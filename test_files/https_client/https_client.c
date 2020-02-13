@@ -20,17 +20,22 @@ int main() {
         fprintf(stderr, "Error creating socket: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
+	
+	printf("connecting\n");
+	
 	if (connect(sock_fd, (struct sockaddr*)&addr, sizeof(addr)) == -1)
 	{
         fprintf(stderr, "Error connecting: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
 
+	printf("Connection made\n");
+
 	char http_request[] = "GET / HTTP/1.1\r\nHost: expired.badssl.com\r\n\r\n";
 	char http_response[2048];
 	memset(http_response, 0, 2048);
 	printf("sending\n");
-    fflush(stdout);
+	fflush(stdout);
 	if(send(sock_fd, http_request, sizeof(http_request)-1, 0) == -1)
     {
         fprintf(stderr, "Error sending: %s\n", strerror(errno));
