@@ -49,15 +49,12 @@ int connect_to_host(char* host, char* service) {
 	}
 
 	for (addr_ptr = addr_list; addr_ptr != NULL; addr_ptr = addr_ptr->ai_next) {
-		printf("Trying next address in address list\n");
-		sock = socket(PF_INET, SOCK_STREAM,/*addr_ptr->ai_family, addr_ptr->ai_socktype,*/ IPPROTO_TLS); //changed to match other test file's configuration which doesn't have this problem
+		sock = socket(addr_ptr->ai_family, addr_ptr->ai_socktype, IPPROTO_TLS);
 		if (sock == -1) {
 			perror("socket");
 			continue;
 		}
-			//a comment on the other https_client file says that this line only applies to TLS sockets, which this is, but it fails to allocate a buffer for TLS_REMOTE_HOSTNAME. This buffer appears to be necessary in order for certificate validation to occur.
-	        if (setsockopt(sock, IPPROTO_TLS, TLS_REMOTE_HOSTNAME, host, strlen(host)+1) == -1) { //this line fails because TLS_REMOTE_HOSTNAME has no buffer space available, even when compiled with the argument hostname-support
-			printf(host);
+	        if (setsockopt(sock, IPPROTO_TLS, TLS_REMOTE_HOSTNAME, host, strlen(host)+1) == -1) {
 			perror("setsockopt: TLS_REMOTE_HOSTNAME");
 			close(sock);
 			continue;
