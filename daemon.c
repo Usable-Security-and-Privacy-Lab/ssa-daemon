@@ -574,11 +574,6 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 			response = -EINVAL;
 		}
 		break;
-	case TLS_ALPN:
-		if (set_alpn_protos(sock_ctx->tls_opts, sock_ctx->tls_conn, value) == 0) {
-			response = -EINVAL;
-		}
-		break;
 	case TLS_SESSION_TTL:
 		if (set_session_ttl(sock_ctx->tls_opts, sock_ctx->tls_conn, value) == 0) {
 			response = -EINVAL;

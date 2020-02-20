@@ -479,57 +479,6 @@ int trustbase_verify(X509_STORE_CTX* store, void* arg) {
 	return 1;
 }
 
-int set_alpn_protos(tls_opts_t* tls_opts, connection* conn_ctx, char* protos) {
-	char* next;
-	char* proto;
-	int proto_len;
-	char* alpn_string;
-	unsigned int alpn_len;
-	char* alpn_str_ptr;
-	tls_opts_t* cur_opts;
-
-	if (conn_ctx != NULL) {
-		/* Already connected */
-		return 0;
-	}
-	alpn_string = tls_opts->alpn_string;
-	proto = protos;
-	alpn_str_ptr = alpn_string;
-	SSL_CTX* tls_ctx = tls_opts->tls_ctx;
-	log_printf(LOG_INFO, "ALPN Setting: %s\n", protos);
-	memset(alpn_string, 0, ALPN_STRING_MAXLEN);
-	while ((next = strchr(proto, ',')) != NULL) {
-		*next = '\0';
-		proto_len = strlen(proto);
-		alpn_str_ptr[0] = proto_len;
-		alpn_str_ptr++;
-		memcpy(alpn_str_ptr, proto, proto_len);
-		alpn_str_ptr += proto_len;
-		proto = next + 1; /* +1 to skip delimeter */
-	}
-	proto_len = strlen(proto);
-	alpn_str_ptr[0] = proto_len;
-	alpn_str_ptr++;
-	memcpy(alpn_str_ptr, proto, proto_len);
-
-	/* XXX I don't think this is correct. verify */
-	alpn_len = strlen(alpn_string);
-
-	/* We need to apply the callback to all relevant SSL_CTXs */
-	cur_opts = tls_opts;
-	while (cur_opts != NULL) {
-		SSL_CTX_set_alpn_select_cb(cur_opts->tls_ctx, server_alpn_cb, (void*)tls_opts);
-		cur_opts = cur_opts->next;
-	}
-	
-	if (SSL_CTX_set_alpn_protos(tls_ctx, (unsigned char*)alpn_string, alpn_len) == 1) {
-		return 0;
-	}
-	
-
-	return 1;
-}
-
 int set_disbled_cipher(tls_opts_t* tls_opts, connection* conn_ctx, char* cipher) {
 	SSL_CTX* tls_ctx = tls_opts->tls_ctx;
 	ssa_config_t* ssa_config;
