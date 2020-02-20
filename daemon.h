@@ -48,7 +48,6 @@ typedef struct tls_opts_st {
 	int custom_validation;
 	int is_server;
 	char alpn_string[ALPN_STRING_MAXLEN];
-	struct tls_opts* next;
 } tls_opts_t;
 
 typedef struct channel_st {

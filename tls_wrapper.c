@@ -331,21 +331,11 @@ tls_opts_t* tls_opts_create(char* path) {
 }
 
 void tls_opts_free(tls_opts_t* opts) {
-	tls_opts_t* cur_opts;
-	tls_opts_t* tmp_opts;
-	/* opts can be NULL (e.g., accepted sockets
-	 * have no opts because they adopt the
-	 * listening socket's opts upon accept */
-	cur_opts = opts;
-	while (cur_opts != NULL) {
-		tmp_opts = cur_opts->next;
-		SSL_CTX_free(cur_opts->tls_ctx);
-		if (cur_opts->app_path) {
-			free(cur_opts->app_path);
-		}
-		free(cur_opts);
-		cur_opts = tmp_opts;
+	SSL_CTX_free(opts->tls_ctx);
+	if (opts->app_path) {
+		free(opts->app_path);
 	}
+	free(opts);
 	return;
 }
 
