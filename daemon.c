@@ -598,6 +598,7 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 			response = -EINVAL;
 		}
 		return;
+		break;
 	case TLS_PEER_CERTIFICATE_CHAIN:
 		response = -ENOPROTOOPT; /* get only */
 		break;
