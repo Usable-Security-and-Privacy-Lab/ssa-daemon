@@ -58,7 +58,7 @@ static SSL* tls_client_setup(SSL_CTX* tls_ctx, char* hostname);
 static void tls_bev_write_cb(struct bufferevent *bev, void *arg);
 static void tls_bev_read_cb(struct bufferevent *bev, void *arg);
 static void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg);
-static int server_name_cb(SSL* tls, int* ad, void* arg);
+
 static int server_alpn_cb(SSL *s, const unsigned char **out, unsigned char *outlen,
 	       	const unsigned char *in, unsigned int inlen, void *arg);
 static SSL_CTX* get_tls_ctx_from_name(tls_opts_t* tls_opts, const char* hostname);
@@ -362,10 +362,7 @@ int tls_opts_server_setup(tls_opts_t* tls_opts) {
 	 * if desired */
 	SSL_CTX_set_session_cache_mode(tls_ctx, SSL_SESS_CACHE_SERVER);
 
-	/* SNI configuration */
-	SSL_CTX_set_tlsext_servername_callback(tls_ctx, server_name_cb);
-	SSL_CTX_set_tlsext_servername_arg(tls_ctx, (void*)tls_opts);
-
+	
 	SSL_CTX_use_certificate_chain_file(tls_ctx, "test_files/localhost_cert.pem");
 	SSL_CTX_use_PrivateKey_file(tls_ctx, "test_files/localhost_key.pem", SSL_FILETYPE_PEM);
 
@@ -689,48 +686,6 @@ long get_session_ttl(tls_opts_t* tls_opts, connection* conn_ctx) {
 	return timeout;
 }
 
-SSL_CTX* get_tls_ctx_from_name(tls_opts_t* tls_opts, const char* hostname) {
-	X509* cert;
-	tls_opts_t* cur_opts;
-	if (tls_opts == NULL) {
-		return NULL;
-	}
-	cur_opts = tls_opts;
-	while (cur_opts != NULL) {
-		cert = SSL_CTX_get0_certificate(cur_opts->tls_ctx);
-		if (cert == NULL) {
-			break;
-		}
-		#if OPENSSL_VERSION_NUMBER >= 0x10100000L
-		if (X509_check_host(cert, hostname, 0, 0, NULL) == 1) {
-		#else
-		if (validate_hostname(hostname, cert) == MatchFound) {
-		#endif
-			return cur_opts->tls_ctx;
-		}
-		cur_opts = cur_opts->next;
-	}
-	return NULL;
-}
-
-int server_name_cb(SSL* tls, int* ad, void* arg) {
-	SSL_CTX* tls_ctx;
-	SSL_CTX* old_ctx;
-	old_ctx = SSL_get_SSL_CTX(tls);
-
-	const char* hostname = SSL_get_servername(tls, TLSEXT_NAMETYPE_host_name);
-	if (hostname == NULL) {
-		return SSL_TLSEXT_ERR_NOACK;
-	}
-	log_printf(LOG_INFO, "SNI from client is %s\n", hostname);
-	tls_ctx = get_tls_ctx_from_name((tls_opts_t*)arg, hostname);
-	if (tls_ctx != NULL) {
-		log_printf(LOG_INFO, "Server SSL_CTX matching SNI was found\n");
-		SSL_set_SSL_CTX(tls, tls_ctx);
-		SSL_set_verify(tls, SSL_CTX_get_verify_mode(old_ctx), SSL_CTX_get_verify_callback(old_ctx));
-	}
-	return SSL_TLSEXT_ERR_OK;
-}
 
 int server_alpn_cb(SSL *s, const unsigned char **out, unsigned char *outlen, const unsigned char *in,
 	       	unsigned int inlen, void *arg) {
