@@ -59,7 +59,6 @@ int tls_opts_client_setup(tls_opts_t* ops);
 /* Helper functions to separate daemon from security library */
 int set_disbled_cipher(tls_opts_t* tls_opts, connection* conn_ctx, char* cipher);
 int set_session_ttl(tls_opts_t* tls_opts, connection* conn_ctx, char* ttl);
-int set_private_key(tls_opts_t* tls_opts, connection* conn_ctx, char* filepath);
 int set_remote_hostname(tls_opts_t* tls_opts, connection* conn_ctx, char* hostname);
 int send_peer_auth_req(tls_opts_t* tls_opts, connection* conn_ctx, char* value);
 

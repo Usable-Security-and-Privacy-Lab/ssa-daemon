@@ -572,39 +572,6 @@ int send_peer_auth_req(tls_opts_t* tls_opts, connection* conn_ctx, char* value) 
 	return 1;
 }
 
-/* XXX update this to take in-memory PEM keys as well as file names */
-int set_private_key(tls_opts_t* tls_opts, connection* conn_ctx, char* filepath) {
-	tls_opts_t* cur_opts;
-
-	/* If an active connection exists, just set the key for that session */
-	if (conn_ctx != NULL) {
-		if (SSL_use_PrivateKey_file(conn_ctx->tls, filepath, SSL_FILETYPE_PEM) == 1) {
-			/* Renegotiate now? */
-			return 0;
-		}
-		log_printf(LOG_INFO, "Using key located at %s\n", filepath);
-		return 1;
-	}
-
-	/* Otherwise set the key to the first SSL_CTX that doesn't currently have one */
-	cur_opts = tls_opts;
-	while (cur_opts != NULL) {
-		if (SSL_CTX_get0_privatekey(cur_opts->tls_ctx) == NULL) {
-			if (SSL_CTX_use_PrivateKey_file(cur_opts->tls_ctx, filepath, SSL_FILETYPE_PEM) != 1) {
-				return 0;
-			}
-			log_printf(LOG_INFO, "Using key located at %s\n", filepath);
-			return 1;
-		}
-		cur_opts = cur_opts->next;
-	}
-
-	/* XXX Should call these as appropriate in this func */
-	//SSL_CTX_check_private_key
-	//SSL_check_private_key
-	return 0;
-}
-
 int set_remote_hostname(tls_opts_t* tls_opts, connection* conn_ctx, char* hostname) {
 	if (conn_ctx == NULL) {
 		/* We don't fail here because this will be set when the
