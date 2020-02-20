@@ -574,11 +574,6 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 			response = -EINVAL;
 		}
 		break;
-	case TLS_DISABLE_CIPHER:
-		if (set_disbled_cipher(sock_ctx->tls_opts, sock_ctx->tls_conn, value) == 0) {
-			response = -EINVAL;
-		}
-		break;
 	case TLS_PEER_IDENTITY:
 		response = -ENOPROTOOPT; /* get only */
 		break;

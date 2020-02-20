@@ -321,26 +321,17 @@ tls_opts_t* tls_opts_create(char* path) {
 	}
 
 	opts->tls_ctx = tls_ctx;
-	opts->app_path = NULL;
-	if (path) {
-		opts->app_path = strdup(path);
-	}
 	return opts;
 }
 
 void tls_opts_free(tls_opts_t* opts) {
 	SSL_CTX_free(opts->tls_ctx);
-	if (opts->app_path) {
-		free(opts->app_path);
-	}
 	free(opts);
 	return;
 }
 
 int tls_opts_server_setup(tls_opts_t* tls_opts) {
 	SSL_CTX* tls_ctx = tls_opts->tls_ctx;
-	
-	tls_opts->is_server = 1;
 	
 	SSL_CTX_set_options(tls_ctx, SSL_OP_ALL);
 	/* There's a billion options we can/should set here by admin config XXX
@@ -359,8 +350,6 @@ int tls_opts_server_setup(tls_opts_t* tls_opts) {
 
 int tls_opts_client_setup(tls_opts_t* tls_opts) {
 	SSL_CTX* tls_ctx = tls_opts->tls_ctx;
-
-	tls_opts->is_server = 0;
 
 	SSL_CTX_set_options(tls_ctx, SSL_OP_ALL);
 
@@ -461,41 +450,6 @@ int trustbase_verify(X509_STORE_CTX* store, void* arg) {
 	}
 	
 	log_printf(LOG_INFO, "TrustBase indicates Certificate was valid!\n");
-	return 1;
-}
-
-int set_disbled_cipher(tls_opts_t* tls_opts, connection* conn_ctx, char* cipher) {
-	SSL_CTX* tls_ctx = tls_opts->tls_ctx;
-	ssa_config_t* ssa_config;
-	char* cipher_list;
-	int length;
-
-	ssa_config = get_app_config(tls_opts->app_path);
-
-	length = snprintf(NULL, 0, "%s:!%s", ssa_config->cipher_list, cipher);
-	if (length == -1) {
-		log_printf(LOG_ERROR, "Unable to parse cipher: %s\n", cipher);
-		return 0;
-	}
-	cipher_list = (char*)malloc(length + 1);
-	if (cipher_list == NULL) {
-		log_printf(LOG_ERROR, "Unable to allocate new cipher list\n");
-		return 0;
-	}
-	if (snprintf(cipher_list, length + 1, "%s:!%s", ssa_config->cipher_list, cipher) == -1) {
-		log_printf(LOG_ERROR, "Unable to add cipher: %s\n",cipher);
-		return 0;
-	}
-
-	if (SSL_CTX_set_cipher_list(tls_ctx, ssa_config->cipher_list) == 0) {
-		free(cipher_list);
-		log_printf(LOG_ERROR, "Unable to disable cipher %s\n",cipher);
-		return 0;
-	}
-
-	free(ssa_config->cipher_list);
-	ssa_config->cipher_list = cipher_list;
-
 	return 1;
 }
 

@@ -44,9 +44,7 @@
 
 typedef struct tls_opts_st {
 	SSL_CTX* tls_ctx;
-	char* app_path;
 	int custom_validation;
-	int is_server;
 } tls_opts_t;
 
 typedef struct channel_st {
@@ -88,7 +86,7 @@ typedef struct sock_context_st {
 		int ext_addrlen;
 		int rem_addrlen;
 	};
-	int is_connected;
+	int is_connected; /* TODO: ad is_server option too */
 	int is_accepting; /* acting as a TLS server or client? */
 	struct evconnlistener* listener;
 	tls_opts_t* tls_opts;
