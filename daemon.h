@@ -42,7 +42,7 @@
 #define ALPN_STRING_MAXLEN	256
 #define MAX_HOSTNAME		255
 
-typedef struct tls_opts {
+typedef struct tls_opts_st {
 	SSL_CTX* tls_ctx;
 	char* app_path;
 	int custom_validation;
@@ -51,13 +51,13 @@ typedef struct tls_opts {
 	struct tls_opts* next;
 } tls_opts_t;
 
-typedef struct channel {
+typedef struct channel_st {
 	struct bufferevent* bev;
 	int closed;
 	int connected;
-} channel_t;
+} channel;
 
-typedef struct daemon_ctx {
+typedef struct daemon_ctx_st {
 	struct event_base* ev_base;
 	struct nl_sock* netlink_sock;
 	int netlink_family;
@@ -66,9 +66,9 @@ typedef struct daemon_ctx {
 	hmap_t* sock_map_port;
 } daemon_ctx;
 
-typedef struct tls_conn_ctx {
-	channel_t plain;
-	channel_t secure;
+typedef struct tls_conn_ctx_st {
+	channel plain;
+	channel secure;
 	SSL* tls;
 	unsigned long id;
 	daemon_ctx* daemon;
@@ -76,7 +76,7 @@ typedef struct tls_conn_ctx {
 	int addrlen;
 } tls_conn_ctx_t;
 
-typedef struct sock_ctx {
+typedef struct sock_ctx_st {
 	unsigned long id;
 	evutil_socket_t fd;
 	int has_bound; /* Nonzero if we've called bind locally */

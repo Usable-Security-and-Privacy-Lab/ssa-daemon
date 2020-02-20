@@ -574,12 +574,6 @@ void setsockopt_cb(daemon_ctx* ctx, unsigned long id, int level,
 			response = -EINVAL;
 		}
 		break;
-	case TLS_CERTIFICATE_CHAIN:
-
-		if (set_certificate_chain(sock_ctx->tls_opts, sock_ctx->tls_conn, value) == 0) {
-			response = -EINVAL;
-		}
-		break;
 	case TLS_PRIVATE_KEY:
 		if (set_private_key(sock_ctx->tls_opts, sock_ctx->tls_conn, value) == 0) {
 			response = -EINVAL;

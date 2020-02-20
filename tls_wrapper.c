@@ -668,59 +668,6 @@ int send_peer_auth_req(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char* val
 	return 1;
 }
 
-/* XXX update this to take in-memory PEM chains as well as file names */
-int set_certificate_chain(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char* filepath) {
-	tls_opts_t* cur_opts;
-	tls_opts_t* new_opts;
-
-	/* If a connection already exists, set the certs on the existing connection*/
-	if (conn_ctx != NULL) {
-		#if OPENSSL_VERSION_NUMBER >= 0x10100000L
-		if (SSL_use_certificate_chain_file(conn_ctx->tls, filepath) != 1) {
-		#else
-		if (compat_SSL_use_certificate_chain_file(conn_ctx->tls, filepath) != 1) {
-		#endif
-			/* Get ready for renegotiation */
-			return 0;
-		}
-		return 1;
-	}
-
-	/* If no connection exists, set the certs on the options */
-	if (tls_opts == NULL) {
-		return 0;
-	}
-	cur_opts = tls_opts;
-	/* There is no cert set yet on the first SSL_CTX so we'll use that */
-	if (SSL_CTX_get0_certificate(cur_opts->tls_ctx) == NULL) {
-		if (SSL_CTX_use_certificate_chain_file(cur_opts->tls_ctx, filepath) != 1) {
-			log_printf(LOG_ERROR, "Unable to assign certificate chain\n");
-			return 0;
-		}
-		log_printf(LOG_INFO, "Using cert located at %s\n", filepath);
-		return 1;
-	}
-
-	/* Otherwise create a new options struct and use that */
-	while (cur_opts->next != NULL) {
-		cur_opts = cur_opts->next;
-	}
-
-	new_opts = tls_opts_create(NULL);
-	if (new_opts == NULL) {
-		return 0;
-	}
-	
-	if (SSL_CTX_use_certificate_chain_file(new_opts->tls_ctx, filepath) != 1) {
-		log_printf(LOG_ERROR, "Unable to assign certificate chain\n");
-		return 0;
-	}
-	log_printf(LOG_INFO, "Using cert located at %s\n", filepath);
-	/* Add new opts to option list */
-	cur_opts->next = new_opts;
-	return 1;
-}
-
 /* XXX update this to take in-memory PEM keys as well as file names */
 int set_private_key(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char* filepath) {
 	tls_opts_t* cur_opts;
@@ -979,7 +926,7 @@ int set_netlink_cb_params(tls_conn_ctx_t* conn, daemon_ctx* daemon_ctx, unsigned
 void tls_bev_write_cb(struct bufferevent *bev, void *arg) {
 	//log_printf(LOG_DEBUG, "write event on bev %p\n", bev);
 	tls_conn_ctx_t* ctx = arg;
-	channel_t* endpoint = (bev == ctx->secure.bev) ? &ctx->plain : &ctx->secure;
+	channel* endpoint = (bev == ctx->secure.bev) ? &ctx->plain : &ctx->secure;
 	struct evbuffer* out_buf;
 
 	if (endpoint->closed == 1) {
@@ -1001,7 +948,7 @@ void tls_bev_write_cb(struct bufferevent *bev, void *arg) {
 void tls_bev_read_cb(struct bufferevent *bev, void *arg) {
 	//log_printf(LOG_DEBUG, "read event on bev %p\n", bev);
 	tls_conn_ctx_t* ctx = arg;
-	channel_t* endpoint = (bev == ctx->secure.bev) ? &ctx->plain : &ctx->secure;
+	channel* endpoint = (bev == ctx->secure.bev) ? &ctx->plain : &ctx->secure;
 	struct evbuffer* in_buf;
 	struct evbuffer* out_buf;
 	size_t in_len;
@@ -1032,8 +979,8 @@ void tls_bev_read_cb(struct bufferevent *bev, void *arg) {
 void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 	tls_conn_ctx_t* ctx = arg;
 	unsigned long ssl_err;
-	channel_t* endpoint = (bev == ctx->secure.bev) ? &ctx->plain : &ctx->secure;
-	channel_t* startpoint = (bev == ctx->secure.bev) ? &ctx->secure : &ctx->plain;
+	channel* endpoint = (bev == ctx->secure.bev) ? &ctx->plain : &ctx->secure;
+	channel* startpoint = (bev == ctx->secure.bev) ? &ctx->secure : &ctx->plain;
 	if (events & BEV_EVENT_CONNECTED) {
 		log_printf(LOG_DEBUG, "%s endpoint connected\n", bev == ctx->secure.bev ? "encrypted" : "plaintext");
 		//startpoint->connected = 1;
