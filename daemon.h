@@ -39,7 +39,7 @@
 #include "hashmap.h"
 #include "queue.h"
 
-#define ALPN_STRING_MAXLEN	256
+
 #define MAX_HOSTNAME		255
 
 typedef struct tls_opts_st {
@@ -47,7 +47,6 @@ typedef struct tls_opts_st {
 	char* app_path;
 	int custom_validation;
 	int is_server;
-	char alpn_string[ALPN_STRING_MAXLEN];
 } tls_opts_t;
 
 typedef struct channel_st {

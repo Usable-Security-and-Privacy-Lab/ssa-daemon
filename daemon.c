@@ -644,11 +644,6 @@ void getsockopt_cb(daemon_context* ctx, unsigned long id, int level, int option)
 	case TLS_PRIVATE_KEY:
 		response = -ENOPROTOOPT; /* set only */
 		break;
-	case TLS_ALPN:
-		if (get_alpn_proto(sock_ctx->tls_opts, sock_ctx->tls_conn, &data, &len) == 0) {
-			response = -EINVAL;
-		}
-		break;
 	case TLS_SESSION_TTL:
 		value = get_session_ttl(sock_ctx->tls_opts, sock_ctx->tls_conn);
 		if (value < 0) {

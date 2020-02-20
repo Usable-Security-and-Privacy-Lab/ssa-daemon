@@ -59,8 +59,6 @@ static void tls_bev_write_cb(struct bufferevent *bev, void *arg);
 static void tls_bev_read_cb(struct bufferevent *bev, void *arg);
 static void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg);
 
-static int server_alpn_cb(SSL *s, const unsigned char **out, unsigned char *outlen,
-	       	const unsigned char *in, unsigned int inlen, void *arg);
 static SSL_CTX* get_tls_ctx_from_name(tls_opts_t* tls_opts, const char* hostname);
 
 static connection* new_tls_conn_ctx();
@@ -657,10 +655,6 @@ int get_certificate_chain(tls_opts_t* tls_opts, connection* conn_ctx, char** dat
 	return 1;
 }
 
-int get_alpn_proto(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len) {
-	SSL_get0_alpn_selected(conn_ctx->tls, (const unsigned char**)data, len);
-	return 1;
-}
 
 long get_session_ttl(tls_opts_t* tls_opts, connection* conn_ctx) {
 	SSL_CTX* tls_ctx;
@@ -674,23 +668,6 @@ long get_session_ttl(tls_opts_t* tls_opts, connection* conn_ctx) {
 		timeout = SSL_CTX_get_timeout(tls_ctx);
 	}
 	return timeout;
-}
-
-
-int server_alpn_cb(SSL *s, const unsigned char **out, unsigned char *outlen, const unsigned char *in,
-	       	unsigned int inlen, void *arg) {
-	tls_opts_t* opts = (tls_opts_t*)arg;
-	int ret;
-	unsigned char* nc_out;
-
-	//printf("alpn string is %s\n", opts->alpn_string);
-	ret = SSL_select_next_proto(&nc_out, outlen, (const unsigned char*)opts->alpn_string, strlen(opts->alpn_string),
-			in, inlen);
-	*out = nc_out;
-
-	ret = OPENSSL_NPN_NEGOTIATED ? SSL_TLSEXT_ERR_OK : SSL_TLSEXT_ERR_ALERT_FATAL;
-	//printf("ret is %s\n", ret == OPENSSL_NPN_NEGOTIATED ? "good" : "bad");
-	return ret;
 }
 
 SSL* tls_client_setup(SSL_CTX* tls_ctx, char* hostname) {
