@@ -97,7 +97,7 @@ typedef struct sock_ctx_st {
 	char rem_hostname[MAX_HOSTNAME];
 	connection* tls_conn;
 	daemon_ctx* daemon;
-} sock_ctx_t;
+} sock_context;
 
 int server_create(int port);
 void socket_cb(daemon_ctx* ctx, unsigned long id, char* comm);

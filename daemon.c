@@ -65,7 +65,7 @@
 int auth_info_index;
 #endif
 
-void free_sock_ctx(sock_ctx_t* sock_ctx);
+void free_sock_ctx(sock_context* sock_ctx);
 
 /* SSA direct functions */
 static void accept_error_cb(struct evconnlistener *listener, void *ctx);
@@ -370,7 +370,7 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	log_printf(LOG_INFO, "Received connection!\n");
 
 	int port;
-	sock_ctx_t* sock_ctx;
+	sock_context* sock_ctx;
 	daemon_ctx* ctx = arg;
 
 	if (address->sa_family == AF_UNIX) {
@@ -421,10 +421,10 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 		.sin_addr.s_addr = htonl(INADDR_LOOPBACK)
 	};
 	socklen_t intaddr_len = sizeof(int_addr);
-	sock_ctx_t* sock_ctx = (sock_ctx_t*)arg;
+	sock_context* sock_ctx = (sock_context*)arg;
 	evutil_socket_t ifd;
 	int port;
-	sock_ctx_t* new_sock_ctx;
+	sock_context* new_sock_ctx;
         //struct event_base *base = evconnlistener_get_base(listener);
 
 	//log_printf(LOG_DEBUG, "Got a connection on a vicarious listener\n");
@@ -436,7 +436,7 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 		return;
 	}
 
-	new_sock_ctx = (sock_ctx_t*)calloc(1, sizeof(sock_ctx_t));
+	new_sock_ctx = (sock_context*)calloc(1, sizeof(sock_context));
 	if (new_sock_ctx == NULL) {
 		return;
 	}
@@ -506,12 +506,12 @@ void signal_cb(evutil_socket_t fd, short event, void* arg) {
 }
 
 void socket_cb(daemon_ctx* ctx, unsigned long id, char* comm) {
-	sock_ctx_t* sock_ctx;
+	sock_context* sock_ctx;
 	evutil_socket_t fd;
 	int ret;
 	int response = 0;
 
-	sock_ctx = (sock_ctx_t*)hashmap_get(ctx->sock_map, id);
+	sock_ctx = (sock_context*)hashmap_get(ctx->sock_map, id);
 	if (sock_ctx != NULL) {
 		log_printf(LOG_ERROR, "We have created a socket with this ID already: %lu\n", id);
 		netlink_notify_kernel(ctx, id, response);
@@ -523,7 +523,7 @@ void socket_cb(daemon_ctx* ctx, unsigned long id, char* comm) {
 		response = -errno;
 	}
 	else {
-		sock_ctx = (sock_ctx_t*)calloc(1, sizeof(sock_ctx_t));
+		sock_ctx = (sock_context*)calloc(1, sizeof(sock_context));
 		if (sock_ctx == NULL) {
 			response = -ENOMEM;
 		}
@@ -547,10 +547,10 @@ void socket_cb(daemon_ctx* ctx, unsigned long id, char* comm) {
 
 void setsockopt_cb(daemon_ctx* ctx, unsigned long id, int level, 
 		int option, void* value, socklen_t len) {
-	sock_ctx_t* sock_ctx;
+	sock_context* sock_ctx;
 	int response = 0; /* Default is success */
 
-	sock_ctx = (sock_ctx_t*)hashmap_get(ctx->sock_map, id);
+	sock_ctx = (sock_context*)hashmap_get(ctx->sock_map, id);
 	if (sock_ctx == NULL) {
 		response = -EBADF;
 		netlink_notify_kernel(ctx, id, response);
@@ -621,14 +621,14 @@ void setsockopt_cb(daemon_ctx* ctx, unsigned long id, int level,
 }
 
 void getsockopt_cb(daemon_ctx* ctx, unsigned long id, int level, int option) {
-	sock_ctx_t* sock_ctx;
+	sock_context* sock_ctx;
 	long value;
 	int response = 0;
 	char* data = NULL;
 	unsigned int len = 0;
 	int need_free = 0;
 
-	sock_ctx = (sock_ctx_t*)hashmap_get(ctx->sock_map, id);
+	sock_ctx = (sock_context*)hashmap_get(ctx->sock_map, id);
 	if (sock_ctx == NULL) {
 		netlink_notify_kernel(ctx, id, -EBADF);
 		return;
@@ -718,10 +718,10 @@ void bind_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr,
 	int int_addrlen, struct sockaddr* ext_addr, int ext_addrlen) {
 
 	int ret;
-	sock_ctx_t* sock_ctx;
+	sock_context* sock_ctx;
 	int response = 0;
 
-	sock_ctx = (sock_ctx_t*)hashmap_get(ctx->sock_map, id);
+	sock_ctx = (sock_context*)hashmap_get(ctx->sock_map, id);
 	if (sock_ctx == NULL) {
 		response = -EBADF;
 	}
@@ -755,7 +755,7 @@ void connect_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr,
 	int int_addrlen, struct sockaddr* rem_addr, int rem_addrlen, int blocking) {
 	
 	int ret;
-	sock_ctx_t* sock_ctx;
+	sock_context* sock_ctx;
 	int port;
 
 	if (int_addr->sa_family == AF_UNIX) {
@@ -766,7 +766,7 @@ void connect_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr,
 		port = (int)ntohs(((struct sockaddr_in*)int_addr)->sin_port);
 	}
 
-	sock_ctx = (sock_ctx_t*)hashmap_get(ctx->sock_map, id);
+	sock_ctx = (sock_context*)hashmap_get(ctx->sock_map, id);
 	if (sock_ctx == NULL) {
 		netlink_notify_kernel(ctx, id, -EBADF);
 		return;
@@ -813,10 +813,10 @@ void listen_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr,
 	int int_addrlen, struct sockaddr* ext_addr, int ext_addrlen) {
 
 	int ret;
-	sock_ctx_t* sock_ctx;
+	sock_context* sock_ctx;
 	int response = 0;
 	
-	sock_ctx = (sock_ctx_t*)hashmap_get(ctx->sock_map, id);
+	sock_ctx = (sock_context*)hashmap_get(ctx->sock_map, id);
 	if (sock_ctx == NULL) {
 		response = -EBADF;
 	}
@@ -850,7 +850,7 @@ void listen_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr,
 }
 
 void associate_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr, int int_addrlen) {
-	sock_ctx_t* sock_ctx;
+	sock_context* sock_ctx;
 	int response = 0;
 	int port;
 
@@ -881,9 +881,9 @@ void associate_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr, 
 }
 
 void close_cb(daemon_ctx* ctx, unsigned long id) {
-	sock_ctx_t* sock_ctx;
+	sock_context* sock_ctx;
 
-	sock_ctx = (sock_ctx_t*)hashmap_get(ctx->sock_map, id);
+	sock_ctx = (sock_context*)hashmap_get(ctx->sock_map, id);
 	if (sock_ctx == NULL) {
 		return;
 	}
@@ -934,7 +934,7 @@ void upgrade_cb(daemon_ctx* ctx, unsigned long id,
 
 /* This function is provided to the hashmap implementation
  * so that it can correctly free all held data */
-void free_sock_ctx(sock_ctx_t* sock_ctx) {
+void free_sock_ctx(sock_context* sock_ctx) {
 	if (sock_ctx->listener != NULL) {
 		evconnlistener_free(sock_ctx->listener);
 	}
@@ -956,7 +956,7 @@ void free_sock_ctx(sock_ctx_t* sock_ctx) {
 }
 
 void upgrade_recv(evutil_socket_t fd, short events, void *arg) {
-	sock_ctx_t* sock_ctx;
+	sock_context* sock_ctx;
 	daemon_ctx* ctx = (daemon_ctx*)arg;
 	char msg_buffer[256];
 	int new_fd;
@@ -978,7 +978,7 @@ void upgrade_recv(evutil_socket_t fd, short events, void *arg) {
 	sscanf(msg_buffer, "%d:%lu", &is_accepting, &id);
 	log_printf(LOG_INFO, "Got a new %s descriptor %d, to be associated with %lu from addr %s\n",
 		       	is_accepting == 1 ? "accepting" : "connecting", new_fd, id, addr.sun_path+1, addr_len);
-	sock_ctx = (sock_ctx_t*)hashmap_get(ctx->sock_map, id);
+	sock_ctx = (sock_context*)hashmap_get(ctx->sock_map, id);
 	if (sock_ctx == NULL) {
 		return;
 	}
