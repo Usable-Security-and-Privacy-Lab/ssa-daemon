@@ -63,8 +63,8 @@ static int server_alpn_cb(SSL *s, const unsigned char **out, unsigned char *outl
 	       	const unsigned char *in, unsigned int inlen, void *arg);
 static SSL_CTX* get_tls_ctx_from_name(tls_opts_t* tls_opts, const char* hostname);
 
-static tls_conn_ctx_t* new_tls_conn_ctx();
-static void shutdown_tls_conn_ctx(tls_conn_ctx_t* ctx); 
+static connection* new_tls_conn_ctx();
+static void shutdown_tls_conn_ctx(connection* ctx); 
 static int read_rand_seed(char **buf, char* seed_path, int size);
 int trustbase_verify(X509_STORE_CTX* store, void* arg);
 int client_verify(X509_STORE_CTX* store, void* arg);
@@ -97,12 +97,12 @@ int auth_daemon_connect(void);
 #endif
 
 
-tls_conn_ctx_t* tls_client_wrapper_setup(evutil_socket_t efd, daemon_ctx* daemon_ctx,
+connection* tls_client_wrapper_setup(evutil_socket_t efd, daemon_ctx* daemon_ctx,
 	char* hostname, int is_accepting, tls_opts_t* tls_opts) {
 	
-	tls_conn_ctx_t* ctx = new_tls_conn_ctx();
+	connection* ctx = new_tls_conn_ctx();
 	if (ctx == NULL) {
-		log_printf(LOG_ERROR, "Failed to allocate tls_conn_ctx_t: %s\n", strerror(errno));
+		log_printf(LOG_ERROR, "Failed to allocate connection: %s\n", strerror(errno));
 		return NULL;
 	}
 	ctx->tls = tls_client_setup(tls_opts->tls_ctx, hostname);
@@ -162,7 +162,7 @@ tls_conn_ctx_t* tls_client_wrapper_setup(evutil_socket_t efd, daemon_ctx* daemon
 	return ctx;
 }
 
-void associate_fd(tls_conn_ctx_t* conn, evutil_socket_t ifd) {
+void associate_fd(connection* conn, evutil_socket_t ifd) {
 	bufferevent_setfd(conn->plain.bev, ifd);
 	bufferevent_enable(conn->plain.bev, EV_READ | EV_WRITE);
 
@@ -171,12 +171,12 @@ void associate_fd(tls_conn_ctx_t* conn, evutil_socket_t ifd) {
 }
 
 
-tls_conn_ctx_t* tls_server_wrapper_setup(evutil_socket_t efd, evutil_socket_t ifd, daemon_ctx* daemon_ctx,
+connection* tls_server_wrapper_setup(evutil_socket_t efd, evutil_socket_t ifd, daemon_ctx* daemon_ctx,
 	tls_opts_t* tls_opts, struct sockaddr* internal_addr, int internal_addrlen) {
 
-	tls_conn_ctx_t* ctx = new_tls_conn_ctx();
+	connection* ctx = new_tls_conn_ctx();
 	if (ctx == NULL) {
-		log_printf(LOG_ERROR, "Failed to allocate server tls_conn_ctx_t: %s\n", strerror(errno));
+		log_printf(LOG_ERROR, "Failed to allocate server connection: %s\n", strerror(errno));
 		return NULL;
 	}
 	
@@ -401,7 +401,7 @@ int verify_dummy(int preverify, X509_STORE_CTX* store) {
 }
 
 int client_verify(X509_STORE_CTX* store, void* arg) {
-	/*tls_conn_ctx_t* ctx = arg;*/
+	/*connection* ctx = arg;*/
 	X509* cert;
 	STACK_OF(X509)* chain;
 #ifndef NO_LOG
@@ -479,7 +479,7 @@ int trustbase_verify(X509_STORE_CTX* store, void* arg) {
 	return 1;
 }
 
-int set_trusted_peer_certificates(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char* value, int len) {
+int set_trusted_peer_certificates(tls_opts_t* tls_opts, connection* conn_ctx, char* value, int len) {
 	const unsigned char verified_context_id = 2;
 	SSL_CTX* tls_ctx;
 	/* XXX update this to take in-memory PEM chains as well as file names */
@@ -524,7 +524,7 @@ int set_trusted_peer_certificates(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx
 	return 1;
 }
 
-int set_alpn_protos(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char* protos) {
+int set_alpn_protos(tls_opts_t* tls_opts, connection* conn_ctx, char* protos) {
 	char* next;
 	char* proto;
 	int proto_len;
@@ -575,7 +575,7 @@ int set_alpn_protos(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char* protos
 	return 1;
 }
 
-int set_disbled_cipher(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char* cipher) {
+int set_disbled_cipher(tls_opts_t* tls_opts, connection* conn_ctx, char* cipher) {
 	SSL_CTX* tls_ctx = tls_opts->tls_ctx;
 	ssa_config_t* ssa_config;
 	char* cipher_list;
@@ -610,7 +610,7 @@ int set_disbled_cipher(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char* cip
 	return 1;
 }
 
-int set_session_ttl(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char* ttl) {
+int set_session_ttl(tls_opts_t* tls_opts, connection* conn_ctx, char* ttl) {
 	SSL_CTX* tls_ctx;
 	long timeout;
 	memcpy(&timeout, ttl, sizeof(timeout));
@@ -643,7 +643,7 @@ void pha_cb(const SSL* tls, int where, int ret) {
 }
 #endif
 
-int send_peer_auth_req(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char* value) {
+int send_peer_auth_req(tls_opts_t* tls_opts, connection* conn_ctx, char* value) {
 	#ifdef CLIENT_AUTH
 	s_auth_info_t* ai;
 	if (conn_ctx == NULL) {
@@ -669,7 +669,7 @@ int send_peer_auth_req(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char* val
 }
 
 /* XXX update this to take in-memory PEM keys as well as file names */
-int set_private_key(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char* filepath) {
+int set_private_key(tls_opts_t* tls_opts, connection* conn_ctx, char* filepath) {
 	tls_opts_t* cur_opts;
 
 	/* If an active connection exists, just set the key for that session */
@@ -701,7 +701,7 @@ int set_private_key(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char* filepa
 	return 0;
 }
 
-int set_remote_hostname(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char* hostname) {
+int set_remote_hostname(tls_opts_t* tls_opts, connection* conn_ctx, char* hostname) {
 	if (conn_ctx == NULL) {
 		/* We don't fail here because this will be set when the
 		 * connection is actually created by tls_client_setup */
@@ -711,7 +711,7 @@ int set_remote_hostname(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char* ho
 	return 1;
 }
 
-int get_peer_certificate(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char** data, unsigned int* len) {
+int get_peer_certificate(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len) {
 	X509* cert;
 	BIO* bio;
 	char* bio_data;
@@ -754,7 +754,7 @@ int get_peer_certificate(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char** 
 	return 1;
 }
 
-int get_peer_identity(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char** data, unsigned int* len) {
+int get_peer_identity(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len) {
 	X509* cert;
 	X509_NAME* subject_name;
 	char* identity;
@@ -773,13 +773,13 @@ int get_peer_identity(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char** dat
 	return 1;
 }
 
-int get_remote_hostname(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char** data, unsigned int* len) {
+int get_remote_hostname(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len) {
 	/* XXX hostname is a bit of a misnomer for the client auth case, as it's actually client identity
 	 * instead of hostname. Perhaps rename this option or make an alias for it */
 	return 1;
 }
 
-int get_hostname(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char** data, unsigned int* len) {
+int get_hostname(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len) {
 	const char* hostname;
 	if (conn_ctx == NULL) {
 		return 0;
@@ -794,17 +794,17 @@ int get_hostname(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char** data, un
 	return 1;
 }
 
-int get_certificate_chain(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char** data, unsigned int* len) {
+int get_certificate_chain(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len) {
 	/* XXX stub */
 	return 1;
 }
 
-int get_alpn_proto(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx, char** data, unsigned int* len) {
+int get_alpn_proto(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len) {
 	SSL_get0_alpn_selected(conn_ctx->tls, (const unsigned char**)data, len);
 	return 1;
 }
 
-long get_session_ttl(tls_opts_t* tls_opts, tls_conn_ctx_t* conn_ctx) {
+long get_session_ttl(tls_opts_t* tls_opts, connection* conn_ctx) {
 	SSL_CTX* tls_ctx;
 	long timeout = 0;
 	if (conn_ctx != NULL) {
@@ -914,7 +914,7 @@ SSL* tls_server_setup(SSL_CTX* tls_ctx) {
 	return tls;
 }
 
-int set_netlink_cb_params(tls_conn_ctx_t* conn, daemon_ctx* daemon_ctx, unsigned long id) {
+int set_netlink_cb_params(connection* conn, daemon_ctx* daemon_ctx, unsigned long id) {
 	/*if (conn->tls == NULL) {
 		return 1;
 	}*/
@@ -925,7 +925,7 @@ int set_netlink_cb_params(tls_conn_ctx_t* conn, daemon_ctx* daemon_ctx, unsigned
 
 void tls_bev_write_cb(struct bufferevent *bev, void *arg) {
 	//log_printf(LOG_DEBUG, "write event on bev %p\n", bev);
-	tls_conn_ctx_t* ctx = arg;
+	connection* ctx = arg;
 	channel* endpoint = (bev == ctx->secure.bev) ? &ctx->plain : &ctx->secure;
 	struct evbuffer* out_buf;
 
@@ -947,7 +947,7 @@ void tls_bev_write_cb(struct bufferevent *bev, void *arg) {
 
 void tls_bev_read_cb(struct bufferevent *bev, void *arg) {
 	//log_printf(LOG_DEBUG, "read event on bev %p\n", bev);
-	tls_conn_ctx_t* ctx = arg;
+	connection* ctx = arg;
 	channel* endpoint = (bev == ctx->secure.bev) ? &ctx->plain : &ctx->secure;
 	struct evbuffer* in_buf;
 	struct evbuffer* out_buf;
@@ -977,7 +977,7 @@ void tls_bev_read_cb(struct bufferevent *bev, void *arg) {
 }
 
 void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
-	tls_conn_ctx_t* ctx = arg;
+	connection* ctx = arg;
 	unsigned long ssl_err;
 	channel* endpoint = (bev == ctx->secure.bev) ? &ctx->plain : &ctx->secure;
 	channel* startpoint = (bev == ctx->secure.bev) ? &ctx->secure : &ctx->plain;
@@ -1049,12 +1049,12 @@ void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 	return;
 }
 
-tls_conn_ctx_t* new_tls_conn_ctx() {
-	tls_conn_ctx_t* ctx = (tls_conn_ctx_t*)calloc(1, sizeof(tls_conn_ctx_t));
+connection* new_tls_conn_ctx() {
+	connection* ctx = (connection*)calloc(1, sizeof(connection));
 	return ctx;
 }
 
-void shutdown_tls_conn_ctx(tls_conn_ctx_t* ctx) {
+void shutdown_tls_conn_ctx(connection* ctx) {
 	if (ctx == NULL) return;
 
 	if (ctx->tls != NULL && ctx->secure.closed == 1) {
@@ -1063,7 +1063,7 @@ void shutdown_tls_conn_ctx(tls_conn_ctx_t* ctx) {
 	return;
 }
 
-void free_tls_conn_ctx(tls_conn_ctx_t* ctx) {
+void free_tls_conn_ctx(connection* ctx) {
 	shutdown_tls_conn_ctx(ctx);
 	ctx->tls = NULL;
 	if (ctx->secure.bev != NULL) {

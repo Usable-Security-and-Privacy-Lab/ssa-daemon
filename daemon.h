@@ -66,7 +66,7 @@ typedef struct daemon_ctx_st {
 	hmap_t* sock_map_port;
 } daemon_ctx;
 
-typedef struct tls_conn_ctx_st {
+typedef struct connection_st {
 	channel plain;
 	channel secure;
 	SSL* tls;
@@ -74,7 +74,7 @@ typedef struct tls_conn_ctx_st {
 	daemon_ctx* daemon;
 	struct sockaddr* addr;
 	int addrlen;
-} tls_conn_ctx_t;
+} connection;
 
 typedef struct sock_ctx_st {
 	unsigned long id;
@@ -95,7 +95,7 @@ typedef struct sock_ctx_st {
 	struct evconnlistener* listener;
 	tls_opts_t* tls_opts;
 	char rem_hostname[MAX_HOSTNAME];
-	tls_conn_ctx_t* tls_conn;
+	connection* tls_conn;
 	daemon_ctx* daemon;
 } sock_ctx_t;
 
