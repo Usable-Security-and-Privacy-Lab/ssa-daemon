@@ -569,11 +569,6 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 	case TLS_HOSTNAME:
 		response = -ENOPROTOOPT; /* get only */
 		break;
-	case TLS_TRUSTED_PEER_CERTIFICATES:
-		if (set_trusted_peer_certificates(sock_ctx->tls_opts, sock_ctx->tls_conn, value, len) == 0) {
-			response = -EINVAL;
-		}
-		break;
 	case TLS_PRIVATE_KEY:
 		if (set_private_key(sock_ctx->tls_opts, sock_ctx->tls_conn, value) == 0) {
 			response = -EINVAL;
@@ -603,7 +598,6 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 			response = -EINVAL;
 		}
 		return;
-		break;
 	case TLS_PEER_CERTIFICATE_CHAIN:
 		response = -ENOPROTOOPT; /* get only */
 		break;

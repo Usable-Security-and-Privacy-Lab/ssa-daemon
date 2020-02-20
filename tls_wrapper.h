@@ -57,7 +57,6 @@ int tls_opts_client_setup(tls_opts_t* ops);
 
 
 /* Helper functions to separate daemon from security library */
-int set_trusted_peer_certificates(tls_opts_t* tls_opts, connection* conn_ctx, char* value, int len);
 int set_alpn_protos(tls_opts_t* tls_opts, connection* conn_ctx, char* protos);
 int set_disbled_cipher(tls_opts_t* tls_opts, connection* conn_ctx, char* cipher);
 int set_session_ttl(tls_opts_t* tls_opts, connection* conn_ctx, char* ttl);

@@ -57,7 +57,7 @@ typedef struct channel_st {
 	int connected;
 } channel;
 
-typedef struct daemon_ctx_st {
+typedef struct daemon_context_st {
 	struct event_base* ev_base;
 	struct nl_sock* netlink_sock;
 	int netlink_family;
@@ -76,7 +76,7 @@ typedef struct connection_st {
 	int addrlen;
 } connection;
 
-typedef struct sock_ctx_st {
+typedef struct sock_context_st {
 	unsigned long id;
 	evutil_socket_t fd;
 	int has_bound; /* Nonzero if we've called bind locally */

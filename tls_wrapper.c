@@ -479,51 +479,6 @@ int trustbase_verify(X509_STORE_CTX* store, void* arg) {
 	return 1;
 }
 
-int set_trusted_peer_certificates(tls_opts_t* tls_opts, connection* conn_ctx, char* value, int len) {
-	const unsigned char verified_context_id = 2;
-	SSL_CTX* tls_ctx;
-	/* XXX update this to take in-memory PEM chains as well as file names */
-	STACK_OF(X509_NAME)* cert_names;
-
-	/*if (tls_opts->custom_validation == 0) {
-		return 1;
-	}*/
-
-	if (conn_ctx != NULL) {
-		cert_names = SSL_load_client_CA_file(value);
-		if (cert_names == NULL) {
-			return 0;
-		}
-		SSL_set_client_CA_list(conn_ctx->tls, cert_names);
-//		printf("size of Cert stack = %d\n", sk_X509_num(cert_names));
-		return 1;
-	}
-	while (tls_opts != NULL) {
-       		tls_ctx = tls_opts->tls_ctx;
-		if (SSL_CTX_load_verify_locations(tls_ctx, value, NULL) == 0) {
-			return 0;
-		}
-		#ifdef CLIENT_AUTH
-		SSL_CTX_set_verify(tls_ctx, SSL_VERIFY_PEER | 
-				SSL_VERIFY_POST_HANDSHAKE, NULL);
-		#else
-		SSL_CTX_set_verify(tls_ctx, SSL_VERIFY_PEER, NULL);
-		#endif
-		SSL_CTX_set_session_id_context(tls_ctx, &verified_context_id, sizeof(verified_context_id));
-
-		/* Really we should only do this if we're the server */
-		cert_names = SSL_load_client_CA_file(value);
-		if (cert_names == NULL) {
-			return 0;
-		}
-
-		SSL_CTX_set_client_CA_list(tls_ctx, cert_names);
-		tls_opts = tls_opts->next;
-
-	}
-	return 1;
-}
-
 int set_alpn_protos(tls_opts_t* tls_opts, connection* conn_ctx, char* protos) {
 	char* next;
 	char* proto;
