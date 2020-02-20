@@ -79,7 +79,7 @@ typedef struct auth_info {
 
 typedef struct s_auth_info {
 	unsigned long id;
-	daemon_ctx* daemon;
+	daemon_context* daemon;
 } s_auth_info_t;
 
 extern int auth_info_index;
@@ -97,7 +97,7 @@ int auth_daemon_connect(void);
 #endif
 
 
-connection* tls_client_wrapper_setup(evutil_socket_t efd, daemon_ctx* daemon_ctx,
+connection* tls_client_wrapper_setup(evutil_socket_t efd, daemon_context* daemon_ctx,
 	char* hostname, int is_accepting, tls_opts_t* tls_opts) {
 	
 	connection* ctx = new_tls_conn_ctx();
@@ -171,7 +171,7 @@ void associate_fd(connection* conn, evutil_socket_t ifd) {
 }
 
 
-connection* tls_server_wrapper_setup(evutil_socket_t efd, evutil_socket_t ifd, daemon_ctx* daemon_ctx,
+connection* tls_server_wrapper_setup(evutil_socket_t efd, evutil_socket_t ifd, daemon_context* daemon_ctx,
 	tls_opts_t* tls_opts, struct sockaddr* internal_addr, int internal_addrlen) {
 
 	connection* ctx = new_tls_conn_ctx();
@@ -914,7 +914,7 @@ SSL* tls_server_setup(SSL_CTX* tls_ctx) {
 	return tls;
 }
 
-int set_netlink_cb_params(connection* conn, daemon_ctx* daemon_ctx, unsigned long id) {
+int set_netlink_cb_params(connection* conn, daemon_context* daemon_ctx, unsigned long id) {
 	/*if (conn->tls == NULL) {
 		return 1;
 	}*/

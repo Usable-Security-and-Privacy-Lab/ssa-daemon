@@ -42,14 +42,14 @@ int SSL_use_certificate_chain_file(SSL *ssl, const char *file);
 
 
 
-connection* tls_client_wrapper_setup(evutil_socket_t efd, daemon_ctx* daemon_ctx,
+connection* tls_client_wrapper_setup(evutil_socket_t efd, daemon_context* daemon_ctx,
 	char* hostname, int is_accepting, tls_opts_t* tls_opts);
 void associate_fd(connection* conn, evutil_socket_t ifd);
-connection* tls_server_wrapper_setup(evutil_socket_t efd, evutil_socket_t ifd, daemon_ctx* daemon_ctx,
+connection* tls_server_wrapper_setup(evutil_socket_t efd, evutil_socket_t ifd, daemon_context* daemon_ctx,
 	tls_opts_t* tls_opts, struct sockaddr* internal_addr, int internal_addrlen);
 void free_tls_conn_ctx(connection* ctx);
 
-int set_netlink_cb_params(connection* conn, daemon_ctx* daemon_ctx, unsigned long id);
+int set_netlink_cb_params(connection* conn, daemon_context* daemon_ctx, unsigned long id);
 tls_opts_t* tls_opts_create(char* path);
 void tls_opts_free(tls_opts_t*);
 int tls_opts_server_setup(tls_opts_t* ops);

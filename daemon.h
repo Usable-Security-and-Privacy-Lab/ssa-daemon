@@ -64,14 +64,14 @@ typedef struct daemon_ctx_st {
 	int port; /* Port to use for both listening and netlink */
 	hmap_t* sock_map;
 	hmap_t* sock_map_port;
-} daemon_ctx;
+} daemon_context;
 
 typedef struct connection_st {
 	channel plain;
 	channel secure;
 	SSL* tls;
 	unsigned long id;
-	daemon_ctx* daemon;
+	daemon_context* daemon;
 	struct sockaddr* addr;
 	int addrlen;
 } connection;
@@ -96,24 +96,24 @@ typedef struct sock_ctx_st {
 	tls_opts_t* tls_opts;
 	char rem_hostname[MAX_HOSTNAME];
 	connection* tls_conn;
-	daemon_ctx* daemon;
+	daemon_context* daemon;
 } sock_context;
 
 int server_create(int port);
-void socket_cb(daemon_ctx* ctx, unsigned long id, char* comm);
-void setsockopt_cb(daemon_ctx* ctx, unsigned long id, int level, 
+void socket_cb(daemon_context* ctx, unsigned long id, char* comm);
+void setsockopt_cb(daemon_context* ctx, unsigned long id, int level, 
 		int option, void* value, socklen_t len);
-void getsockopt_cb(daemon_ctx* ctx, unsigned long id, int level, int option);
-void bind_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr, 
+void getsockopt_cb(daemon_context* ctx, unsigned long id, int level, int option);
+void bind_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr, 
 	int int_addrlen, struct sockaddr* ext_addr, int ext_addrlen);
-void connect_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr, 
+void connect_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr, 
 	int int_addrlen, struct sockaddr* rem_addr, int rem_addrlen, int blocking);
-void listen_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr,
+void listen_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr,
 	int int_addrlen, struct sockaddr* ext_addr, int ext_addrlen);
-void associate_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr,
+void associate_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr,
 	       	int int_addrlen);
-void close_cb(daemon_ctx* ctx, unsigned long id);
-void upgrade_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr, 
+void close_cb(daemon_context* ctx, unsigned long id);
+void upgrade_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr, 
 	int int_addrlen);
 
 #endif

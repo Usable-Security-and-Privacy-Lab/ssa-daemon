@@ -130,7 +130,7 @@ int server_create(int port) {
 
 	//signal(SIGPIPE, SIG_IGN);
 
-	daemon_ctx daemon_ctx = {
+	daemon_context context = {
 		.ev_base = ev_base,
 		.netlink_sock = NULL,
 		.port = port,
@@ -140,7 +140,7 @@ int server_create(int port) {
 
 	/* Set up server socket with event base */
 	server_sock = create_server_socket(port, PF_INET, SOCK_STREAM);
-	listener = evconnlistener_new(ev_base, accept_cb, &daemon_ctx, 
+	listener = evconnlistener_new(ev_base, accept_cb, &context, 
 		LEV_OPT_CLOSE_ON_FREE | LEV_OPT_THREADSAFE, SOMAXCONN, server_sock);
 	if (listener == NULL) {
 		log_printf(LOG_ERROR, "Couldn't create evconnlistener\n");
@@ -149,7 +149,7 @@ int server_create(int port) {
 	evconnlistener_set_error_cb(listener, accept_error_cb);
 
 	/* Set up netlink socket with event base */
-	netlink_sock = netlink_connect(&daemon_ctx);
+	netlink_sock = netlink_connect(&context);
 	if (netlink_sock == NULL) {
 		log_printf(LOG_ERROR, "Couldn't create Netlink socket\n");
 		return 1;
@@ -167,7 +167,7 @@ int server_create(int port) {
 
 	/* Set up upgrade notification socket with event base */
 	upgrade_sock = create_upgrade_socket(port);
-	upgrade_ev = event_new(ev_base, upgrade_sock, EV_READ | EV_PERSIST, upgrade_recv, &daemon_ctx);
+	upgrade_ev = event_new(ev_base, upgrade_sock, EV_READ | EV_PERSIST, upgrade_recv, &context);
 	if (event_add(upgrade_ev, NULL) == -1) {
 		log_printf(LOG_ERROR, "Couldn't add upgrade event\n");
 		return 1;
@@ -181,8 +181,8 @@ int server_create(int port) {
 
 	/* Cleanup */
 	evconnlistener_free(listener); /* This also closes the socket due to our listener creation flags */
-	hashmap_free(daemon_ctx.sock_map_port);
-	hashmap_deep_free(daemon_ctx.sock_map, (void (*)(void*))free_sock_ctx);
+	hashmap_free(context.sock_map_port);
+	hashmap_deep_free(context.sock_map, (void (*)(void*))free_sock_ctx);
 	event_free(nl_ev);
 
 	event_free(upgrade_ev);
@@ -371,7 +371,7 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 
 	int port;
 	sock_context* sock_ctx;
-	daemon_ctx* ctx = arg;
+	daemon_context* ctx = arg;
 
 	if (address->sa_family == AF_UNIX) {
 		port = strtol(((struct sockaddr_un*)address)->sun_path+1, NULL, 16);
@@ -505,7 +505,7 @@ void signal_cb(evutil_socket_t fd, short event, void* arg) {
 	return;
 }
 
-void socket_cb(daemon_ctx* ctx, unsigned long id, char* comm) {
+void socket_cb(daemon_context* ctx, unsigned long id, char* comm) {
 	sock_context* sock_ctx;
 	evutil_socket_t fd;
 	int ret;
@@ -545,7 +545,7 @@ void socket_cb(daemon_ctx* ctx, unsigned long id, char* comm) {
 	return;
 }
 
-void setsockopt_cb(daemon_ctx* ctx, unsigned long id, int level, 
+void setsockopt_cb(daemon_context* ctx, unsigned long id, int level, 
 		int option, void* value, socklen_t len) {
 	sock_context* sock_ctx;
 	int response = 0; /* Default is success */
@@ -620,7 +620,7 @@ void setsockopt_cb(daemon_ctx* ctx, unsigned long id, int level,
 	return;
 }
 
-void getsockopt_cb(daemon_ctx* ctx, unsigned long id, int level, int option) {
+void getsockopt_cb(daemon_context* ctx, unsigned long id, int level, int option) {
 	sock_context* sock_ctx;
 	long value;
 	int response = 0;
@@ -714,7 +714,7 @@ void getsockopt_cb(daemon_ctx* ctx, unsigned long id, int level, int option) {
 	return;
 }
 
-void bind_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr, 
+void bind_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr, 
 	int int_addrlen, struct sockaddr* ext_addr, int ext_addrlen) {
 
 	int ret;
@@ -751,7 +751,7 @@ void bind_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr,
 	return;
 }
 
-void connect_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr, 
+void connect_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr, 
 	int int_addrlen, struct sockaddr* rem_addr, int rem_addrlen, int blocking) {
 	
 	int ret;
@@ -809,7 +809,7 @@ void connect_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr,
 	return;
 }
 
-void listen_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr,
+void listen_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr,
 	int int_addrlen, struct sockaddr* ext_addr, int ext_addrlen) {
 
 	int ret;
@@ -849,7 +849,7 @@ void listen_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr,
 	return;
 }
 
-void associate_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr, int int_addrlen) {
+void associate_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr, int int_addrlen) {
 	sock_context* sock_ctx;
 	int response = 0;
 	int port;
@@ -880,7 +880,7 @@ void associate_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr, 
 	return;
 }
 
-void close_cb(daemon_ctx* ctx, unsigned long id) {
+void close_cb(daemon_context* ctx, unsigned long id) {
 	sock_context* sock_ctx;
 
 	sock_ctx = (sock_context*)hashmap_get(ctx->sock_map, id);
@@ -926,7 +926,7 @@ void close_cb(daemon_ctx* ctx, unsigned long id) {
 	return;
 }
 
-void upgrade_cb(daemon_ctx* ctx, unsigned long id, 
+void upgrade_cb(daemon_context* ctx, unsigned long id, 
 		struct sockaddr* int_addr, int int_addrlen) {
 	/* This was implemented in the kernel directly. */
 	return;
@@ -957,7 +957,7 @@ void free_sock_ctx(sock_context* sock_ctx) {
 
 void upgrade_recv(evutil_socket_t fd, short events, void *arg) {
 	sock_context* sock_ctx;
-	daemon_ctx* ctx = (daemon_ctx*)arg;
+	daemon_context* ctx = (daemon_context*)arg;
 	char msg_buffer[256];
 	int new_fd;
 	int bytes_read;
