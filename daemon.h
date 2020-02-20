@@ -39,8 +39,23 @@
 #include "hashmap.h"
 #include "queue.h"
 
-
+#define ALPN_STRING_MAXLEN	256
 #define MAX_HOSTNAME		255
+
+typedef struct tls_opts {
+	SSL_CTX* tls_ctx;
+	char* app_path;
+	int custom_validation;
+	int is_server;
+	char alpn_string[ALPN_STRING_MAXLEN];
+	struct tls_opts* next;
+} tls_opts_t;
+
+typedef struct channel {
+	struct bufferevent* bev;
+	int closed;
+	int connected;
+} channel_t;
 
 typedef struct tls_daemon_ctx {
 	struct event_base* ev_base;
@@ -50,6 +65,39 @@ typedef struct tls_daemon_ctx {
 	hmap_t* sock_map;
 	hmap_t* sock_map_port;
 } tls_daemon_ctx_t;
+
+typedef struct tls_conn_ctx {
+	channel_t plain;
+	channel_t secure;
+	SSL* tls;
+	unsigned long id;
+	tls_daemon_ctx_t* daemon;
+	struct sockaddr* addr;
+	int addrlen;
+} tls_conn_ctx_t;
+
+typedef struct sock_ctx {
+	unsigned long id;
+	evutil_socket_t fd;
+	int has_bound; /* Nonzero if we've called bind locally */
+	struct sockaddr int_addr;
+	int int_addrlen;
+	union {
+		struct sockaddr ext_addr;
+		struct sockaddr rem_addr;
+	};
+	union {
+		int ext_addrlen;
+		int rem_addrlen;
+	};
+	int is_connected;
+	int is_accepting; /* acting as a TLS server or client? */
+	struct evconnlistener* listener;
+	tls_opts_t* tls_opts;
+	char rem_hostname[MAX_HOSTNAME];
+	tls_conn_ctx_t* tls_conn;
+	tls_daemon_ctx_t* daemon;
+} sock_ctx_t;
 
 int server_create(int port);
 void socket_cb(tls_daemon_ctx_t* ctx, unsigned long id, char* comm);

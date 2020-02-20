@@ -38,7 +38,7 @@ void add_setting(ssa_config_t* config, config_setting_t* cur_setting) {
     else if (STR_MATCH(name, "MaxProtocol")) {
         value = config_setting_get_string(cur_setting);
         if (STR_MATCH(value, "1.3")) {
-            config->max_version = TLS1_3_VERSION;
+            config->max_version = TLS_MAX_VERSION;
         }
         else if (STR_MATCH(value, "1.2")) {
             config->max_version = TLS1_2_VERSION;
@@ -209,7 +209,7 @@ size_t parse_config(char* filename) {
 	//for MaxProtocol, if it is not given, default to the highest for best security
     if (config_lookup(&cfg, "Default.MaxProtocol") == NULL) {
         log_printf(LOG_INFO, "Default configuration for MaxProtocol not set. Setting it to v1.3\n");
-        default_config->max_version = TLS1_3_VERSION;
+        default_config->max_version = TLS_MAX_VERSION;
     }
 
     //for other default values, fail if not set

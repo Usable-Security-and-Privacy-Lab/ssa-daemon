@@ -40,32 +40,7 @@
 int SSL_use_certificate_chain_file(SSL *ssl, const char *file);
 #endif
 
-#define ALPN_STRING_MAXLEN	256
 
-typedef struct tls_opts {
-	SSL_CTX* tls_ctx;
-	char* app_path;
-	int custom_validation;
-	int is_server;
-	char alpn_string[ALPN_STRING_MAXLEN];
-	struct tls_opts* next;
-} tls_opts_t;
-
-typedef struct channel {
-	struct bufferevent* bev;
-	int closed;
-	int connected;
-} channel_t;
-
-typedef struct tls_conn_ctx {
-	channel_t plain;
-	channel_t secure;
-	SSL* tls;
-	unsigned long id;
-	tls_daemon_ctx_t* daemon;
-	struct sockaddr* addr;
-	int addrlen;
-} tls_conn_ctx_t;
 
 tls_conn_ctx_t* tls_client_wrapper_setup(evutil_socket_t efd, tls_daemon_ctx_t* daemon_ctx,
 	char* hostname, int is_accepting, tls_opts_t* tls_opts);

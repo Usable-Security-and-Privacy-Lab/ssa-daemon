@@ -65,30 +65,6 @@
 int auth_info_index;
 #endif
 
-typedef struct sock_ctx {
-	unsigned long id;
-	evutil_socket_t fd;
-	int has_bound; /* Nonzero if we've called bind locally */
-	struct sockaddr int_addr;
-	int int_addrlen;
-	union {
-		struct sockaddr ext_addr;
-		struct sockaddr rem_addr;
-	};
-	union {
-		int ext_addrlen;
-		int rem_addrlen;
-	};
-	int is_connected;
-	int is_accepting; /* acting as a TLS server or client? */
-	struct evconnlistener* listener;
-	tls_opts_t* tls_opts;
-	char rem_hostname[MAX_HOSTNAME];
-	tls_conn_ctx_t* tls_conn;
-	tls_daemon_ctx_t* daemon;
-} sock_ctx_t;
-
-
 void free_sock_ctx(sock_ctx_t* sock_ctx);
 
 /* SSA direct functions */
