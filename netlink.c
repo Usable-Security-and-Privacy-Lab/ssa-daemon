@@ -93,7 +93,7 @@ static struct nla_policy ssa_nl_policy[SSA_NL_A_MAX + 1] = {
 
 int handle_netlink_msg(struct nl_msg* msg, void* arg);
 
-struct nl_sock* netlink_connect(tls_daemon_ctx_t* ctx) {
+struct nl_sock* netlink_connect(daemon_ctx* ctx) {
 	int group;
 	int family;
 	struct nl_sock* netlink_sock = nl_socket_alloc();
@@ -138,7 +138,7 @@ void netlink_recv(evutil_socket_t fd, short events, void *arg) {
 }
 
 int handle_netlink_msg(struct nl_msg* msg, void* arg) {
-	tls_daemon_ctx_t* ctx = (tls_daemon_ctx_t*)arg;
+	daemon_ctx* ctx = (daemon_ctx*)arg;
         struct nlmsghdr* nlh;
         struct genlmsghdr* gnlh;
         struct nlattr* attrs[SSA_NL_A_MAX + 1];
@@ -254,7 +254,7 @@ int netlink_disconnect(struct nl_sock* sock) {
         return 0;
 }
 
-void netlink_notify_kernel(tls_daemon_ctx_t* ctx, unsigned long id, int response) {
+void netlink_notify_kernel(daemon_ctx* ctx, unsigned long id, int response) {
 	int ret;
 	struct nl_msg* msg;
 	void* msg_head;
@@ -290,7 +290,7 @@ void netlink_notify_kernel(tls_daemon_ctx_t* ctx, unsigned long id, int response
 	return;
 }
 
-void netlink_send_and_notify_kernel(tls_daemon_ctx_t* ctx, unsigned long id, char* data, unsigned int len) {
+void netlink_send_and_notify_kernel(daemon_ctx* ctx, unsigned long id, char* data, unsigned int len) {
 	int ret;
 	struct nl_msg* msg;
 	void* msg_head;
@@ -326,7 +326,7 @@ void netlink_send_and_notify_kernel(tls_daemon_ctx_t* ctx, unsigned long id, cha
 	return;
 }
 
-void netlink_handshake_notify_kernel(tls_daemon_ctx_t* ctx, unsigned long id, int response) {
+void netlink_handshake_notify_kernel(daemon_ctx* ctx, unsigned long id, int response) {
 	int ret;
 	struct nl_msg* msg;
 	void* msg_head;

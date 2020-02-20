@@ -130,7 +130,7 @@ int server_create(int port) {
 
 	//signal(SIGPIPE, SIG_IGN);
 
-	tls_daemon_ctx_t daemon_ctx = {
+	daemon_ctx daemon_ctx = {
 		.ev_base = ev_base,
 		.netlink_sock = NULL,
 		.port = port,
@@ -371,7 +371,7 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 
 	int port;
 	sock_ctx_t* sock_ctx;
-	tls_daemon_ctx_t* ctx = arg;
+	daemon_ctx* ctx = arg;
 
 	if (address->sa_family == AF_UNIX) {
 		port = strtol(((struct sockaddr_un*)address)->sun_path+1, NULL, 16);
@@ -505,7 +505,7 @@ void signal_cb(evutil_socket_t fd, short event, void* arg) {
 	return;
 }
 
-void socket_cb(tls_daemon_ctx_t* ctx, unsigned long id, char* comm) {
+void socket_cb(daemon_ctx* ctx, unsigned long id, char* comm) {
 	sock_ctx_t* sock_ctx;
 	evutil_socket_t fd;
 	int ret;
@@ -545,7 +545,7 @@ void socket_cb(tls_daemon_ctx_t* ctx, unsigned long id, char* comm) {
 	return;
 }
 
-void setsockopt_cb(tls_daemon_ctx_t* ctx, unsigned long id, int level, 
+void setsockopt_cb(daemon_ctx* ctx, unsigned long id, int level, 
 		int option, void* value, socklen_t len) {
 	sock_ctx_t* sock_ctx;
 	int response = 0; /* Default is success */
@@ -626,7 +626,7 @@ void setsockopt_cb(tls_daemon_ctx_t* ctx, unsigned long id, int level,
 	return;
 }
 
-void getsockopt_cb(tls_daemon_ctx_t* ctx, unsigned long id, int level, int option) {
+void getsockopt_cb(daemon_ctx* ctx, unsigned long id, int level, int option) {
 	sock_ctx_t* sock_ctx;
 	long value;
 	int response = 0;
@@ -720,7 +720,7 @@ void getsockopt_cb(tls_daemon_ctx_t* ctx, unsigned long id, int level, int optio
 	return;
 }
 
-void bind_cb(tls_daemon_ctx_t* ctx, unsigned long id, struct sockaddr* int_addr, 
+void bind_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr, 
 	int int_addrlen, struct sockaddr* ext_addr, int ext_addrlen) {
 
 	int ret;
@@ -757,7 +757,7 @@ void bind_cb(tls_daemon_ctx_t* ctx, unsigned long id, struct sockaddr* int_addr,
 	return;
 }
 
-void connect_cb(tls_daemon_ctx_t* ctx, unsigned long id, struct sockaddr* int_addr, 
+void connect_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr, 
 	int int_addrlen, struct sockaddr* rem_addr, int rem_addrlen, int blocking) {
 	
 	int ret;
@@ -815,7 +815,7 @@ void connect_cb(tls_daemon_ctx_t* ctx, unsigned long id, struct sockaddr* int_ad
 	return;
 }
 
-void listen_cb(tls_daemon_ctx_t* ctx, unsigned long id, struct sockaddr* int_addr,
+void listen_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr,
 	int int_addrlen, struct sockaddr* ext_addr, int ext_addrlen) {
 
 	int ret;
@@ -855,7 +855,7 @@ void listen_cb(tls_daemon_ctx_t* ctx, unsigned long id, struct sockaddr* int_add
 	return;
 }
 
-void associate_cb(tls_daemon_ctx_t* ctx, unsigned long id, struct sockaddr* int_addr, int int_addrlen) {
+void associate_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr, int int_addrlen) {
 	sock_ctx_t* sock_ctx;
 	int response = 0;
 	int port;
@@ -886,7 +886,7 @@ void associate_cb(tls_daemon_ctx_t* ctx, unsigned long id, struct sockaddr* int_
 	return;
 }
 
-void close_cb(tls_daemon_ctx_t* ctx, unsigned long id) {
+void close_cb(daemon_ctx* ctx, unsigned long id) {
 	sock_ctx_t* sock_ctx;
 
 	sock_ctx = (sock_ctx_t*)hashmap_get(ctx->sock_map, id);
@@ -932,7 +932,7 @@ void close_cb(tls_daemon_ctx_t* ctx, unsigned long id) {
 	return;
 }
 
-void upgrade_cb(tls_daemon_ctx_t* ctx, unsigned long id, 
+void upgrade_cb(daemon_ctx* ctx, unsigned long id, 
 		struct sockaddr* int_addr, int int_addrlen) {
 	/* This was implemented in the kernel directly. */
 	return;
@@ -963,7 +963,7 @@ void free_sock_ctx(sock_ctx_t* sock_ctx) {
 
 void upgrade_recv(evutil_socket_t fd, short events, void *arg) {
 	sock_ctx_t* sock_ctx;
-	tls_daemon_ctx_t* ctx = (tls_daemon_ctx_t*)arg;
+	daemon_ctx* ctx = (daemon_ctx*)arg;
 	char msg_buffer[256];
 	int new_fd;
 	int bytes_read;
