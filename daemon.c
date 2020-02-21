@@ -525,18 +525,24 @@ void socket_cb(daemon_context* ctx, unsigned long id, char* comm) {
 	fd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (fd == -1) {
 		response = -errno;
+		goto err;
 	}
-	else {
-		sock_ctx = (sock_context*)calloc(1, sizeof(sock_context));
-		if (sock_ctx == NULL) {
-			response = -ENOMEM;
-		}
-		else {
-			sock_ctx->id = id;
-			sock_ctx->fd = fd;
-			hashmap_add(ctx->sock_map, id, (void*)sock_ctx);
-		}
+	
+	sock_ctx = (sock_context*)calloc(1, sizeof(sock_context));
+	if (sock_ctx == NULL) {
+		response = -ENOMEM;
+		goto err;
 	}
+	sock_ctx->tls_conn = client_connection_new(ctx);
+	if (sock_ctx->tls_conn == NULL) {
+		response = -ENOMEM;
+		goto err;
+	}
+	sock_ctx->id = id;
+	sock_ctx->fd = fd;
+	hashmap_add(ctx->sock_map, id, (void*)sock_ctx);
+
+
 	ret = evutil_make_socket_nonblocking(sock_ctx->fd);
 	if (ret == -1) {
 		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
@@ -544,6 +550,9 @@ void socket_cb(daemon_context* ctx, unsigned long id, char* comm) {
 	}
 
 	log_printf(LOG_INFO, "Socket created on behalf of application %s\n", comm);
+	netlink_notify_kernel(ctx, id, response);
+	return;
+err:
 	netlink_notify_kernel(ctx, id, response);
 	return;
 }
@@ -729,8 +738,12 @@ void connect_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr
 		return;
 	}
 
-	sock_ctx->tls_conn = tls_client_wrapper_setup(sock_ctx->fd, ctx, 
-				sock_ctx->rem_hostname, sock_ctx->is_accepting);
+	int retVal = client_connection_setup(sock_ctx->tls_conn, ctx, sock_ctx->rem_hostname, sock_ctx->fd, sock_ctx->is_accepting);
+	if (retVal != 1) {
+		log_printf(LOG_ERROR, "Client connection setup function failed.");
+	}
+	/* sock_ctx->tls_conn = tls_client_wrapper_setup(sock_ctx->fd, ctx, 
+				sock_ctx->rem_hostname, sock_ctx->is_accepting); */
 	set_netlink_cb_params(sock_ctx->tls_conn, ctx, sock_ctx->id);
 	/* only connect if we're not already.
 	 * we might already be connected due to a

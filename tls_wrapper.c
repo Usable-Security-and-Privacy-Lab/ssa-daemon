@@ -456,23 +456,6 @@ connection* new_tls_conn_ctx() {
 	return ctx;
 }
 
-void free_tls_conn_ctx(connection* ctx) {
-	/* TODO: This function never actually did anything. Change this?? */
-	/* shutdown_tls_conn_ctx(ctx); */
-	ctx->tls = NULL;
-	if (ctx->secure.bev != NULL) {
-		// && ctx->secure.closed == 0) {
-		 bufferevent_free(ctx->secure.bev);
-	}
-	ctx->secure.bev = NULL;
-	if (ctx->plain.bev != NULL) {
-		// && ctx->plain.closed == 1) {
-		 bufferevent_free(ctx->plain.bev);
-	}
-	ctx->plain.bev = NULL;
-	free(ctx);
-	return;
-}
 
 #ifdef CLIENT_AUTH
 int client_auth_callback(SSL *tls, void* hdata, size_t hdata_len, int hash_nid, int sigalg_nid, unsigned char** o_sig, size_t* o_siglen) {

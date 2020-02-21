@@ -46,7 +46,6 @@ connection* tls_client_wrapper_setup(evutil_socket_t efd, daemon_context* daemon
 	char* hostname, int is_accepting);
 connection* tls_server_wrapper_setup(evutil_socket_t efd, evutil_socket_t ifd, daemon_context* daemon_ctx,
 	struct sockaddr* internal_addr, int internal_addrlen);
-void free_tls_conn_ctx(connection* ctx);
 
 int set_netlink_cb_params(connection* conn, daemon_context* daemon_ctx, unsigned long id);
 

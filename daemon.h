@@ -42,8 +42,6 @@
 
 #define MAX_HOSTNAME		255
 
-
-
 typedef struct channel_st {
 	struct bufferevent* bev;
 	int closed;
@@ -85,7 +83,7 @@ typedef struct sock_context_st {
 		int ext_addrlen;
 		int rem_addrlen;
 	};
-	int is_connected; /* TODO: ad is_server option too */
+	int is_connected; /* TODO: Add is_server and custom_validation options */
 	int is_accepting; /* acting as a TLS server or client? */
 	struct evconnlistener* listener;
 	char rem_hostname[MAX_HOSTNAME];
