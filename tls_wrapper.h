@@ -41,9 +41,6 @@ int SSL_use_certificate_chain_file(SSL *ssl, const char *file);
 #endif
 
 
-
-connection* tls_client_wrapper_setup(evutil_socket_t efd, daemon_context* daemon_ctx,
-	char* hostname, int is_accepting);
 connection* tls_server_wrapper_setup(evutil_socket_t efd, evutil_socket_t ifd, daemon_context* daemon_ctx,
 	struct sockaddr* internal_addr, int internal_addrlen);
 

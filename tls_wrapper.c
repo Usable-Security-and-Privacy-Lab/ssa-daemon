@@ -57,13 +57,10 @@
 
 
 static SSL* tls_server_setup(SSL_CTX* tls_ctx);
-static SSL* tls_client_setup(SSL_CTX* tls_ctx, char* hostname);
 static int read_rand_seed(char **buf, char* seed_path, int size);
 
 static connection* new_tls_conn_ctx();
-int trustbase_verify(X509_STORE_CTX* store, void* arg);
 int client_verify(X509_STORE_CTX* store, void* arg);
-int verify_dummy(int preverify, X509_STORE_CTX* store);
 
 #ifdef CLIENT_AUTH
 typedef struct auth_info {
@@ -92,74 +89,6 @@ int auth_daemon_connect(void);
 #endif
 
 
-connection* tls_client_wrapper_setup(evutil_socket_t efd, daemon_context* daemon_ctx,
-	char* hostname, int is_accepting) {
-	SSL_CTX* client_settings = daemon_ctx->client_settings;
-
-
-	connection* ctx = new_tls_conn_ctx();
-	if (ctx == NULL) {
-		log_printf(LOG_ERROR, "Failed to allocate connection: %s\n", strerror(errno));
-		return NULL;
-	}
-
-	ctx->tls = tls_client_setup(client_settings, hostname);
-	if (ctx->tls == NULL) {
-		log_printf(LOG_ERROR, "Failed to set up TLS (SSL*) context\n");
-		free_tls_conn_ctx(ctx);
-		return NULL;
-	}
-	/* socket set to -1 because we set it later */
-	ctx->plain.bev = bufferevent_socket_new(daemon_ctx->ev_base, -1,
-			BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
-	//ctx->plain.connected = 1;
-	if (ctx->plain.bev == NULL) {
-		log_printf(LOG_ERROR, "Failed to set up client facing bufferevent [direct mode]\n");
-		/* Need to close socket because it won't be closed on free since bev creation failed */
-		free_tls_conn_ctx(ctx);
-		return NULL;
-	}
-
-
-	if (is_accepting == 1) { /* TLS server role */
-		ctx->secure.bev = bufferevent_openssl_socket_new(daemon_ctx->ev_base, efd, ctx->tls,
-			BUFFEREVENT_SSL_ACCEPTING, BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
-	}
-	else { /* TLS client role */
-		ctx->secure.bev = bufferevent_openssl_socket_new(daemon_ctx->ev_base, efd, ctx->tls,
-			BUFFEREVENT_SSL_CONNECTING, BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
-	}
-
-	if (ctx->secure.bev == NULL) {
-		log_printf(LOG_ERROR, "Failed to set up server facing bufferevent [direct mode]\n");
-		free_tls_conn_ctx(ctx);
-		return NULL;
-	}
-
-	#if LIBEVENT_VERSION_NUMBER >= 0x02010000
-	/* Comment out this line if you need to do better debugging of OpenSSL behavior */
-	bufferevent_openssl_set_allow_dirty_shutdown(ctx->secure.bev, 1);
-	#endif /* LIBEVENT_VERSION_NUMBER >= 0x02010000 */
-
-
-	/* Register callbacks for reading and writing to both bevs */
-	bufferevent_setcb(ctx->secure.bev, tls_bev_read_cb, tls_bev_write_cb, tls_bev_event_cb, ctx);
-	bufferevent_enable(ctx->secure.bev, EV_READ | EV_WRITE);
-	bufferevent_setcb(ctx->plain.bev, tls_bev_read_cb, tls_bev_write_cb, tls_bev_event_cb, ctx);
-	//log_printf(LOG_INFO, "secure bev enabled\n");
-	//bufferevent_enable(ctx->plain.bev, EV_READ | EV_WRITE);
-
-	/* Connect server facing socket */
-	/*if (bufferevent_socket_connect(ctx->secure.bev, (struct sockaddr*)server_addr, server_addrlen) < 0) {
-		log_printf(LOG_ERROR, "bufferevent_socket_connect [direct mode]: %s\n", strerror(errno));
-		free_tls_conn_ctx(ctx);
-		return;
-	}*/
-	//SSL_connect(ctx->tls);
-	return ctx;
-}
-
-
 connection* tls_server_wrapper_setup(evutil_socket_t efd, evutil_socket_t ifd,
 		daemon_context* daemon_ctx,	struct sockaddr* internal_addr, int internal_addrlen) {
 
@@ -179,7 +108,7 @@ connection* tls_server_wrapper_setup(evutil_socket_t efd, evutil_socket_t ifd,
 	if (ctx->secure.bev == NULL) {
 		log_printf(LOG_ERROR, "Failed to set up client facing bufferevent [listener mode]\n");
 		EVUTIL_CLOSESOCKET(efd);
-		free_tls_conn_ctx(ctx);
+		connection_free(ctx);
 		return NULL;
 	}
 	
@@ -193,7 +122,7 @@ connection* tls_server_wrapper_setup(evutil_socket_t efd, evutil_socket_t ifd,
 	if (ctx->plain.bev == NULL) {
 		log_printf(LOG_ERROR, "Failed to set up server facing bufferevent [listener mode]\n");
 		EVUTIL_CLOSESOCKET(ifd);
-		free_tls_conn_ctx(ctx);
+		connection_free(ctx);
 		return NULL;
 	}
 
@@ -206,12 +135,6 @@ connection* tls_server_wrapper_setup(evutil_socket_t efd, evutil_socket_t ifd,
 	bufferevent_setcb(ctx->secure.bev, tls_bev_read_cb, tls_bev_write_cb, tls_bev_event_cb, ctx);
 	bufferevent_enable(ctx->secure.bev, EV_READ | EV_WRITE);
 	
-	/* Connect to local application server */
-	/*if (bufferevent_socket_connect(ctx->plain.bev, internal_addr, internal_addrlen) < 0) {
-		log_printf(LOG_ERROR, "bufferevent_socket_connect [listener mode]: %s\n", strerror(errno));
-		free_tls_conn_ctx(ctx);
-		return;
-	}*/
 	return ctx;
 }
 
@@ -253,9 +176,6 @@ static int read_rand_seed(char **buf, char* seed_path, int size) {
 
 
 
-int verify_dummy(int preverify, X509_STORE_CTX* store) {
-	return 1;
-}
 
 int client_verify(X509_STORE_CTX* store, void* arg) {
 	/*connection* ctx = arg;*/
@@ -295,46 +215,6 @@ int client_verify(X509_STORE_CTX* store, void* arg) {
 	return 1;
 }
 
-int trustbase_verify(X509_STORE_CTX* store, void* arg) {
-	uint64_t query_id;
-	STACK_OF(X509)* chain;
-	int response;
-	char* hostname = arg;
-
-	X509_verify_cert(store);
-
-	query_id = 1;
-	chain = X509_STORE_CTX_get1_chain(store);
-	if (chain == NULL) {
-		log_printf(LOG_ERROR, "Certificate chain unavailable\n");
-		return 0;
-	}
-
-	if (trustbase_connect()) {
-		log_printf(LOG_ERROR, "unable to connect to trustbase\n");
-		sk_X509_pop_free(chain, X509_free);
-		return 0;
-	}
-	log_printf(LOG_INFO, "Querying TrustBase with chain supposedly from %s\n", hostname);
-	send_query_openssl(query_id, hostname, 443, chain);
-	response = recv_response();
-	trustbase_disconnect();
-
-	sk_X509_pop_free(chain, X509_free);
-	// Response checking
-	if (response < 0) {
-		log_printf(LOG_ERROR, "Did not hear back from TrustBase\n");
-		return 0;
-	}
-
-	if (response == 0) {
-		log_printf(LOG_INFO, "TrustBase indicates certificate was invalid!\n");
-		return 0;
-	}
-	
-	log_printf(LOG_INFO, "TrustBase indicates Certificate was valid!\n");
-	return 1;
-}
 
 #ifdef CLIENT_AUTH
 void pha_cb(const SSL* tls, int where, int ret) {
@@ -402,35 +282,6 @@ int get_hostname(connection* conn_ctx, char** data, unsigned int* len) {
 	}
 	*len = strlen(hostname)+1;
 	return 1;
-}
-
-SSL* tls_client_setup(SSL_CTX* tls_ctx, char* hostname) {
-	SSL* tls;
-	#ifdef CLIENT_AUTH
-	SSL_CTX_set_client_cert_cb(tls_ctx, client_cert_callback);
-	log_printf(LOG_INFO, "Client cert callback set\n");
-	auth_info_t* ai = (auth_info_t*)calloc(1, sizeof(auth_info_t));
-	if (ai == NULL) {
-		log_printf(LOG_ERROR, "Failed to allocate auth info\n");
-		return NULL;
-	}
-	ai->hostname = hostname;
-	#endif
-	tls = SSL_new(tls_ctx);
-	if (tls == NULL) {
-		return NULL;
-	}
-	/* set server name indication for client hello */
-	if (hostname != NULL) {
-		SSL_set_tlsext_host_name(tls, hostname);
-	}
-	//SSL_CTX_set_cert_verify_callback(tls_ctx, trustbase_verify, hostname);
-
-	#ifdef CLIENT_AUTH
-	SSL_force_post_handshake_auth(tls);
-	SSL_set_ex_data(tls, auth_info_index, (void*)ai);
-	#endif
-	return tls;
 }
 
 SSL* tls_server_setup(SSL_CTX* tls_ctx) {

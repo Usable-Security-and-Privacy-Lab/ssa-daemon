@@ -742,8 +742,7 @@ void connect_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr
 	if (retVal != 1) {
 		log_printf(LOG_ERROR, "Client connection setup function failed.");
 	}
-	/* sock_ctx->tls_conn = tls_client_wrapper_setup(sock_ctx->fd, ctx, 
-				sock_ctx->rem_hostname, sock_ctx->is_accepting); */
+	
 	set_netlink_cb_params(sock_ctx->tls_conn, ctx, sock_ctx->id);
 	/* only connect if we're not already.
 	 * we might already be connected due to a
@@ -875,7 +874,7 @@ void close_cb(daemon_context* ctx, unsigned long id) {
 		 * But we were given control of the remote peer
 		 * connection */
 		hashmap_del(ctx->sock_map, id);
-		free_tls_conn_ctx(sock_ctx->tls_conn);
+		connection_free(sock_ctx->tls_conn);
 		free(sock_ctx);
 		return;
 	}
@@ -886,7 +885,7 @@ void close_cb(daemon_context* ctx, unsigned long id) {
 		 * only need to clean up the sock_ctx */
 		//netlink_notify_kernel(ctx, id, 0);
 		hashmap_del(ctx->sock_map, id);
-		free_tls_conn_ctx(sock_ctx->tls_conn);
+		connection_free(sock_ctx->tls_conn);
 		free(sock_ctx);
 		return;
 	}
@@ -926,7 +925,7 @@ void free_sock_ctx(sock_context* sock_ctx) {
 		EVUTIL_CLOSESOCKET(sock_ctx->fd);
 	}
 	if (sock_ctx->tls_conn != NULL) {
-		free_tls_conn_ctx(sock_ctx->tls_conn);
+		connection_free(sock_ctx->tls_conn);
 	}
 	free(sock_ctx);
 	return;

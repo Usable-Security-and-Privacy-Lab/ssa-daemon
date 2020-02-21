@@ -25,8 +25,9 @@
 #include "daemon.h"
 
 
-void associate_fd(connection* conn, evutil_socket_t ifd);
+void connection_free(connection* ctx);
 
+void associate_fd(connection* conn, evutil_socket_t ifd);
 
 void tls_bev_write_cb(struct bufferevent *bev, void *arg);
 void tls_bev_read_cb(struct bufferevent *bev, void *arg);

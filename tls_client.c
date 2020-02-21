@@ -126,7 +126,7 @@ int client_connection_setup(connection* client_conn, daemon_context* daemon_ctx,
 	if (client_conn->plain.bev == NULL) {
 		log_printf(LOG_ERROR, "Failed to set up client facing bufferevent [direct mode]\n");
 		/* Need to close socket because it won't be closed on free since bev creation failed */
-		free_tls_conn_ctx(client_conn);
+		connection_free(client_conn);
 		return 0;
 	}
 
@@ -142,7 +142,7 @@ int client_connection_setup(connection* client_conn, daemon_context* daemon_ctx,
 
 	if (client_conn->secure.bev == NULL) {
 		log_printf(LOG_ERROR, "Failed to set up server facing bufferevent [direct mode]\n");
-		free_tls_conn_ctx(client_conn);
+		connection_free(client_conn);
 		return 0;
 	}
 
@@ -158,22 +158,4 @@ int client_connection_setup(connection* client_conn, daemon_context* daemon_ctx,
 	bufferevent_setcb(client_conn->plain.bev, tls_bev_read_cb, tls_bev_write_cb, tls_bev_event_cb, client_conn);
 
 	return 1;
-}
-
-void free_tls_conn_ctx(connection* ctx) {
-	/* TODO: This function never actually did anything. Change this?? */
-	/* shutdown_tls_conn_ctx(ctx); */
-	ctx->tls = NULL;
-	if (ctx->secure.bev != NULL) {
-		// && ctx->secure.closed == 0) {
-		 bufferevent_free(ctx->secure.bev);
-	}
-	ctx->secure.bev = NULL;
-	if (ctx->plain.bev != NULL) {
-		// && ctx->plain.closed == 1) {
-		 bufferevent_free(ctx->plain.bev);
-	}
-	ctx->plain.bev = NULL;
-	free(ctx);
-	return;
 }

@@ -14,6 +14,27 @@
 
 #define MAX_BUFFER	1024*1024*10
 
+void connection_free(connection* ctx) {
+	/* TODO: This function never actually did anything. Change this?? */
+	/* shutdown_tls_conn_ctx(ctx); */
+	ctx->tls = NULL;
+	if (ctx->secure.bev != NULL) {
+		// && ctx->secure.closed == 0) {
+		 bufferevent_free(ctx->secure.bev);
+	}
+	ctx->secure.bev = NULL;
+	if (ctx->plain.bev != NULL) {
+		// && ctx->plain.closed == 1) {
+		 bufferevent_free(ctx->plain.bev);
+	}
+	ctx->plain.bev = NULL;
+	free(ctx);
+	return;
+}
+
+
+
+
 void associate_fd(connection* conn, evutil_socket_t ifd) {
 	bufferevent_setfd(conn->plain.bev, ifd);
 	bufferevent_enable(conn->plain.bev, EV_READ | EV_WRITE);
