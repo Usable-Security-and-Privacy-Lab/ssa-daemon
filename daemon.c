@@ -178,11 +178,11 @@ int server_create(int port) {
 		return 1;
 	}
 
-	context.client_settings = client_settings_init();
+	/* context.client_settings = client_settings_init("ssa.cfg");
 	if (context.client_settings == NULL) {
 		log_printf(LOG_ERROR, "Couldn't create SSL_CTX/load settings into it.\n");
 		return 1;
-	}
+	} */
 
 	/* Main event loop */	
 	event_base_dispatch(ev_base);
@@ -541,6 +541,7 @@ void socket_cb(daemon_context* ctx, unsigned long id, char* comm) {
 		else {
 			sock_ctx->id = id;
 			sock_ctx->fd = fd;
+			log_printf(LOG_INFO, "Creating tls_opts using comm %s\n", comm);
 			sock_ctx->tls_opts = tls_opts_create(comm);
 			hashmap_add(ctx->sock_map, id, (void*)sock_ctx);
 		}

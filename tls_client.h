@@ -28,7 +28,7 @@
 
 #include "daemon.h"
 
-SSL_CTX* client_settings_init();
+SSL_CTX* client_settings_init(char* path);
 
 
 

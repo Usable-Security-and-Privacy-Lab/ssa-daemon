@@ -58,10 +58,9 @@
 
 static SSL* tls_server_setup(SSL_CTX* tls_ctx);
 static SSL* tls_client_setup(SSL_CTX* tls_ctx, char* hostname);
-
+static int read_rand_seed(char **buf, char* seed_path, int size);
 
 static connection* new_tls_conn_ctx();
-static int read_rand_seed(char **buf, char* seed_path, int size);
 int trustbase_verify(X509_STORE_CTX* store, void* arg);
 int client_verify(X509_STORE_CTX* store, void* arg);
 int verify_dummy(int preverify, X509_STORE_CTX* store);
@@ -249,7 +248,7 @@ static int read_rand_seed(char **buf, char* seed_path, int size) {
 
 tls_opts_t* tls_opts_create(char* path) {
 	tls_opts_t* opts;
-	SSL_CTX* tls_ctx;
+	SSL_CTX* client_settings;
 	ssa_config_t* ssa_config;
 	struct stat stat_store;
 	/*char* store_dir = NULL;*/
@@ -264,12 +263,37 @@ tls_opts_t* tls_opts_create(char* path) {
 
 	/* Configure default settings for connections based on
 	 * admin preferences */
-	tls_ctx = SSL_CTX_new(SSLv23_method());
-	SSL_CTX_set_session_id_context(tls_ctx, &unverified_context_id, sizeof(unverified_context_id));
+	client_settings = SSL_CTX_new(SSLv23_method());
+	SSL_CTX_set_session_id_context(client_settings, &unverified_context_id, sizeof(unverified_context_id));
 	ssa_config = get_app_config(path);
 
+
+	const char* CA_file = "/etc/pki/tls/certs/ca-bundle.crt";
+	const char* cipher_list = "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256";
+	/* const char *ciphersuites = "TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_SHA256:TLS_AES_128_CCM_8_SHA256";
+	*/
+	/* TODO: Uncomment this eventually */
+	
+	SSL_CTX_set_verify(client_settings, SSL_VERIFY_PEER, NULL);
+	SSL_CTX_set_options(client_settings, SSL_OP_NO_COMPRESSION | SSL_OP_NO_TICKET);
+
+	SSL_CTX_set_min_proto_version(client_settings, TLS1_2_VERSION); 
+	SSL_CTX_set_max_proto_version(client_settings, TLS_MAX_VERSION);
+
+	/* TODO: Get my personal working with OpenSSL 1.1.1 before this will work
+	if (SSL_CTX_set_ciphersuites(client_settings, ciphersuites) != 1) 
+		goto err;
+	*/
+	SSL_CTX_set_cipher_list(client_settings, cipher_list);
+
+	SSL_CTX_load_verify_locations(client_settings, CA_file, NULL);
+
+	opts->tls_ctx = client_settings;
+	return opts;
+	/*
+
 	if (ssa_config) {
-        printf("MinVersion: %d\n", ssa_config->min_version);
+        log_printf(LOG_INFO, "MinVersion: %d\n", ssa_config->min_version);
 		if (SSL_CTX_set_min_proto_version(tls_ctx, ssa_config->min_version) == 0) {
 			log_printf(LOG_ERROR, "Unable to set min protocol version for %s\n",path);
 		}
@@ -280,11 +304,7 @@ tls_opts_t* tls_opts_create(char* path) {
 			log_printf(LOG_ERROR, "Unable to set cipher list for %s\n",path);
 		}
 
-		stat(ssa_config->trust_store, &stat_store);
-		if (S_ISDIR(stat_store.st_mode)) {
-			/*store_dir = ssa_config->trust_store;
-			 * XXX We don't support dirs yet */
-		}
+	
 		else {
 			store_file = ssa_config->trust_store;
 		}
@@ -304,7 +324,6 @@ tls_opts_t* tls_opts_create(char* path) {
 		//SessionCacheLocation
 		SSL_CTX_set_timeout(tls_ctx, ssa_config->cache_timeout);
 		opts->custom_validation = ssa_config->custom_validation;
-		
 	}
 	else {
 		log_printf(LOG_ERROR, "Unable to find ssa configuration\n");
@@ -312,6 +331,7 @@ tls_opts_t* tls_opts_create(char* path) {
 
 	opts->tls_ctx = tls_ctx;
 	return opts;
+	*/
 }
 
 void tls_opts_free(tls_opts_t* opts) {
