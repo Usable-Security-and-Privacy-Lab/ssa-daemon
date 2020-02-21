@@ -608,7 +608,7 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 
 void getsockopt_cb(daemon_context* ctx, unsigned long id, int level, int option) {
 	sock_context* sock_ctx;
-	long value;
+	/* long value; */
 	int response = 0;
 	char* data = NULL;
 	unsigned int len = 0;

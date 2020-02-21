@@ -27,9 +27,14 @@
 
 void associate_fd(connection* conn, evutil_socket_t ifd);
 
+void tls_bev_write_cb(struct bufferevent *bev, void *arg);
+void tls_bev_read_cb(struct bufferevent *bev, void *arg);
+void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg);
 
 /* setsockopt/getsockopt */
 
 int get_peer_certificate(connection* conn_ctx, char** data, unsigned int* len);
 int get_peer_identity(connection* conn_ctx, char** data, unsigned int* len);
+
+
 
