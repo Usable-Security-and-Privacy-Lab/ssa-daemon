@@ -51,7 +51,6 @@ void free_tls_conn_ctx(connection* ctx);
 int set_netlink_cb_params(connection* conn, daemon_context* daemon_ctx, unsigned long id);
 tls_opts_t* tls_opts_create(char* path);
 void tls_opts_free(tls_opts_t*);
-int tls_opts_server_setup(tls_opts_t* ops);
 
 /* Helper functions to separate daemon from security library */
 int set_remote_hostname(tls_opts_t* tls_opts, connection* conn_ctx, char* hostname);

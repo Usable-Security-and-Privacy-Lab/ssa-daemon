@@ -813,7 +813,19 @@ void listen_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr,
 		return;
 	}
 
-	tls_opts_server_setup(sock_ctx->tls_opts);
+	/* TODO: Eventually clean up this whole section--ripped from tls_opts_server_setup()... */
+	SSL_CTX* server_settings = ctx->server_settings;
+	SSL_CTX_set_options(server_settings, SSL_OP_ALL);
+	/* There's a billion options we can/should set here by admin config XXX
+ 	 * See SSL_CTX_set_options and SSL_CTX_set_cipher_list for details */
+
+	/* XXX We can do all sorts of caching modes and define our own callbacks
+	 * if desired */
+	SSL_CTX_set_session_cache_mode(server_settings, SSL_SESS_CACHE_SERVER);
+	SSL_CTX_use_certificate_chain_file(server_settings, "test_files/localhost_cert.pem");
+	SSL_CTX_use_PrivateKey_file(server_settings, "test_files/localhost_key.pem", SSL_FILETYPE_PEM);
+	/* Thus concludes the TODO. */
+
 	sock_ctx->daemon = ctx; /* XXX I don't want this here */
 	sock_ctx->listener = evconnlistener_new(ctx->ev_base, listener_accept_cb, sock_ctx,
 		LEV_OPT_CLOSE_ON_FREE | LEV_OPT_THREADSAFE, 0, sock_ctx->fd);
@@ -961,7 +973,19 @@ void upgrade_recv(evutil_socket_t fd, short events, void *arg) {
 	sock_ctx->tls_opts = tls_opts_create(NULL); 
 
 	if (is_accepting == 1) {
-		tls_opts_server_setup(sock_ctx->tls_opts);
+		/* TODO: Eventually clean up this whole section--ripped from tls_opts_server_setup()... */
+		SSL_CTX* server_settings = ctx->server_settings;
+		SSL_CTX_set_options(server_settings, SSL_OP_ALL);
+		/* There's a billion options we can/should set here by admin config XXX
+		* See SSL_CTX_set_options and SSL_CTX_set_cipher_list for details */
+
+		/* XXX We can do all sorts of caching modes and define our own callbacks
+		* if desired */
+		SSL_CTX_set_session_cache_mode(server_settings, SSL_SESS_CACHE_SERVER);
+		SSL_CTX_use_certificate_chain_file(server_settings, "test_files/localhost_cert.pem");
+		SSL_CTX_use_PrivateKey_file(server_settings, "test_files/localhost_key.pem", SSL_FILETYPE_PEM);
+		/* Thus concludes the TODO. */
+
 		sock_ctx->is_accepting = 1;
 	}
 	else {

@@ -43,7 +43,6 @@
 #define MAX_HOSTNAME		255
 
 typedef struct tls_opts_st {
-	SSL_CTX* tls_ctx;
 	int custom_validation;
 } tls_opts_t;
 
