@@ -94,14 +94,16 @@ int auth_daemon_connect(void);
 
 connection* tls_client_wrapper_setup(evutil_socket_t efd, daemon_context* daemon_ctx,
 	char* hostname, int is_accepting, tls_opts_t* tls_opts) {
-	
+	SSL_CTX* client_settings = daemon_ctx->client_settings;
+
+
 	connection* ctx = new_tls_conn_ctx();
 	if (ctx == NULL) {
 		log_printf(LOG_ERROR, "Failed to allocate connection: %s\n", strerror(errno));
 		return NULL;
 	}
-	ctx->tls = tls_client_setup(tls_opts->tls_ctx, hostname);
 
+	ctx->tls = tls_client_setup(client_settings, hostname);
 	if (ctx->tls == NULL) {
 		log_printf(LOG_ERROR, "Failed to set up TLS (SSL*) context\n");
 		free_tls_conn_ctx(ctx);
@@ -354,28 +356,6 @@ int tls_opts_server_setup(tls_opts_t* tls_opts) {
 	
 	SSL_CTX_use_certificate_chain_file(tls_ctx, "test_files/localhost_cert.pem");
 	SSL_CTX_use_PrivateKey_file(tls_ctx, "test_files/localhost_key.pem", SSL_FILETYPE_PEM);
-
-	return 1;
-}
-
-int tls_opts_client_setup(tls_opts_t* tls_opts) {
-	SSL_CTX* tls_ctx = tls_opts->tls_ctx;
-
-	SSL_CTX_set_options(tls_ctx, SSL_OP_ALL);
-
-	SSL_CTX_set_verify(tls_ctx, SSL_VERIFY_PEER, NULL);
-
-	/* This allows verify_dummy to override the default cert checking */
-	//SSL_CTX_set_verify(tls_ctx, SSL_VERIFY_PEER, verify_dummy);
-	
-	/* This disables cert checking */
-	//SSL_CTX_set_verify(tls_ctx, SSL_VERIFY_NONE, verify_dummy);
-
-	/* There's a billion options we can/should set here by admin config XXX
- 	 * See SSL_CTX_set_options and SSL_CTX_set_cipher_list for details */
-
-	/* For client auth portion of the SSA utilize 
-	 * SSL_CTX_set_default_passwd_cb */
 
 	return 1;
 }

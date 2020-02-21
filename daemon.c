@@ -746,7 +746,6 @@ void connect_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr
 		return;
 	}
 
-	tls_opts_client_setup(sock_ctx->tls_opts);
 	sock_ctx->tls_conn = tls_client_wrapper_setup(sock_ctx->fd, ctx, 
 				sock_ctx->rem_hostname, sock_ctx->is_accepting, sock_ctx->tls_opts);
 	set_netlink_cb_params(sock_ctx->tls_conn, ctx, sock_ctx->id);
@@ -966,7 +965,7 @@ void upgrade_recv(evutil_socket_t fd, short events, void *arg) {
 		sock_ctx->is_accepting = 1;
 	}
 	else {
-		tls_opts_client_setup(sock_ctx->tls_opts);
+		/* tls_opts_client_setup(sock_ctx->tls_opts); */
 		sock_ctx->is_accepting = 0;
 	}
 
