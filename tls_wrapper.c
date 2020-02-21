@@ -93,7 +93,7 @@ int auth_daemon_connect(void);
 
 
 connection* tls_client_wrapper_setup(evutil_socket_t efd, daemon_context* daemon_ctx,
-	char* hostname, int is_accepting, tls_opts_t* tls_opts) {
+	char* hostname, int is_accepting) {
 	SSL_CTX* client_settings = daemon_ctx->client_settings;
 
 
@@ -160,8 +160,8 @@ connection* tls_client_wrapper_setup(evutil_socket_t efd, daemon_context* daemon
 }
 
 
-connection* tls_server_wrapper_setup(evutil_socket_t efd, evutil_socket_t ifd, daemon_context* daemon_ctx,
-	tls_opts_t* tls_opts, struct sockaddr* internal_addr, int internal_addrlen) {
+connection* tls_server_wrapper_setup(evutil_socket_t efd, evutil_socket_t ifd,
+		daemon_context* daemon_ctx,	struct sockaddr* internal_addr, int internal_addrlen) {
 
 	SSL_CTX* server_settings = daemon_ctx->server_settings;
 	connection* ctx = new_tls_conn_ctx();
@@ -249,29 +249,9 @@ static int read_rand_seed(char **buf, char* seed_path, int size) {
 	return 1;
 }
 
-tls_opts_t* tls_opts_create(char* path) {
-	tls_opts_t* opts;
-	SSL_CTX* client_settings;
-	ssa_config_t* ssa_config;
-	struct stat stat_store;
-	/*char* store_dir = NULL;*/
-	char* store_file = NULL;
-	char* rand_buf;
-	const unsigned char unverified_context_id = 1;
 
-	opts = (tls_opts_t*)calloc(1, sizeof(tls_opts_t));
-	if (opts == NULL) {
-		return NULL;
-	}
 
-	
-	return opts;
-}
 
-void tls_opts_free(tls_opts_t* opts) {
-	free(opts);
-	return;
-}
 
 int verify_dummy(int preverify, X509_STORE_CTX* store) {
 	return 1;
@@ -374,7 +354,7 @@ void pha_cb(const SSL* tls, int where, int ret) {
 }
 #endif
 
-int send_peer_auth_req(tls_opts_t* tls_opts, connection* conn_ctx, char* value) {
+int send_peer_auth_req(connection* conn_ctx, char* value) {
 	#ifdef CLIENT_AUTH
 	s_auth_info_t* ai;
 	if (conn_ctx == NULL) {
@@ -399,7 +379,7 @@ int send_peer_auth_req(tls_opts_t* tls_opts, connection* conn_ctx, char* value) 
 	return 1;
 }
 
-int set_remote_hostname(tls_opts_t* tls_opts, connection* conn_ctx, char* hostname) {
+int set_remote_hostname(connection* conn_ctx, char* hostname) {
 	if (conn_ctx == NULL) {
 		/* We don't fail here because this will be set when the
 		 * connection is actually created by tls_client_setup */
@@ -409,13 +389,7 @@ int set_remote_hostname(tls_opts_t* tls_opts, connection* conn_ctx, char* hostna
 	return 1;
 }
 
-int get_remote_hostname(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len) {
-	/* XXX hostname is a bit of a misnomer for the client auth case, as it's actually client identity
-	 * instead of hostname. Perhaps rename this option or make an alias for it */
-	return 1;
-}
-
-int get_hostname(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len) {
+int get_hostname(connection* conn_ctx, char** data, unsigned int* len) {
 	const char* hostname;
 	if (conn_ctx == NULL) {
 		return 0;
@@ -427,11 +401,6 @@ int get_hostname(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsign
 		return 1;
 	}
 	*len = strlen(hostname)+1;
-	return 1;
-}
-
-int get_certificate_chain(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len) {
-	/* XXX stub */
 	return 1;
 }
 

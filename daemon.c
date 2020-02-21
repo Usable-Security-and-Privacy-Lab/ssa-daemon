@@ -406,8 +406,6 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 		return;
 	}
 	hashmap_del(ctx->sock_map_port, port);
-	//sock_ctx->tls_conn = tls_client_wrapper_setup(sock_ctx->fd, ctx, 
-	//			sock_ctx->rem_hostname, sock_ctx->is_accepting, sock_ctx->tls_opts);
 
 	associate_fd(sock_ctx->tls_conn, fd);
 	return;
@@ -452,10 +450,6 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 		return;
 	}
 	new_sock_ctx->fd = efd;
-	//new_sock_ctx->daemon = sock_ctx->daemon;
-	//new_sock_ctx->tls_opts = sock_ctx->tls_opts;
-	//new_sock_ctx->int_addr = sock_ctx->int_addr;
-	//new_sock_ctx->int_addrlen = sock_ctx->int_addrlen;
 
 	ifd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (ifd == -1) {
@@ -484,8 +478,7 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	port = (int)ntohs((&int_addr)->sin_port);
 	hashmap_add(sock_ctx->daemon->sock_map_port, port, (void*)new_sock_ctx);
 	
-	new_sock_ctx->tls_conn = tls_server_wrapper_setup(efd, ifd, sock_ctx->daemon,
-			sock_ctx->tls_opts, &sock_ctx->int_addr, sock_ctx->int_addrlen);
+	new_sock_ctx->tls_conn = tls_server_wrapper_setup(efd, ifd, sock_ctx->daemon, &sock_ctx->int_addr, sock_ctx->int_addrlen);
 	return;
 }
 
@@ -541,8 +534,6 @@ void socket_cb(daemon_context* ctx, unsigned long id, char* comm) {
 		else {
 			sock_ctx->id = id;
 			sock_ctx->fd = fd;
-			log_printf(LOG_INFO, "Creating tls_opts using comm %s\n", comm);
-			sock_ctx->tls_opts = tls_opts_create(comm);
 			hashmap_add(ctx->sock_map, id, (void*)sock_ctx);
 		}
 	}
@@ -574,7 +565,7 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 		/* The kernel validated this data for us */
 		memcpy(sock_ctx->rem_hostname, value, len);
 		log_printf(LOG_INFO, "Assigning %s to socket %lu\n", sock_ctx->rem_hostname, id);
-		if (set_remote_hostname(sock_ctx->tls_opts, sock_ctx->tls_conn, value) == 0) {
+		if (set_remote_hostname(sock_ctx->tls_conn, value) == 0) {
 			response = -EINVAL;
 		}
 		break;
@@ -586,7 +577,7 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 		break;
 	case TLS_REQUEST_PEER_AUTH:
 		set_netlink_cb_params(sock_ctx->tls_conn, ctx, id);
-		if (send_peer_auth_req(sock_ctx->tls_opts, sock_ctx->tls_conn, value) == 0) {
+		if (send_peer_auth_req(sock_ctx->tls_conn, value) == 0) {
 			response = -EINVAL;
 		}
 		return;
@@ -626,22 +617,14 @@ void getsockopt_cb(daemon_context* ctx, unsigned long id, int level, int option)
 			netlink_send_and_notify_kernel(ctx, id, sock_ctx->rem_hostname, strlen(sock_ctx->rem_hostname)+1);
 			return;
 		}
-		if (get_remote_hostname(sock_ctx->tls_opts, sock_ctx->tls_conn, &data, &len) == 0) {
-			response = -EINVAL;
-		}
 		break;
 	case TLS_HOSTNAME:
-		if(get_hostname(sock_ctx->tls_opts, sock_ctx->tls_conn, &data, &len) == 0) {
+		if(get_hostname(sock_ctx->tls_conn, &data, &len) == 0) {
 			response = -EINVAL;
 		}
 		break;
 	case TLS_TRUSTED_PEER_CERTIFICATES:
 		response = -ENOPROTOOPT; /* set only */
-		break;
-	case TLS_CERTIFICATE_CHAIN:
-		if (get_certificate_chain(sock_ctx->tls_opts, sock_ctx->tls_conn, &data, &len) == 0) {
-			response = -EINVAL;
-		}
 		break;
 	case TLS_PRIVATE_KEY:
 		response = -ENOPROTOOPT; /* set only */
@@ -747,7 +730,7 @@ void connect_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr
 	}
 
 	sock_ctx->tls_conn = tls_client_wrapper_setup(sock_ctx->fd, ctx, 
-				sock_ctx->rem_hostname, sock_ctx->is_accepting, sock_ctx->tls_opts);
+				sock_ctx->rem_hostname, sock_ctx->is_accepting);
 	set_netlink_cb_params(sock_ctx->tls_conn, ctx, sock_ctx->id);
 	/* only connect if we're not already.
 	 * we might already be connected due to a
@@ -879,7 +862,6 @@ void close_cb(daemon_context* ctx, unsigned long id) {
 		 * But we were given control of the remote peer
 		 * connection */
 		hashmap_del(ctx->sock_map, id);
-		tls_opts_free(sock_ctx->tls_opts);
 		free_tls_conn_ctx(sock_ctx->tls_conn);
 		free(sock_ctx);
 		return;
@@ -891,7 +873,6 @@ void close_cb(daemon_context* ctx, unsigned long id) {
 		 * only need to clean up the sock_ctx */
 		//netlink_notify_kernel(ctx, id, 0);
 		hashmap_del(ctx->sock_map, id);
-		tls_opts_free(sock_ctx->tls_opts);
 		free_tls_conn_ctx(sock_ctx->tls_conn);
 		free(sock_ctx);
 		return;
@@ -899,7 +880,6 @@ void close_cb(daemon_context* ctx, unsigned long id) {
 	if (sock_ctx->listener != NULL) {
 		hashmap_del(ctx->sock_map, id);
 		evconnlistener_free(sock_ctx->listener);
-		tls_opts_free(sock_ctx->tls_opts);
 		free(sock_ctx);
 		//netlink_notify_kernel(ctx, id, 0);
 		return;
@@ -932,7 +912,6 @@ void free_sock_ctx(sock_context* sock_ctx) {
 	else {
 		EVUTIL_CLOSESOCKET(sock_ctx->fd);
 	}
-	tls_opts_free(sock_ctx->tls_opts);
 	if (sock_ctx->tls_conn != NULL) {
 		free_tls_conn_ctx(sock_ctx->tls_conn);
 	}
@@ -970,7 +949,6 @@ void upgrade_recv(evutil_socket_t fd, short events, void *arg) {
 	EVUTIL_CLOSESOCKET(sock_ctx->fd);
 	sock_ctx->fd = new_fd;
 	sock_ctx->is_connected = 1;
-	sock_ctx->tls_opts = tls_opts_create(NULL); 
 
 	if (is_accepting == 1) {
 		/* TODO: Eventually clean up this whole section--ripped from tls_opts_server_setup()... */
@@ -989,13 +967,9 @@ void upgrade_recv(evutil_socket_t fd, short events, void *arg) {
 		sock_ctx->is_accepting = 1;
 	}
 	else {
-		/* tls_opts_client_setup(sock_ctx->tls_opts); */
+		/* used to have tls_opts_client_setup(sock_ctx->tls_opts); */
 		sock_ctx->is_accepting = 0;
 	}
-
-	//sock_ctx->tls_conn = tls_client_wrapper_setup(sock_ctx->fd, ctx, 
-	//			sock_ctx->rem_hostname, sock_ctx->is_accepting, sock_ctx->tls_opts);
-	//set_netlink_cb_params(sock_ctx->tls_conn, ctx, sock_ctx->id);
 
 	if (sendto(fd, "GOT IT", sizeof("GOT IT"), 0, (struct sockaddr*)&addr, addr_len) == -1) {
 		perror("sendto");

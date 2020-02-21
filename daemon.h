@@ -42,9 +42,7 @@
 
 #define MAX_HOSTNAME		255
 
-typedef struct tls_opts_st {
-	int custom_validation;
-} tls_opts_t;
+
 
 typedef struct channel_st {
 	struct bufferevent* bev;
@@ -90,7 +88,6 @@ typedef struct sock_context_st {
 	int is_connected; /* TODO: ad is_server option too */
 	int is_accepting; /* acting as a TLS server or client? */
 	struct evconnlistener* listener;
-	tls_opts_t* tls_opts;
 	char rem_hostname[MAX_HOSTNAME];
 	connection* tls_conn;
 	daemon_context* daemon;

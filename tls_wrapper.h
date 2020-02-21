@@ -43,21 +43,16 @@ int SSL_use_certificate_chain_file(SSL *ssl, const char *file);
 
 
 connection* tls_client_wrapper_setup(evutil_socket_t efd, daemon_context* daemon_ctx,
-	char* hostname, int is_accepting, tls_opts_t* tls_opts);
+	char* hostname, int is_accepting);
 connection* tls_server_wrapper_setup(evutil_socket_t efd, evutil_socket_t ifd, daemon_context* daemon_ctx,
-	tls_opts_t* tls_opts, struct sockaddr* internal_addr, int internal_addrlen);
+	struct sockaddr* internal_addr, int internal_addrlen);
 void free_tls_conn_ctx(connection* ctx);
 
 int set_netlink_cb_params(connection* conn, daemon_context* daemon_ctx, unsigned long id);
-tls_opts_t* tls_opts_create(char* path);
-void tls_opts_free(tls_opts_t*);
 
 /* Helper functions to separate daemon from security library */
-int set_remote_hostname(tls_opts_t* tls_opts, connection* conn_ctx, char* hostname);
-int send_peer_auth_req(tls_opts_t* tls_opts, connection* conn_ctx, char* value);
+int set_remote_hostname(connection* conn_ctx, char* hostname);
+int send_peer_auth_req(connection* conn_ctx, char* value);
 
-int get_remote_hostname(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len);
-int get_hostname(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len);
-int get_certificate_chain(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len);
-int get_peer_identity(connection* conn_ctx, char** data, unsigned int* len);
+int get_hostname(connection* conn_ctx, char** data, unsigned int* len);
 #endif
