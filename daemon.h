@@ -60,6 +60,8 @@ typedef struct daemon_context_st {
 	int port; /* Port to use for both listening and netlink */
 	hmap_t* sock_map;
 	hmap_t* sock_map_port;
+	SSL_CTX* client_settings;
+	SSL_CTX* server_settings;
 } daemon_context;
 
 typedef struct connection_st {

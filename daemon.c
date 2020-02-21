@@ -58,6 +58,8 @@
 #include "netlink.h"
 #include "log.h"
 
+#include "tls_client.h"
+
 #define MAX_UPGRADE_SOCKET  18
 #define HASHMAP_NUM_BUCKETS	100
 
@@ -136,6 +138,8 @@ int server_create(int port) {
 		.port = port,
 		.sock_map = hashmap_create(HASHMAP_NUM_BUCKETS),
 		.sock_map_port = hashmap_create(HASHMAP_NUM_BUCKETS),
+		.client_settings = NULL,
+		.server_settings = NULL,
 	};
 
 	/* Set up server socket with event base */
@@ -170,6 +174,12 @@ int server_create(int port) {
 	upgrade_ev = event_new(ev_base, upgrade_sock, EV_READ | EV_PERSIST, upgrade_recv, &context);
 	if (event_add(upgrade_ev, NULL) == -1) {
 		log_printf(LOG_ERROR, "Couldn't add upgrade event\n");
+		return 1;
+	}
+
+	context.client_settings = client_settings_init();
+	if (context.client_settings == NULL) {
+		log_printf(LOG_ERROR, "Couldn't create SSL_CTX/load settings into it.\n");
 		return 1;
 	}
 
