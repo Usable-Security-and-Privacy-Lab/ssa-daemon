@@ -444,21 +444,6 @@ int trustbase_verify(X509_STORE_CTX* store, void* arg) {
 	return 1;
 }
 
-int set_session_ttl(tls_opts_t* tls_opts, connection* conn_ctx, char* ttl) {
-	SSL_CTX* tls_ctx;
-	long timeout;
-	memcpy(&timeout, ttl, sizeof(timeout));
-	if (conn_ctx != NULL) {
-		return SSL_SESSION_set_timeout(SSL_get0_session(conn_ctx->tls), timeout);
-	}
-
-	if (tls_opts != NULL) {
-		tls_ctx = tls_opts->tls_ctx;
-		SSL_CTX_set_timeout(tls_ctx, timeout);
-	}
-	return 1;
-}
-
 #ifdef CLIENT_AUTH
 void pha_cb(const SSL* tls, int where, int ret) {
 	s_auth_info_t* ai;
@@ -512,68 +497,6 @@ int set_remote_hostname(tls_opts_t* tls_opts, connection* conn_ctx, char* hostna
 	return 1;
 }
 
-int get_peer_certificate(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len) {
-	X509* cert;
-	BIO* bio;
-	char* bio_data;
-	char* pem_data;
-	unsigned int cert_len;
-
-	if (conn_ctx->tls == NULL) {
-		return 0;
-	}
-	cert = SSL_get_peer_certificate(conn_ctx->tls);
-	if (cert == NULL) {
-		return 0;
-	}
-	bio = BIO_new(BIO_s_mem());
-	if (bio == NULL) {
-		X509_free(cert);
-		return 0;
-	}
-	if (PEM_write_bio_X509(bio, cert) == 0) {
-		X509_free(cert);
-		BIO_free(bio);
-		return 0;
-	}
-
-	cert_len = BIO_get_mem_data(bio, &bio_data);
-	pem_data = malloc(cert_len + 1); /* +1 for null terminator */
-	if (pem_data == NULL) {
-		X509_free(cert);
-		BIO_free(bio);
-		return 0;
-	}
-
-	memcpy(pem_data, bio_data, cert_len);
-	pem_data[cert_len] = '\0';
-	X509_free(cert);
-	BIO_free(bio);
-
-	*data = pem_data;
-	*len = cert_len;
-	return 1;
-}
-
-int get_peer_identity(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len) {
-	X509* cert;
-	X509_NAME* subject_name;
-	char* identity;
-	if (conn_ctx->tls == NULL) {
-		return 0;
-	}
-	cert = SSL_get_peer_certificate(conn_ctx->tls);
-	if (cert == NULL) {
-		log_printf(LOG_INFO, "peer cert is NULL\n");
-		return 0;
-	}
-	subject_name = X509_get_subject_name(cert);
-	identity = X509_NAME_oneline(subject_name, NULL, 0);
-	*data = identity;
-	*len = strlen(identity)+1;
-	return 1;
-}
-
 int get_remote_hostname(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len) {
 	/* XXX hostname is a bit of a misnomer for the client auth case, as it's actually client identity
 	 * instead of hostname. Perhaps rename this option or make an alias for it */
@@ -598,21 +521,6 @@ int get_hostname(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsign
 int get_certificate_chain(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len) {
 	/* XXX stub */
 	return 1;
-}
-
-
-long get_session_ttl(tls_opts_t* tls_opts, connection* conn_ctx) {
-	SSL_CTX* tls_ctx;
-	long timeout = 0;
-	if (conn_ctx != NULL) {
-		timeout = SSL_SESSION_get_timeout(SSL_get0_session(conn_ctx->tls));
-		return timeout;
-	}
-	if (tls_opts != NULL) {
-		tls_ctx = tls_opts->tls_ctx;
-		timeout = SSL_CTX_get_timeout(tls_ctx);
-	}
-	return timeout;
 }
 
 SSL* tls_client_setup(SSL_CTX* tls_ctx, char* hostname) {

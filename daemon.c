@@ -580,11 +580,6 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 	case TLS_HOSTNAME:
 		response = -ENOPROTOOPT; /* get only */
 		break;
-	case TLS_SESSION_TTL:
-		if (set_session_ttl(sock_ctx->tls_opts, sock_ctx->tls_conn, value) == 0) {
-			response = -EINVAL;
-		}
-		break;
 	case TLS_PEER_IDENTITY:
 		response = -ENOPROTOOPT; /* get only */
 		break;
@@ -650,19 +645,11 @@ void getsockopt_cb(daemon_context* ctx, unsigned long id, int level, int option)
 	case TLS_PRIVATE_KEY:
 		response = -ENOPROTOOPT; /* set only */
 		break;
-	case TLS_SESSION_TTL:
-		value = get_session_ttl(sock_ctx->tls_opts, sock_ctx->tls_conn);
-		if (value < 0) {
-			response = EINVAL;
-		}
-		data = (char*)&value;
-		len = sizeof(value);
-		break;
 	case TLS_DISABLE_CIPHER:
 		response = -ENOPROTOOPT; /* set only */
 		break;
 	case TLS_PEER_IDENTITY:
-		if (get_peer_identity(sock_ctx->tls_opts, sock_ctx->tls_conn, &data, &len) == 0) {
+		if (get_peer_identity(sock_ctx->tls_conn, &data, &len) == 0) {
 			response = -ENOTCONN;
 		}
 		else {
@@ -673,7 +660,7 @@ void getsockopt_cb(daemon_context* ctx, unsigned long id, int level, int option)
 		response = -ENOPROTOOPT; /* set only */
 		break;
 	case TLS_PEER_CERTIFICATE_CHAIN:
-		if (get_peer_certificate(sock_ctx->tls_opts, sock_ctx->tls_conn, &data, &len) == 0) {
+		if (get_peer_certificate(sock_ctx->tls_conn, &data, &len) == 0) {
 			response = -ENOTCONN;
 		}
 		need_free = 1;

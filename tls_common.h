@@ -26,3 +26,10 @@
 
 
 void associate_fd(connection* conn, evutil_socket_t ifd);
+
+
+/* setsockopt/getsockopt */
+
+int get_peer_certificate(connection* conn_ctx, char** data, unsigned int* len);
+int get_peer_identity(connection* conn_ctx, char** data, unsigned int* len);
+

@@ -56,15 +56,11 @@ int tls_opts_client_setup(tls_opts_t* ops);
 
 
 /* Helper functions to separate daemon from security library */
-int set_session_ttl(tls_opts_t* tls_opts, connection* conn_ctx, char* ttl);
 int set_remote_hostname(tls_opts_t* tls_opts, connection* conn_ctx, char* hostname);
 int send_peer_auth_req(tls_opts_t* tls_opts, connection* conn_ctx, char* value);
 
 int get_remote_hostname(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len);
 int get_hostname(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len);
 int get_certificate_chain(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len);
-long get_session_ttl(tls_opts_t* tls_opts, connection* conn_ctx);
-int get_peer_identity(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len);
-int get_peer_certificate(tls_opts_t* tls_opts, connection* conn_ctx, char** data, unsigned int* len);
-
+int get_peer_identity(connection* conn_ctx, char** data, unsigned int* len);
 #endif
