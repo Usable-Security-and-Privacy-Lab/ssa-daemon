@@ -8,13 +8,15 @@
 
 SSL_CTX* client_settings_init(char* path) {
     SSL_CTX *client_settings;
+	/*
 	ssa_config_t* ssa_config;
 	char* store_file;
-
+	*/
 	client_settings = SSL_CTX_new(TLS_client_method());
 	if (client_settings == NULL)
 		goto err_ctx;
 	
+	/* TODO: use this code??
 	ssa_config = get_app_config(path);
 	if (ssa_config) {
 		log_printf(LOG_INFO, "MinVersion: %d\n", ssa_config->min_version);
@@ -32,15 +34,16 @@ SSL_CTX* client_settings_init(char* path) {
 		if (S_ISDIR(stat_store.st_mode)) {
 			store_dir = ssa_config->trust_store;
 		} else {
-		*/
+		*/ /*
 		store_file = ssa_config->trust_store;
 		log_printf(LOG_INFO, "Setting cert root store to %s\n", store_file);
 		if (SSL_CTX_load_verify_locations(client_settings, store_file, store_file) == 0) {
 			log_printf(LOG_ERROR, "Unable set truststore %s\n",ssa_config->trust_store);
 		}
 	} else {
+		
 		log_printf(LOG_INFO, "Unable to find ssa configuration\n");
-
+		*/
 		const char* CA_file = "/etc/pki/tls/certs/ca-bundle.crt";
 		const char* cipher_list = "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256";
 		/* const char *ciphersuites = "TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_SHA256:TLS_AES_128_CCM_8_SHA256";
@@ -71,7 +74,9 @@ SSL_CTX* client_settings_init(char* path) {
 		if (SSL_CTX_set_tlsext_status_arg(client_settings, <put_Arg_here>) != 1) 
 			goto err;
 		*/
+	/*
 	}
+	*/
 
 	return client_settings;
 err:
