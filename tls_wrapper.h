@@ -44,7 +44,6 @@ int SSL_use_certificate_chain_file(SSL *ssl, const char *file);
 
 connection* tls_client_wrapper_setup(evutil_socket_t efd, daemon_context* daemon_ctx,
 	char* hostname, int is_accepting, tls_opts_t* tls_opts);
-void associate_fd(connection* conn, evutil_socket_t ifd);
 connection* tls_server_wrapper_setup(evutil_socket_t efd, evutil_socket_t ifd, daemon_context* daemon_ctx,
 	tls_opts_t* tls_opts, struct sockaddr* internal_addr, int internal_addrlen);
 void free_tls_conn_ctx(connection* ctx);

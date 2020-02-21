@@ -20,21 +20,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TLS_CLIENT_H
-#define TLS_CLIENT_H
-
-#include <openssl/ssl.h>
-#include <openssl/x509.h>
+#include <event2/util.h>
 
 #include "daemon.h"
 
-SSL_CTX* client_settings_init();
 
-
-
-
-
-
-
-
-#endif
+void associate_fd(connection* conn, evutil_socket_t ifd);

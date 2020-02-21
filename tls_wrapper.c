@@ -48,6 +48,7 @@
 #include "log.h"
 #include "config.h"
 #include "netlink.h"
+#include "daemon.h"
 
 #define MAX_BUFFER	1024*1024*10
 #define IPPROTO_TLS 	(715 % 255)
@@ -58,8 +59,6 @@ static SSL* tls_client_setup(SSL_CTX* tls_ctx, char* hostname);
 static void tls_bev_write_cb(struct bufferevent *bev, void *arg);
 static void tls_bev_read_cb(struct bufferevent *bev, void *arg);
 static void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg);
-
-static SSL_CTX* get_tls_ctx_from_name(tls_opts_t* tls_opts, const char* hostname);
 
 static connection* new_tls_conn_ctx();
 static void shutdown_tls_conn_ctx(connection* ctx); 
@@ -158,14 +157,6 @@ connection* tls_client_wrapper_setup(evutil_socket_t efd, daemon_context* daemon
 	}*/
 	//SSL_connect(ctx->tls);
 	return ctx;
-}
-
-void associate_fd(connection* conn, evutil_socket_t ifd) {
-	bufferevent_setfd(conn->plain.bev, ifd);
-	bufferevent_enable(conn->plain.bev, EV_READ | EV_WRITE);
-
-	//log_printf(LOG_INFO, "plain bev enabled\n");
-	return;
 }
 
 

@@ -131,7 +131,7 @@ The daemon process is built around an event-loop managed by the [Libevent](https
 Function						| Location
 ---								| ---
 accept_cb						| ssa-daemon/daemon.c  
-associate_fd					| ssa-daemon/tls_wrapper.c
+associate_fd					| ssa-daemon/tls_common.c
 bufferevent_openssl_socket_new  | (defined by Libevent)
 bufferevent_socket_connect		| (defined by Libevent)
 bufferevent_socket_new			| (defined by Libevent)
