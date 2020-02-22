@@ -28,6 +28,7 @@
 void connection_free(connection* ctx);
 
 void associate_fd(connection* conn, evutil_socket_t ifd);
+int set_netlink_cb_params(connection* conn, daemon_context* daemon_ctx, unsigned long id);
 
 void tls_bev_write_cb(struct bufferevent *bev, void *arg);
 void tls_bev_read_cb(struct bufferevent *bev, void *arg);
@@ -37,6 +38,7 @@ void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg);
 
 int get_peer_certificate(connection* conn_ctx, char** data, unsigned int* len);
 int get_peer_identity(connection* conn_ctx, char** data, unsigned int* len);
+int get_hostname(connection* conn_ctx, char** data, unsigned int* len);
 
 
 

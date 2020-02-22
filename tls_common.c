@@ -43,6 +43,16 @@ void associate_fd(connection* conn, evutil_socket_t ifd) {
 	return;
 }
 
+int set_netlink_cb_params(connection* conn, daemon_context* daemon_ctx, unsigned long id) {
+	/*if (conn->tls == NULL) {
+		return 1;
+	}*/
+	conn->daemon = daemon_ctx;
+	conn->id = id;
+	return 1;
+}
+
+
 
 void tls_bev_write_cb(struct bufferevent *bev, void *arg) {
 	//log_printf(LOG_DEBUG, "write event on bev %p\n", bev);
@@ -233,6 +243,21 @@ int get_peer_identity(connection* conn_ctx, char** data, unsigned int* len) {
 	identity = X509_NAME_oneline(subject_name, NULL, 0);
 	*data = identity;
 	*len = strlen(identity)+1;
+	return 1;
+}
+
+int get_hostname(connection* conn_ctx, char** data, unsigned int* len) {
+	const char* hostname;
+	if (conn_ctx == NULL) {
+		return 0;
+	}
+	hostname = SSL_get_servername(conn_ctx->tls, TLSEXT_NAMETYPE_host_name);
+	*data = (char*)hostname;
+	if (hostname == NULL) {
+		*len = 0;
+		return 1;
+	}
+	*len = strlen(hostname)+1;
 	return 1;
 }
 

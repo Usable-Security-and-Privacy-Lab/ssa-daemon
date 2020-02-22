@@ -60,6 +60,7 @@
 
 #include "tls_client.h"
 #include "tls_common.h"
+#include "tls_server.h"
 
 #define MAX_UPGRADE_SOCKET  18
 #define HASHMAP_NUM_BUCKETS	100
@@ -478,7 +479,11 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	port = (int)ntohs((&int_addr)->sin_port);
 	hashmap_add(sock_ctx->daemon->sock_map_port, port, (void*)new_sock_ctx);
 	
-	new_sock_ctx->tls_conn = tls_server_wrapper_setup(efd, ifd, sock_ctx->daemon, &sock_ctx->int_addr, sock_ctx->int_addrlen);
+	/* Old code: new_sock_ctx->tls_conn = tls_server_wrapper_setup(efd, ifd, sock_ctx->daemon, &sock_ctx->int_addr, sock_ctx->int_addrlen); */
+
+	server_connection_setup(new_sock_ctx->tls_conn, new_sock_ctx->daemon, efd, ifd, &sock_ctx->int_addr, sock_ctx->int_addrlen);
+	/* TODO: This entire server_accept_cb() function is PROPER convoluted. We need to fix it. */
+
 	return;
 }
 
@@ -584,13 +589,6 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 	case TLS_PEER_IDENTITY:
 		response = -ENOPROTOOPT; /* get only */
 		break;
-	case TLS_REQUEST_PEER_AUTH:
-		set_netlink_cb_params(sock_ctx->tls_conn, ctx, id);
-		if (send_peer_auth_req(sock_ctx->tls_conn, value) == 0) {
-			response = -EINVAL;
-		}
-		return;
-		break;
 	case TLS_PEER_CERTIFICATE_CHAIN:
 		response = -ENOPROTOOPT; /* get only */
 		break;
@@ -690,6 +688,7 @@ void bind_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr,
 	sock_ctx = (sock_context*)hashmap_get(ctx->sock_map, id);
 	if (sock_ctx == NULL) {
 		response = -EBADF;
+		goto err;
 	}
 	else {
 		ret = evutil_make_listen_socket_reuseable(sock_ctx->fd);
@@ -704,6 +703,7 @@ void bind_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr,
 		if (ret == -1) {
 			perror("bind");
 			response = -errno;
+			goto err;
 		}
 		else {
 			sock_ctx->has_bound = 1;
@@ -713,8 +713,21 @@ void bind_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr,
 			sock_ctx->ext_addrlen = ext_addrlen;
 		}
 	}
+
+	/* New stuff added by Nathaniel */
+	sock_ctx->tls_conn = server_connection_new(ctx);
+	if (sock_ctx->tls_conn == NULL) {
+		response = -ENOMEM;
+		goto err;
+	}
+
 	netlink_notify_kernel(ctx, id, response);
 	return;
+err:
+	/* TODO: Free resources as needed? */
+	netlink_notify_kernel(ctx, id, response);
+	return;
+
 }
 
 void connect_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr, 

@@ -41,14 +41,6 @@ int SSL_use_certificate_chain_file(SSL *ssl, const char *file);
 #endif
 
 
-connection* tls_server_wrapper_setup(evutil_socket_t efd, evutil_socket_t ifd, daemon_context* daemon_ctx,
-	struct sockaddr* internal_addr, int internal_addrlen);
 
-int set_netlink_cb_params(connection* conn, daemon_context* daemon_ctx, unsigned long id);
 
-/* Helper functions to separate daemon from security library */
-int set_remote_hostname(connection* conn_ctx, char* hostname);
-int send_peer_auth_req(connection* conn_ctx, char* value);
-
-int get_hostname(connection* conn_ctx, char** data, unsigned int* len);
 #endif
