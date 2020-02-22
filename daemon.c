@@ -37,6 +37,7 @@
 #include <netdb.h>
 #include <assert.h>
 
+#include <event2/bufferevent.h>
 #include <event2/event.h>
 #include <event2/listener.h>
 #include <event2/util.h>
@@ -513,16 +514,16 @@ void signal_cb(evutil_socket_t fd, short event, void* arg) {
 	return;
 }
 
-void socket_cb(daemon_context* ctx, unsigned long id, char* comm) {
+void socket_cb(daemon_context* daemon_ctx, unsigned long id, char* comm) {
 	sock_context* sock_ctx;
 	evutil_socket_t fd;
 	int ret;
 	int response = 0;
 
-	sock_ctx = (sock_context*)hashmap_get(ctx->sock_map, id);
+	sock_ctx = (sock_context*)hashmap_get(daemon_ctx->sock_map, id);
 	if (sock_ctx != NULL) {
 		log_printf(LOG_ERROR, "We have created a socket with this ID already: %lu\n", id);
-		netlink_notify_kernel(ctx, id, response);
+		netlink_notify_kernel(daemon_ctx, id, response);
 		return;
 	}
 
@@ -537,14 +538,14 @@ void socket_cb(daemon_context* ctx, unsigned long id, char* comm) {
 		response = -ENOMEM;
 		goto err;
 	}
-	sock_ctx->tls_conn = client_connection_new(ctx);
+	sock_ctx->tls_conn = client_connection_new(daemon_ctx);
 	if (sock_ctx->tls_conn == NULL) {
 		response = -ENOMEM;
 		goto err;
 	}
 	sock_ctx->id = id;
 	sock_ctx->fd = fd;
-	hashmap_add(ctx->sock_map, id, (void*)sock_ctx);
+	hashmap_add(daemon_ctx->sock_map, id, (void*)sock_ctx);
 
 
 	ret = evutil_make_socket_nonblocking(sock_ctx->fd);
@@ -554,10 +555,10 @@ void socket_cb(daemon_context* ctx, unsigned long id, char* comm) {
 	}
 
 	log_printf(LOG_INFO, "Socket created on behalf of application %s\n", comm);
-	netlink_notify_kernel(ctx, id, response);
+	netlink_notify_kernel(daemon_ctx, id, response);
 	return;
 err:
-	netlink_notify_kernel(ctx, id, response);
+	netlink_notify_kernel(daemon_ctx, id, response);
 	return;
 }
 
@@ -604,7 +605,7 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 	return;
 }
 
-void getsockopt_cb(daemon_context* ctx, unsigned long id, int level, int option) {
+void getsockopt_cb(daemon_context* daemon_ctx, unsigned long id, int level, int option) {
 	sock_context* sock_ctx;
 	/* long value; */
 	int response = 0;
@@ -612,15 +613,15 @@ void getsockopt_cb(daemon_context* ctx, unsigned long id, int level, int option)
 	unsigned int len = 0;
 	int need_free = 0;
 
-	sock_ctx = (sock_context*)hashmap_get(ctx->sock_map, id);
+	sock_ctx = (sock_context*)hashmap_get(daemon_ctx->sock_map, id);
 	if (sock_ctx == NULL) {
-		netlink_notify_kernel(ctx, id, -EBADF);
+		netlink_notify_kernel(daemon_ctx, id, -EBADF);
 		return;
 	}
 	switch (option) {
 	case TLS_REMOTE_HOSTNAME:
 		if (sock_ctx->rem_hostname != NULL) {
-			netlink_send_and_notify_kernel(ctx, id, sock_ctx->rem_hostname, strlen(sock_ctx->rem_hostname)+1);
+			netlink_send_and_notify_kernel(daemon_ctx, id, sock_ctx->rem_hostname, strlen(sock_ctx->rem_hostname)+1);
 			return;
 		}
 		break;
@@ -667,24 +668,24 @@ void getsockopt_cb(daemon_context* ctx, unsigned long id, int level, int option)
 		break;
 	}
 	if (response != 0) {
-		netlink_notify_kernel(ctx, id, response);
+		netlink_notify_kernel(daemon_ctx, id, response);
 		return;
 	}
-	netlink_send_and_notify_kernel(ctx, id, data, len);
+	netlink_send_and_notify_kernel(daemon_ctx, id, data, len);
 	if (need_free == 1) {
 		free(data);
 	}
 	return;
 }
 
-void bind_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr, 
+void bind_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* int_addr, 
 	int int_addrlen, struct sockaddr* ext_addr, int ext_addrlen) {
 
 	int ret;
 	sock_context* sock_ctx;
 	int response = 0;
 
-	sock_ctx = (sock_context*)hashmap_get(ctx->sock_map, id);
+	sock_ctx = (sock_context*)hashmap_get(daemon_ctx->sock_map, id);
 	if (sock_ctx == NULL) {
 		response = -EBADF;
 		goto err;
@@ -714,22 +715,22 @@ void bind_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr,
 	}
 
 	/* New stuff added by Nathaniel */
-	sock_ctx->tls_conn = server_connection_new(ctx);
+	sock_ctx->tls_conn = server_connection_new(daemon_ctx);
 	if (sock_ctx->tls_conn == NULL) {
 		response = -ENOMEM;
 		goto err;
 	}
 
-	netlink_notify_kernel(ctx, id, response);
+	netlink_notify_kernel(daemon_ctx, id, response);
 	return;
 err:
 	/* TODO: Free resources as needed? */
-	netlink_notify_kernel(ctx, id, response);
+	netlink_notify_kernel(daemon_ctx, id, response);
 	return;
 
 }
 
-void connect_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr, 
+void connect_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* int_addr, 
 	int int_addrlen, struct sockaddr* rem_addr, int rem_addrlen, int blocking) {
 	
 	int ret;
@@ -744,18 +745,18 @@ void connect_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr
 		port = (int)ntohs(((struct sockaddr_in*)int_addr)->sin_port);
 	}
 
-	sock_ctx = (sock_context*)hashmap_get(ctx->sock_map, id);
+	sock_ctx = (sock_context*)hashmap_get(daemon_ctx->sock_map, id);
 	if (sock_ctx == NULL) {
-		netlink_notify_kernel(ctx, id, -EBADF);
+		netlink_notify_kernel(daemon_ctx, id, -EBADF);
 		return;
 	}
 
-	int retVal = client_connection_setup(sock_ctx->tls_conn, ctx, sock_ctx->rem_hostname, sock_ctx->fd, sock_ctx->is_accepting);
+	int retVal = client_connection_setup(sock_ctx->tls_conn, daemon_ctx, sock_ctx->rem_hostname, sock_ctx->fd, sock_ctx->is_accepting);
 	if (retVal != 1) {
 		log_printf(LOG_ERROR, "Client connection setup function failed.");
 	}
 	
-	set_netlink_cb_params(sock_ctx->tls_conn, ctx, sock_ctx->id);
+	set_netlink_cb_params(sock_ctx->tls_conn, daemon_ctx, sock_ctx->id);
 	/* only connect if we're not already.
 	 * we might already be connected due to a
 	 * socket upgrade */
@@ -768,7 +769,7 @@ void connect_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr
 	}
 
 	if (ret != 0) {
-		netlink_notify_kernel(ctx, id, -EINVAL);
+		netlink_notify_kernel(daemon_ctx, id, -EINVAL);
 		return;
 	}
 
@@ -777,26 +778,26 @@ void connect_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr
 		sock_ctx->int_addrlen = int_addrlen;
 	}
 	log_printf(LOG_INFO, "Placing sock_ctx for port %d\n", port);
-	hashmap_add(ctx->sock_map_port, port, sock_ctx);
+	hashmap_add(daemon_ctx->sock_map_port, port, sock_ctx);
 	sock_ctx->rem_addr = *rem_addr;
 	sock_ctx->rem_addrlen = rem_addrlen;
 	sock_ctx->is_connected = 1; /* is this a lie? */
 
 	if (blocking == 0) {
 		log_printf(LOG_INFO, "Nonblocking connect requested\n");
-		netlink_notify_kernel(ctx, id, -EINPROGRESS);
+		netlink_notify_kernel(daemon_ctx, id, -EINPROGRESS);
 	}
 	return;
 }
 
-void listen_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr,
+void listen_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* int_addr,
 	int int_addrlen, struct sockaddr* ext_addr, int ext_addrlen) {
 
 	int ret;
 	sock_context* sock_ctx;
 	int response = 0;
 	
-	sock_ctx = (sock_context*)hashmap_get(ctx->sock_map, id);
+	sock_ctx = (sock_context*)hashmap_get(daemon_ctx->sock_map, id);
 	if (sock_ctx == NULL) {
 		response = -EBADF;
 	}
@@ -806,7 +807,7 @@ void listen_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr,
 			response = -errno;
 		}
 	}
-	netlink_notify_kernel(ctx, id, response);
+	netlink_notify_kernel(daemon_ctx, id, response);
 	if (response != 0) {
 		return;
 	}
@@ -821,7 +822,7 @@ void listen_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr,
 	}
 
 	/* TODO: Eventually clean up this whole section--ripped from tls_opts_server_setup()... */
-	SSL_CTX* server_settings = ctx->server_settings;
+	SSL_CTX* server_settings = daemon_ctx->server_settings;
 	SSL_CTX_set_options(server_settings, SSL_OP_ALL);
 	/* There's a billion options we can/should set here by admin config XXX
  	 * See SSL_CTX_set_options and SSL_CTX_set_cipher_list for details */
@@ -833,15 +834,15 @@ void listen_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr,
 	SSL_CTX_use_PrivateKey_file(server_settings, "test_files/localhost_key.pem", SSL_FILETYPE_PEM);
 	/* Thus concludes the TODO. */
 
-	sock_ctx->daemon = ctx; /* XXX I don't want this here */
-	sock_ctx->listener = evconnlistener_new(ctx->ev_base, listener_accept_cb, sock_ctx,
+	sock_ctx->daemon = daemon_ctx; /* XXX I don't want this here */
+	sock_ctx->listener = evconnlistener_new(daemon_ctx->ev_base, listener_accept_cb, sock_ctx,
 		LEV_OPT_CLOSE_ON_FREE | LEV_OPT_THREADSAFE, 0, sock_ctx->fd);
 
 	evconnlistener_set_error_cb(sock_ctx->listener, listener_accept_error_cb);
 	return;
 }
 
-void associate_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr, int int_addrlen) {
+void associate_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* int_addr, int int_addrlen) {
 	sock_context* sock_ctx;
 	int response = 0;
 	int port;
@@ -853,29 +854,29 @@ void associate_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_ad
 	else {
 		port = (int)ntohs(((struct sockaddr_in*)int_addr)->sin_port);
 	}
-	sock_ctx = hashmap_get(ctx->sock_map_port, port);
-	hashmap_del(ctx->sock_map_port, port);
+	sock_ctx = hashmap_get(daemon_ctx->sock_map_port, port);
+	hashmap_del(daemon_ctx->sock_map_port, port);
 	if (sock_ctx == NULL) {
 		log_printf(LOG_ERROR, "port provided in associate_cb not found");
 		response = -EBADF;
-		netlink_notify_kernel(ctx, id, response);
+		netlink_notify_kernel(daemon_ctx, id, response);
 		return;
 	}
 
 	sock_ctx->id = id;
 	sock_ctx->is_connected = 1;
-	hashmap_add(ctx->sock_map, id, (void*)sock_ctx);
+	hashmap_add(daemon_ctx->sock_map, id, (void*)sock_ctx);
 	
-	set_netlink_cb_params(sock_ctx->tls_conn, ctx, id);
+	set_netlink_cb_params(sock_ctx->tls_conn, daemon_ctx, id);
 	//log_printf(LOG_INFO, "Socket %lu accepted\n", id);
-	netlink_notify_kernel(ctx, id, response);
+	netlink_notify_kernel(daemon_ctx, id, response);
 	return;
 }
 
-void close_cb(daemon_context* ctx, unsigned long id) {
+void close_cb(daemon_context* daemon_ctx, unsigned long id) {
 	sock_context* sock_ctx;
 
-	sock_ctx = (sock_context*)hashmap_get(ctx->sock_map, id);
+	sock_ctx = (sock_context*)hashmap_get(daemon_ctx->sock_map, id);
 	if (sock_ctx == NULL) {
 		return;
 	}
@@ -885,7 +886,7 @@ void close_cb(daemon_context* ctx, unsigned long id) {
 		 * We don't host its corresponding listen socket
 		 * But we were given control of the remote peer
 		 * connection */
-		hashmap_del(ctx->sock_map, id);
+		hashmap_del(daemon_ctx->sock_map, id);
 		connection_free(sock_ctx->tls_conn);
 		free(sock_ctx);
 		return;
@@ -896,26 +897,26 @@ void close_cb(daemon_context* ctx, unsigned long id) {
 		 * received from one of the endpoints. In this case we
 		 * only need to clean up the sock_ctx */
 		//netlink_notify_kernel(ctx, id, 0);
-		hashmap_del(ctx->sock_map, id);
+		hashmap_del(daemon_ctx->sock_map, id);
 		connection_free(sock_ctx->tls_conn);
 		free(sock_ctx);
 		return;
 	}
 	if (sock_ctx->listener != NULL) {
-		hashmap_del(ctx->sock_map, id);
+		hashmap_del(daemon_ctx->sock_map, id);
 		evconnlistener_free(sock_ctx->listener);
 		free(sock_ctx);
 		//netlink_notify_kernel(ctx, id, 0);
 		return;
 	}
-	hashmap_del(ctx->sock_map, id);
+	hashmap_del(daemon_ctx->sock_map, id);
 	EVUTIL_CLOSESOCKET(sock_ctx->fd);
 	free(sock_ctx);
 	//netlink_notify_kernel(ctx, id, 0);
 	return;
 }
 
-void upgrade_cb(daemon_context* ctx, unsigned long id, 
+void upgrade_cb(daemon_context* daemon_ctx, unsigned long id, 
 		struct sockaddr* int_addr, int int_addrlen) {
 	/* This was implemented in the kernel directly. */
 	return;
@@ -945,7 +946,7 @@ void free_sock_ctx(sock_context* sock_ctx) {
 
 void upgrade_recv(evutil_socket_t fd, short events, void *arg) {
 	sock_context* sock_ctx;
-	daemon_context* ctx = (daemon_context*)arg;
+	daemon_context* daemon_ctx = (daemon_context*)arg;
 	char msg_buffer[256];
 	int new_fd;
 	int bytes_read;
@@ -966,7 +967,7 @@ void upgrade_recv(evutil_socket_t fd, short events, void *arg) {
 	sscanf(msg_buffer, "%d:%lu", &is_accepting, &id);
 	log_printf(LOG_INFO, "Got a new %s descriptor %d, to be associated with %lu from addr %s\n",
 		       	is_accepting == 1 ? "accepting" : "connecting", new_fd, id, addr.sun_path+1, addr_len);
-	sock_ctx = (sock_context*)hashmap_get(ctx->sock_map, id);
+	sock_ctx = (sock_context*)hashmap_get(daemon_ctx->sock_map, id);
 	if (sock_ctx == NULL) {
 		return;
 	}
@@ -976,7 +977,7 @@ void upgrade_recv(evutil_socket_t fd, short events, void *arg) {
 
 	if (is_accepting == 1) {
 		/* TODO: Eventually clean up this whole section--ripped from tls_opts_server_setup()... */
-		SSL_CTX* server_settings = ctx->server_settings;
+		SSL_CTX* server_settings = daemon_ctx->server_settings;
 		SSL_CTX_set_options(server_settings, SSL_OP_ALL);
 		/* There's a billion options we can/should set here by admin config XXX
 		* See SSL_CTX_set_options and SSL_CTX_set_cipher_list for details */

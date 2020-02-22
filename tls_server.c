@@ -75,50 +75,6 @@ err:
 
 
 
-
-
-
-/*
- *********************************
- *  OLD FUNCTIONS
- *********************************
- */
-
-static int read_rand_seed(char **buf, char* seed_path, int size) {
-	int fd;
-	int data_len = 0;
-	int ret;
-
-	if ((seed_path == NULL) || ( size < 0)) {
-		return 0;
-	}
-
-	fd = open(seed_path,O_RDONLY);
-	if (fd == -1) {
-		return 0;
-	}
-
-	*buf = malloc(size);
-	if (*buf == NULL) {
-		return 0;
-	}
-
-	while (data_len < size) {
-	    	ret = read(fd, *buf + data_len, size-data_len);
-	        if (ret < 0) {
-			free(*buf);
-			close(fd);
-			*buf = NULL;
-			return 0;
-		}
-		data_len += ret;
-	}
-
-	close(fd);
-	return 1;
-}
-
-
 /*
  **********************************
  * Function from setsockopt()
