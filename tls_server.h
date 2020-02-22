@@ -2,7 +2,7 @@
 #define TLS_SERVER_H
 
 #include "tls_common.h"
-#include "daemon.h"
+#include "tls_structs.h"
 
 
 SSL_CTX* server_settings_init(char* path);

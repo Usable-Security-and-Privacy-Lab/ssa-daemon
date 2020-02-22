@@ -22,7 +22,7 @@
 
 #include <event2/util.h>
 
-#include "daemon.h"
+#include "tls_structs.h"
 
 
 void connection_free(connection* ctx);

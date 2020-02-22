@@ -61,6 +61,7 @@
 #include "tls_client.h"
 #include "tls_common.h"
 #include "tls_server.h"
+#include "tls_structs.h"
 
 #define MAX_UPGRADE_SOCKET  18
 #define HASHMAP_NUM_BUCKETS	100

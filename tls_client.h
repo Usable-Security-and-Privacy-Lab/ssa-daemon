@@ -26,7 +26,7 @@
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 
-#include "daemon.h"
+#include "tls_structs.h"
 
 SSL_CTX* client_settings_init(char* path);
 
