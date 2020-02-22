@@ -707,7 +707,7 @@ void bind_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* int_
 			goto err;
 		}
 		else {
-			sock_ctx->has_bound = 1;
+			set_bound(sock_ctx->state);
 			sock_ctx->int_addr = *int_addr;
 			sock_ctx->int_addrlen = int_addrlen;
 			sock_ctx->ext_addr = *ext_addr;
@@ -752,7 +752,7 @@ void connect_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* i
 		return;
 	}
 
-	int retVal = client_connection_setup(sock_ctx->tls_conn, daemon_ctx, sock_ctx->rem_hostname, sock_ctx->fd, sock_ctx->is_accepting);
+	int retVal = client_connection_setup(sock_ctx->tls_conn, daemon_ctx, sock_ctx->rem_hostname, sock_ctx->fd, is_accepting(sock_ctx->state));
 	if (retVal != 1) {
 		log_printf(LOG_ERROR, "Client connection setup function failed.");
 	}
@@ -761,7 +761,7 @@ void connect_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* i
 	/* only connect if we're not already.
 	 * we might already be connected due to a
 	 * socket upgrade */
-	if (sock_ctx->is_connected == 0) {
+	if (!is_connected(sock_ctx->state)) {
 		//ret = connect(sock_ctx->fd, rem_addr, rem_addrlen);
 		ret = bufferevent_socket_connect(sock_ctx->tls_conn->secure.bev, rem_addr, rem_addrlen);
 	}
@@ -774,7 +774,7 @@ void connect_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* i
 		return;
 	}
 
-	if (sock_ctx->has_bound == 0) {
+	if (!is_bound(sock_ctx->state)) {
 		sock_ctx->int_addr = *int_addr;
 		sock_ctx->int_addrlen = int_addrlen;
 	}
@@ -782,7 +782,7 @@ void connect_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* i
 	hashmap_add(daemon_ctx->sock_map_port, port, sock_ctx);
 	sock_ctx->rem_addr = *rem_addr;
 	sock_ctx->rem_addrlen = rem_addrlen;
-	sock_ctx->is_connected = 1; /* is this a lie? */
+	set_connected(sock_ctx->state);
 
 	if (blocking == 0) {
 		log_printf(LOG_INFO, "Nonblocking connect requested\n");
@@ -865,7 +865,7 @@ void associate_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr*
 	}
 
 	sock_ctx->id = id;
-	sock_ctx->is_connected = 1;
+	set_connected(sock_ctx->state);
 	hashmap_add(daemon_ctx->sock_map, id, (void*)sock_ctx);
 	
 	set_netlink_cb_params(sock_ctx->tls_conn, daemon_ctx, id);
@@ -882,7 +882,7 @@ void close_cb(daemon_context* daemon_ctx, unsigned long id) {
 		return;
 	}
 	/* close things here */
-	if (sock_ctx->is_accepting == 1) {
+	if (is_accepting(sock_ctx->state)) {
 		/* This is an ophan server connection.
 		 * We don't host its corresponding listen socket
 		 * But we were given control of the remote peer
@@ -892,7 +892,7 @@ void close_cb(daemon_context* daemon_ctx, unsigned long id) {
 		free(sock_ctx);
 		return;
 	}
-	if (sock_ctx->is_connected == 1) {
+	if (is_connected(sock_ctx->state)) {
 		/* connections under the control of the tls_wrapper code
 		 * clean up themselves as a result of the close event
 		 * received from one of the endpoints. In this case we
@@ -929,7 +929,7 @@ void free_sock_ctx(sock_context* sock_ctx) {
 	if (sock_ctx->listener != NULL) {
 		evconnlistener_free(sock_ctx->listener);
 	}
-	else if (sock_ctx->is_connected == 1) {
+	else if (is_connected(sock_ctx->state)) {
 		/* connections under the control of the tls_wrapper code
 		 * clean up themselves as a result of the close event
 		 * received from one of the endpoints. In this case we
@@ -974,7 +974,7 @@ void upgrade_recv(evutil_socket_t fd, short events, void *arg) {
 	}
 	EVUTIL_CLOSESOCKET(sock_ctx->fd);
 	sock_ctx->fd = new_fd;
-	sock_ctx->is_connected = 1;
+	set_connected(sock_ctx->state);
 
 	if (is_accepting == 1) {
 		/* TODO: Eventually clean up this whole section--ripped from tls_opts_server_setup()... */
@@ -990,11 +990,11 @@ void upgrade_recv(evutil_socket_t fd, short events, void *arg) {
 		SSL_CTX_use_PrivateKey_file(server_settings, "test_files/localhost_key.pem", SSL_FILETYPE_PEM);
 		/* Thus concludes the TODO. */
 
-		sock_ctx->is_accepting = 1;
+		set_accepting(sock_ctx->state);
 	}
 	else {
 		/* used to have tls_opts_client_setup(sock_ctx->tls_opts); */
-		sock_ctx->is_accepting = 0;
+		set_not_accepting(sock_ctx->state);
 	}
 
 	if (sendto(fd, "GOT IT", sizeof("GOT IT"), 0, (struct sockaddr*)&addr, addr_len) == -1) {
