@@ -94,7 +94,7 @@ err_ctx:
 connection* client_connection_new(daemon_context* daemon) {
 	connection* client_conn;
 
-	client_conn = (connection*)calloc(0, sizeof(connection));
+	client_conn = (connection*)calloc(1, sizeof(connection));
 	if (client_conn == NULL) {
 		log_printf(LOG_ERROR, "Failed to allocate connection: %s\n", strerror(errno));
 		goto err;
