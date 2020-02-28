@@ -11,7 +11,7 @@
 int main() {
 	struct sockaddr_host addr;
 	addr.sin_family = AF_HOSTNAME;
-	strcpy((char*)addr.sin_addr.name, "expired.badssl.com");
+	strcpy((char*)addr.sin_addr.name, "www.google.com");
 	addr.sin_port = htons(443);
 
 	int sock_fd; 
@@ -26,7 +26,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-	char http_request[] = "GET / HTTP/1.1\r\nHost: expired.badssl.com\r\n\r\n";
+	char http_request[] = "GET / HTTP/1.1\r\nHost: www.google.com\r\n\r\n";
 	char http_response[2048];
 	memset(http_response, 0, 2048);
 	printf("sending\n");
