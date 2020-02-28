@@ -15,7 +15,7 @@
  *  |-------------------|-------------------|
  *  |     FEATURES      |   IMPLEMENTED?    |
  *  |-------------------|-------------------|
- * 	| Secure Encryption | Yes               |
+ *  | Secure Encryption | Yes               |
  *  | Cert Verification | Yes               |
  *  | Error Testing     | None              |
  *  | Concurrency       | None--Blocking    |

@@ -16,7 +16,7 @@
  *  |-------------------|-------------------|
  *  |     FEATURES      |   IMPLEMENTED?    |
  *  |-------------------|-------------------|
- * 	| Secure Encryption | Yes, But Insecure |
+ *  | Secure Encryption | Yes, But Insecure |
  *  | Cert Verification | NO                |
  *  | Error Testing     | None              |
  *  | Concurrency       | None--Blocking    |
