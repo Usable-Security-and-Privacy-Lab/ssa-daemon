@@ -37,6 +37,8 @@
 *.x86_64
 *.hex
 tls_wrapper
+ssa_daemon
+example_client
 
 # Debug files
 *.dSYM/
