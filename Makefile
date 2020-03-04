@@ -2,9 +2,8 @@ CC = gcc
 CXXFLAGS=-Wall -Wno-deprecated-declarations
 CXX_DEBUG_FLAGS=-g
 CXX_RELEASE_FLAGS=-O3 -DNO_LOG
-CXX_CLIENTAUTH_FLAGS= -g -DCLIENT_AUTH
  
-EXEC = tls_wrapper
+EXEC = ssa_daemon
 SOURCES = $(wildcard *.c)
 OBJECTS = $(SOURCES:.c=.o)
 STD_INCLUDES = `pkg-config --cflags libnl-3.0`
@@ -41,10 +40,9 @@ INCLUDES= \
 	`pkg-config --cflags libnotify`
 
 PRELOAD_PATH=$(PWD)/extras
-QRVIEWR_PATH=./qrdisplay
 BASHRC=$(HOME)/.bashrc
 
-.PHONY: clean qrwindow sharedobject hostname-support preload hostname-support-remove
+.PHONY: clean sharedobject hostname-support preload hostname-support-remove
 
 all: CXXFLAGS+=$(CXX_DEBUG_FLAGS)
 all: INCLUDES=$(STD_INCLUDES)
@@ -62,11 +60,6 @@ hostname-support-release: sharedobject
 hostname-support-release: preload
 hostname-support-release: release
 
-clientauth: CXXFLAGS+=$(CXX_CLIENTAUTH_FLAGS)
-clientauth: INCLUDES+=$(NEW_INCLUDES)
-clientauth: qrwindow
-clientauth: $(OBJECTS)
-	$(CC) $(OBJECTS) -o $(EXEC) $(LIBS_EX)
 
 # Main target
 $(EXEC): $(OBJECTS)
@@ -79,10 +72,6 @@ $(EXEC): $(OBJECTS)
 # To remove generated files
 clean:
 	rm -f $(EXEC) $(OBJECTS)
-	$(MAKE) -C $(QRVIEWR_PATH) clean
-
-qrwindow:
-	$(MAKE) -C $(QRVIEWR_PATH)
 
 sharedobject:
 	$(MAKE) -C $(PRELOAD_PATH)
