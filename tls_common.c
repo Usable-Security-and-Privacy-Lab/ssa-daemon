@@ -189,7 +189,7 @@ void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 
 /*
  *-----------------------------------------------------------------------------
- *                           SETSOCKOPT FUNCTIONS 
+ *                           GETSOCKOPT FUNCTIONS 
  *----------------------------------------------------------------------------- 
  */
 
@@ -263,12 +263,6 @@ int get_hostname(connection* conn_ctx, char** data, unsigned int* len) {
 	return 1;
 }
 
-/*
- *-----------------------------------------------------------------------------
- *                           GETSOCKOPT FUNCTIONS
- *----------------------------------------------------------------------------- 
- */
-
 char* get_enabled_ciphers(connection* conn) {
 	assert(conn);
 	assert(conn->tls);
@@ -284,6 +278,28 @@ char* get_enabled_ciphers(connection* conn) {
 		return NULL;
 	}
 	return ciphers_str;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *                           SETSOCKOPT FUNCTIONS
+ *----------------------------------------------------------------------------- 
+ */
+
+/* TODO: Test this */
+int set_trusted_peer_certificates(connection* conn, char* value) {
+	/* XXX update this to take in-memory PEM chains as well as file names */
+	/* ^ old comment, maybe still do? */
+
+	if (conn_ctx == NULL)
+		return 0;
+
+	STACK_OF(X509_NAME)* cert_names = SSL_load_client_CA_file(value);
+	if (cert_names == NULL)
+		return 0;
+
+	SSL_set_client_CA_list(conn_ctx->tls, cert_names);
+	return 1;
 }
 
 int disable_cipher(connection* conn, char* cipher) {

@@ -584,8 +584,11 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 		}
 		break;
 	case TLS_DISABLE_CIPHER:
-		if (disable_cipher(sock_ctx->tls_conn, (char*) value))
-			response = 0;
+		if (disable_cipher(sock_ctx->tls_conn, (char*) value) != 1)
+			response = -1; /* TODO: set specific error reporting errno here */
+		break;
+	case TLS_TRUSTED_PEER_CERTIFICATES:
+		if (set_trusted_peer_certificates(sock_ctx->tls_conn, (char*) value != 1)
 		break;
 	case TLS_HOSTNAME:
 		response = -ENOPROTOOPT; /* get only */
