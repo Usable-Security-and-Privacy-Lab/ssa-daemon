@@ -101,9 +101,8 @@ int server_create(int port) {
 	struct nl_sock* netlink_sock;
 	struct event_base* ev_base = event_base_new();
 
-#ifndef NO_LOG
-        const char* ev_version = event_get_version();
-#endif
+    const char* ev_version = event_get_version();
+
 	if (ev_base == NULL) {
                 perror("event_base_new");
                 return 1;
@@ -415,11 +414,11 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 
 void accept_error_cb(struct evconnlistener *listener, void *ctx) {
         struct event_base *base = evconnlistener_get_base(listener);
-#ifndef NO_LOG
+
         int err = EVUTIL_SOCKET_ERROR();
         log_printf(LOG_ERROR, "Got an error %d (%s) on the listener\n", 
 				err, evutil_socket_error_to_string(err));
-#endif
+
         event_base_loopexit(base, NULL);
 	return;
 }
@@ -558,7 +557,7 @@ void socket_cb(daemon_context* daemon_ctx, unsigned long id, char* comm) {
 	log_printf(LOG_INFO, "Socket created on behalf of application %s\n", comm);
 	netlink_notify_kernel(daemon_ctx, id, response);
 	return;
-err:
+ err:
 	netlink_notify_kernel(daemon_ctx, id, response);
 	return;
 }
@@ -583,6 +582,10 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 		if (set_remote_hostname(sock_ctx->tls_conn, value) == 0) {
 			response = -EINVAL;
 		}
+		break;
+	case TLS_DISABLE_CIPHER:
+		if (disable_cipher(sock_ctx->tls_conn, (char*) value))
+			response = 0;
 		break;
 	case TLS_HOSTNAME:
 		response = -ENOPROTOOPT; /* get only */
@@ -631,15 +634,6 @@ void getsockopt_cb(daemon_context* daemon_ctx, unsigned long id, int level, int 
 			response = -EINVAL;
 		}
 		break;
-	case TLS_TRUSTED_PEER_CERTIFICATES:
-		response = -ENOPROTOOPT; /* set only */
-		break;
-	case TLS_PRIVATE_KEY:
-		response = -ENOPROTOOPT; /* set only */
-		break;
-	case TLS_DISABLE_CIPHER:
-		response = -ENOPROTOOPT; /* set only */
-		break;
 	case TLS_PEER_IDENTITY:
 		if (get_peer_identity(sock_ctx->tls_conn, &data, &len) == 0) {
 			response = -ENOTCONN;
@@ -648,14 +642,17 @@ void getsockopt_cb(daemon_context* daemon_ctx, unsigned long id, int level, int 
 			need_free = 1;
 		}
 		break;
-	case TLS_REQUEST_PEER_AUTH:
-		response = -ENOPROTOOPT; /* set only */
-		break;
 	case TLS_PEER_CERTIFICATE_CHAIN:
 		if (get_peer_certificate(sock_ctx->tls_conn, &data, &len) == 0) {
 			response = -ENOTCONN;
 		}
 		need_free = 1;
+		break;
+	case TLS_TRUSTED_PEER_CERTIFICATES:
+	case TLS_PRIVATE_KEY:
+	case TLS_DISABLE_CIPHER:
+	case TLS_REQUEST_PEER_AUTH:
+		response = -ENOPROTOOPT; /* all set only */
 		break;
 	case TLS_ID:
 		/* This case is handled directly by the kernel.
@@ -724,7 +721,7 @@ void bind_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* int_
 
 	netlink_notify_kernel(daemon_ctx, id, response);
 	return;
-err:
+ err:
 	/* TODO: Free resources as needed? */
 	netlink_notify_kernel(daemon_ctx, id, response);
 	return;
