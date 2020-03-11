@@ -274,10 +274,11 @@ char* get_enabled_ciphers(connection* conn) {
 	assert(conn->tls);
 
 	STACK_OF(SSL_CIPHER)* ciphers = SSL_get_ciphers(conn->tls);
-	/* TODO: replace this with SSL_get1_supported_ciphers? */
+	/* TODO: replace this with SSL_get1_supported_ciphers? Maybe... */
 
 	int ciphers_len = get_ciphers_strlen(ciphers);
 	char* ciphers_str = (char*) malloc(ciphers_len);
+	/* TODO: handle malloc failures... */
 	if (!get_ciphers_string(ciphers, ciphers_str, ciphers_len)) {
 		/* TODO: once again, shouldnt happen... */
 		return NULL;

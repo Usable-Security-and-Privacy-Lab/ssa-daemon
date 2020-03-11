@@ -596,8 +596,9 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 	case TLS_PEER_CERTIFICATE_CHAIN:
 		response = -ENOPROTOOPT; /* get only */
 		break;
+	case TLS_TRUSTED_CIPHERS:
 	case TLS_ID:
-		response = -ENOPROTOOPT; /* get only */
+		response = -ENOPROTOOPT; /* all get only */
 		break;
 	default:
 		if (setsockopt(sock_ctx->fd, level, option, value, len) == -1) {
@@ -646,6 +647,12 @@ void getsockopt_cb(daemon_context* daemon_ctx, unsigned long id, int level, int 
 		if (get_peer_certificate(sock_ctx->tls_conn, &data, &len) == 0) {
 			response = -ENOTCONN;
 		}
+		need_free = 1;
+		break;
+	case TLS_TRUSTED_CIPHERS:
+		data = get_enabled_ciphers(sock_ctx->tls_conn);
+		if (data == NULL)
+			response = -ENOTCONN;
 		need_free = 1;
 		break;
 	case TLS_TRUSTED_PEER_CERTIFICATES:
