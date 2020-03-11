@@ -263,7 +263,7 @@ int get_hostname(connection* conn_ctx, char** data, unsigned int* len) {
 	return 1;
 }
 
-char* get_enabled_ciphers(connection* conn) {
+char* get_enabled_ciphers(connection* conn, char** data) {
 	assert(conn);
 	assert(conn->tls);
 
@@ -275,9 +275,50 @@ char* get_enabled_ciphers(connection* conn) {
 	/* TODO: handle malloc failures... */
 	if (!get_ciphers_string(ciphers, ciphers_str, ciphers_len)) {
 		/* TODO: once again, shouldnt happen... */
-		return NULL;
+		return 0;
 	}
-	return ciphers_str;
+	*data = ciphers_str;
+	return 1;
+}
+
+int get_peer_certificate(connection* conn, char** data, unsigned int* len) {
+	X509* cert = NULL;
+	BIO* bio = NULL;
+	char* bio_data;
+	char* pem_data;
+	unsigned int cert_len, ret = 0;
+	
+	if (conn == NULL || conn->tls == NULL)
+		return ret;
+
+	cert = SSL_get_peer_certificate(conn->tls);
+	if (cert == NULL)
+		return ret; /* TODO: Should return different to others--not connected */
+
+	bio = BIO_new(BIO_s_mem());
+	if (bio == NULL)
+		goto end;
+
+	if (PEM_write_bio_X509(bio, cert) == 0) {
+		goto end; /* TODO: handle BIO error */ 
+	}
+
+	cert_len = BIO_get_mem_data(bio, &bio_data);
+	pem_data = malloc(cert_len + 1); /* +1 for null terminator */
+	if (pem_data == NULL) {
+		goto end;
+	}
+
+	memcpy(pem_data, bio_data, cert_len);
+	pem_data[cert_len] = '\0';
+
+	*data = pem_data;
+	*len = cert_len; /* BUG: shouldn't this be cert_len + 1 because of '\0'? */
+	ret = 1;
+ end:
+	X509_free(cert);
+	BIO_free(bio);
+	return ret;
 }
 
 /*
