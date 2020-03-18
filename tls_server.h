@@ -8,8 +8,10 @@ int server_SSL_new(connection* conn, daemon_context* daemon);
 SSL_CTX* server_settings_init(char* path);
 
 connection* server_connection_new(daemon_context* daemon);
-int server_connection_setup(connection* server_conn, daemon_context* daemon_ctx, evutil_socket_t efd, 
-        evutil_socket_t ifd, struct sockaddr* internal_addr, int internal_addrlen);
+connection* accept_connection_new(daemon_context* daemon, connection* old);
+
+int accept_connection_setup(sock_context* new_sock, sock_context* old_sock, 
+        evutil_socket_t ifd);
 
 int set_remote_hostname(connection* conn_ctx, char* hostname);
 

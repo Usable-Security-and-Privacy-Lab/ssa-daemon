@@ -426,8 +426,8 @@ void accept_error_cb(struct evconnlistener *listener, void *ctx) {
 }
 
 /**
- * @param efd The file descriptor of the client that has sent the connect()
- * request to our server. 'Client' should not be confused with the programmer
+ * @param efd The file descriptor of the peer that has sent the connect()
+ * request to our server. 'Peer' should not be confused with the programmer
  * interacting via c POSIX sockets calls to the daemon; it is simply someone
  * creating a connection with the socket to which this listener_accept_cb
  * was assigned with.
@@ -442,14 +442,11 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 		.sin_addr.s_addr = htonl(INADDR_LOOPBACK)
 	};
 	socklen_t intaddr_len = sizeof(int_addr);
-	sock_context* sock_ctx = (sock_context*)arg;
+	sock_context* listening_sock_ctx = (sock_context*)arg;
 	evutil_socket_t ifd;
 	int port;
-	sock_context* new_sock_ctx;
-    //struct event_base *base = evconnlistener_get_base(listener);
+	sock_context* accepting_sock_ctx;
 
-	//log_printf(LOG_DEBUG, "Got a connection on a vicarious listener\n");
-	//log_printf_addr(&sock_ctx->int_addr);
 	if (evutil_make_socket_nonblocking(efd) == -1) {
 		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
 			 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
@@ -457,11 +454,11 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 		return;
 	}
 
-	new_sock_ctx = (sock_context*)calloc(1, sizeof(sock_context));
-	if (new_sock_ctx == NULL) {
+	accepting_sock_ctx = (sock_context*)calloc(1, sizeof(sock_context));
+	if (accepting_sock_ctx == NULL) {
 		return;
 	}
-	new_sock_ctx->fd = efd;
+	accepting_sock_ctx->fd = efd;
 
 	ifd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (ifd == -1) {
@@ -490,13 +487,11 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 
 	/* now convert the random port the kernel had assigned us */
 	port = (int)ntohs((&int_addr)->sin_port);
-	hashmap_add(sock_ctx->daemon->sock_map_port, port, (void*)new_sock_ctx);
-	/* NOTE: something about this sock_map_port is crucially important... */
-	
-	/* Old code: new_sock_ctx->tls_conn = tls_server_wrapper_setup(efd, ifd, sock_ctx->daemon, &sock_ctx->int_addr, sock_ctx->int_addrlen); */
-	server_connection_setup(new_sock_ctx->tls_conn, new_sock_ctx->daemon, efd, ifd, &sock_ctx->int_addr, sock_ctx->int_addrlen);
+	hashmap_add(listening_sock_ctx->daemon->sock_map_port, port, (void*)accepting_sock_ctx);
 
-	/* TODO: This entire server_accept_cb() function is PROPER convoluted. We need to fix it. */
+	accepting_sock_ctx->tls_conn = accept_connection_new(daemon_context, listening_sock_ctx);
+	/* TODO: check errors in both functions */
+	accept_connection_setup(accepting_sock_ctx, listening_sock_ctx, ifd);
 	return;
 }
 
