@@ -13,6 +13,17 @@ SSL_CTX* server_settings_init(char* path) {
     return NULL; /* TODO: stub */
 }
 
+int server_SSL_new(connection* conn, daemon_context* daemon) {
+	if (conn->tls != NULL)
+		SSL_free(conn->tls);
+	conn->tls = SSL_new(daemon->server_settings);
+	if (conn->tls == NULL) {
+		/* TODO: determine if the error was actually an out-of-memory issue */
+		return -ENOMEM;
+	}
+	return 0;
+}
+
 connection* server_connection_new(daemon_context* daemon) {
     connection* server_conn = (connection*)calloc(1, sizeof(connection));
     if (server_conn == NULL) {
@@ -36,14 +47,14 @@ int server_connection_setup(connection* server_conn, daemon_context* daemon_ctx,
 
 	server_conn->secure.bev = bufferevent_openssl_socket_new(daemon_ctx->ev_base, efd, server_conn->tls,
 			BUFFEREVENT_SSL_ACCEPTING, BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
-	server_conn->secure.connected = 1;
 	if (server_conn->secure.bev == NULL) {
 		log_printf(LOG_ERROR, "Failed to set up client facing bufferevent [listener mode]\n");
 		EVUTIL_CLOSESOCKET(efd);
 		connection_free(server_conn);
 		goto err;
 	}
-	
+	server_conn->secure.connected = 1;
+
 	#if LIBEVENT_VERSION_NUMBER >= 0x02010000
 	/* Comment out this line if you need to do better debugging of OpenSSL behavior */
 	bufferevent_openssl_set_allow_dirty_shutdown(server_conn->secure.bev, 1);

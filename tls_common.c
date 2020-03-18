@@ -62,7 +62,7 @@ int set_netlink_cb_params(connection* conn, daemon_context* daemon_ctx, unsigned
 
 void tls_bev_write_cb(struct bufferevent *bev, void *arg) {
 	//log_printf(LOG_DEBUG, "write event on bev %p\n", bev);
-	connection* ctx = arg;
+	connection* ctx = (connection*)arg;
 	channel* endpoint = (bev == ctx->secure.bev) ? &ctx->plain : &ctx->secure;
 	struct evbuffer* out_buf;
 
@@ -84,7 +84,7 @@ void tls_bev_write_cb(struct bufferevent *bev, void *arg) {
 
 void tls_bev_read_cb(struct bufferevent *bev, void *arg) {
 	//log_printf(LOG_DEBUG, "read event on bev %p\n", bev);
-	connection* ctx = arg;
+	connection* ctx = (connection*)arg;
 	channel* endpoint = (bev == ctx->secure.bev) ? &ctx->plain : &ctx->secure;
 	struct evbuffer* in_buf;
 	struct evbuffer* out_buf;
@@ -92,16 +92,17 @@ void tls_bev_read_cb(struct bufferevent *bev, void *arg) {
 
 	in_buf = bufferevent_get_input(bev);
 	in_len = evbuffer_get_length(in_buf);
-	
+
+	/* clear read buffer if already closed */
 	if (endpoint->closed == 1) {
 		evbuffer_drain(in_buf, in_len);
 		return;
 	}
 
-	if (in_len == 0) {
+	if (in_len == 0)
 		return;
-	}
 
+	/* copy content from external buffer to internal buffer */
 	out_buf = bufferevent_get_output(endpoint->bev);
 	evbuffer_add_buffer(out_buf, in_buf);
 
@@ -114,20 +115,21 @@ void tls_bev_read_cb(struct bufferevent *bev, void *arg) {
 }
 
 void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
-	connection* ctx = arg;
+	/* TODO: maybe split server and client functionality to make more readable? */
+	connection* ctx = (connection*)arg;
 	unsigned long ssl_err;
 	channel* endpoint = (bev == ctx->secure.bev) ? &ctx->plain : &ctx->secure;
 	channel* startpoint = (bev == ctx->secure.bev) ? &ctx->secure : &ctx->plain;
 	if (events & BEV_EVENT_CONNECTED) {
 		log_printf(LOG_DEBUG, "%s endpoint connected\n", bev == ctx->secure.bev ? "encrypted" : "plaintext");
-		//startpoint->connected = 1;
+		
 		if (bev == ctx->secure.bev) {
-			//log_printf(LOG_INFO, "Is handshake finished?: %d\n", SSL_is_init_finished(ctx->tls));
 			log_printf(LOG_INFO, "Negotiated connection with %s\n", SSL_get_version(ctx->tls));
+			
+			/* -1 means that we're the client */
 			if (bufferevent_getfd(ctx->plain.bev) == -1) {
 				netlink_handshake_notify_kernel(ctx->daemon, ctx->id, 0);
-			}
-			else {
+			} else {
 				bufferevent_enable(ctx->plain.bev, EV_READ | EV_WRITE);
 				bufferevent_socket_connect(ctx->plain.bev, ctx->addr, ctx->addrlen);
 			}

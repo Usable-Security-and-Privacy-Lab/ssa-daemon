@@ -130,6 +130,19 @@ struct nl_sock* netlink_connect(daemon_context* ctx) {
 	return netlink_sock;
 }
 
+/**
+ * Calls the netlink socket's recv callback method. This callback method
+ * is set as handle_netlink_msg when netlink_connect was called, so this
+ * function realistically just acts as a wrapper function.
+ * 
+ * When the daemon's event base senses that the netlink socket is ready
+ * to read information from, it will call this method (as it was the 
+ * callback function set in server_create when event_new was called for
+ * the netlink socket).
+ * 
+ * @see server_create in daemon.c
+ * @see netlink_connect
+ */
 void netlink_recv(evutil_socket_t fd, short events, void *arg) {
 	//log_printf(LOG_INFO, "Got a message from the kernel!\n");
 	struct nl_sock* netlink_sock = (struct nl_sock*)arg;

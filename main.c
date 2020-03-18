@@ -107,6 +107,8 @@ int main(int argc, char* argv[]) {
 	    exit(EXIT_FAILURE);
     }
 	
+	/* Multiple daemons allows for really easy concurrency */
+	/* TODO: set this to however many processors are available */
 	worker_count = 1;
 
 	workers = malloc(sizeof(pid_t) * worker_count);
@@ -118,6 +120,7 @@ int main(int argc, char* argv[]) {
 		pid = fork();
 		if (pid == -1) {
 			log_printf(LOG_ERROR, "%s", strerror(errno));
+			/* BUG: if some workers already forked then they will be orphaned */
 			exit(EXIT_FAILURE);
 		}
 		if (pid == 0) {

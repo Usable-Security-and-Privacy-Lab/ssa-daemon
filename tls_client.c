@@ -108,7 +108,7 @@ connection* client_connection_new(daemon_context* daemon) {
 	client_conn->daemon = daemon;
 
 	return client_conn;
-err:
+ err:
 	/* TODO: make connection_free(); */
 	return NULL;
 }
@@ -130,16 +130,14 @@ int client_connection_setup(connection* client_conn, daemon_context* daemon_ctx,
 		return 0;
 	}
 
-	/* TODO: Take this out soon. */
-	if (is_accepting == 1) { /* TLS server role */
-		client_conn->secure.bev = bufferevent_openssl_socket_new(daemon_ctx->ev_base, efd, client_conn->tls,
-			BUFFEREVENT_SSL_ACCEPTING, BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
-	}
-	else { /* TLS client role */
-		client_conn->secure.bev = bufferevent_openssl_socket_new(daemon_ctx->ev_base, efd, client_conn->tls,
-			BUFFEREVENT_SSL_CONNECTING, BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
-	}
+	enum bufferevent_ssl_state state;
+	if (is_accepting) /* TLS server role */
+		state = BUFFEREVENT_SSL_ACCEPTING;
+	else
+		state = BUFFEREVENT_SSL_CONNECTING;
 
+	client_conn->secure.bev = bufferevent_openssl_socket_new(daemon_ctx->ev_base, efd, 
+			client_conn->tls, state, BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
 	if (client_conn->secure.bev == NULL) {
 		log_printf(LOG_ERROR, "Failed to set up server facing bufferevent [direct mode]\n");
 		connection_free(client_conn);

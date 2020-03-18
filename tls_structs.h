@@ -26,11 +26,11 @@ typedef struct daemon_context_st {
 	struct event_base* ev_base;
 	struct nl_sock* netlink_sock;
 	int netlink_family;
-	int port; /* Port to use for both listening and netlink */
+	int port; /** Port to use for both listening and netlink */
 	hmap_t* sock_map;
 	hmap_t* sock_map_port;
 	SSL_CTX* client_settings;
-	SSL_CTX* server_settings;
+	SSL_CTX* server_settings; /* Modifying settings problems solved with SSL_dup() */
 } daemon_context;
 
 typedef struct connection_st {
@@ -47,11 +47,11 @@ typedef struct sock_context_st {
 	unsigned long id;
 	evutil_socket_t fd;
 
-	struct sockaddr int_addr;
+	struct sockaddr int_addr; /** Internal address/port--the program using SSA */
 	int int_addrlen;
 	union {
 		struct sockaddr ext_addr;
-		struct sockaddr rem_addr;
+		struct sockaddr rem_addr; /* The address we're trying to connect to */
 	};
 	union {
 		int ext_addrlen;
@@ -61,7 +61,7 @@ typedef struct sock_context_st {
 	struct evconnlistener* listener;
 	char rem_hostname[MAX_HOSTNAME];
 	connection* tls_conn;
-	int state; /** Different states do not affect each other--set_connected will not change is_bound. */
+	int state; /** Different states are set independantly of each other */
 	daemon_context* daemon;
 } sock_context;
 
