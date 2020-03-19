@@ -71,7 +71,7 @@
 int auth_info_index;
 #endif
 
-void free_sock_ctx(sock_context* sock_ctx);
+void sock_context_free(sock_context* sock_ctx);
 
 /* SSA direct functions */
 static void accept_error_cb(struct evconnlistener *listener, void *ctx);
@@ -193,7 +193,7 @@ int server_create(int port) {
 	/* Cleanup */
 	evconnlistener_free(listener); /* This also closes the socket due to our listener creation flags */
 	hashmap_free(context.sock_map_port);
-	hashmap_deep_free(context.sock_map, (void (*)(void*))free_sock_ctx);
+	hashmap_deep_free(context.sock_map, (void (*)(void*))sock_context_free);
 	event_free(nl_ev);
 
 	event_free(upgrade_ev);
@@ -257,7 +257,8 @@ evutil_socket_t create_upgrade_socket(int port) {
 	return sock;
 }
 
-/* Creates a listening socket that binds to local IPv4 and IPv6 interfaces.
+/**
+ * Creates a listening socket that binds to local IPv4 and IPv6 interfaces.
  * It also makes the socket nonblocking (since this software uses libevent)
  * @param port numeric port for listening
  * @param type SOCK_STREAM or SOCK_DGRAM
@@ -385,6 +386,7 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	daemon_context* daemon = (daemon_context*)arg;
 	sock_context* sock_ctx;
 	int port;
+
 	log_printf(LOG_INFO, "Received connection!\n");
 	if (evutil_make_socket_nonblocking(fd) == -1) {
 		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
@@ -393,13 +395,7 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 		return;
 	}
 
-	if (address->sa_family == AF_UNIX) {
-		port = strtol(((struct sockaddr_un*)address)->sun_path+1, NULL, 16);
-		log_printf(LOG_INFO, "unix port is %05x", port);
-	}
-	else {
-		port = (int)ntohs(((struct sockaddr_in*)address)->sin_port);
-	}
+	port = get_port(address);
 
 	sock_ctx = (sock_context*)hashmap_get(daemon->sock_map_port, port);
 	if (sock_ctx == NULL) {
@@ -522,18 +518,30 @@ void signal_cb(evutil_socket_t fd, short event, void* arg) {
 	return;
 }
 
-void socket_cb(daemon_context* daemon_ctx, unsigned long id, char* comm) {
+/**
+ * The callback invoked when an internal program calls socket() with the 
+ * IPPROTO_TLS option. This function creates a socket within the daemon
+ * that mirrors any settings or functionality set by the internal program.
+ * That socket is added to a hashmap (sock_map), and is used to establish
+ * encrypted connections with the external peer via TLS protocols.
+ * @param daemon A pointer to the program's daemon_context.
+ * @param id A uniquely generated ID for the given socket; corresponds with
+ * (though is not equal to) the internal program's file descriptor of that
+ * socket.
+ * @param comm TODO: I have no clue what this is for. Used to be hostname??
+ */
+void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 	/* TODO: why do we need comm passed in here? */
 	sock_context* sock_ctx;
-	evutil_socket_t fd;
-	int ret;
+	evutil_socket_t fd = -1;
 	int response = 0;
 
-	sock_ctx = (sock_context*)hashmap_get(daemon_ctx->sock_map, id);
+	sock_ctx = (sock_context*)hashmap_get(daemon->sock_map, id);
 	if (sock_ctx != NULL) {
 		log_printf(LOG_ERROR, "We have created a socket with this ID already: %lu\n", id);
-		netlink_notify_kernel(daemon_ctx, id, response);
-		return;
+		response = -EBADF; /* BUG: wrong error code? */
+		sock_ctx = NULL; /* prevent err from deallocating sock_ctx */
+		goto err;
 	}
 
 	fd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -542,33 +550,35 @@ void socket_cb(daemon_context* daemon_ctx, unsigned long id, char* comm) {
 		goto err;
 	}
 	
-	sock_ctx = (sock_context*)calloc(1, sizeof(sock_context));
-	if (sock_ctx == NULL) {
-		response = -ENOMEM;
+	response = sock_context_new(&sock_ctx);
+	if (response != 0)
 		goto err;
-	}
-	sock_ctx->tls_conn = client_connection_new(daemon_ctx);
-	if (sock_ctx->tls_conn == NULL) {
-		response = -ENOMEM;
+	response = connection_new(&sock_ctx->tls_conn);
+	if (response != 0)
 		goto err;
-	}
-	sock_ctx->id = id;
-	sock_ctx->fd = fd;
-	hashmap_add(daemon_ctx->sock_map, id, (void*)sock_ctx);
 
 	/* whether server or client, we need nonblocking sockets for bufferevent */
-	ret = evutil_make_socket_nonblocking(sock_ctx->fd);
-	if (ret == -1) {
+	if (evutil_make_socket_nonblocking(sock_ctx->fd) != 0) {
+		response = -EVUTIL_SOCKET_ERROR();
 		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
-			 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+			 evutil_socket_error_to_string(-response));
+		goto err;
 	}
 
+	sock_ctx->id = id;
+	sock_ctx->fd = fd;
+	hashmap_add(daemon->sock_map, id, (void*)sock_ctx);
+
 	log_printf(LOG_INFO, "Socket created on behalf of application %s\n", comm);
-	netlink_notify_kernel(daemon_ctx, id, response);
+	netlink_notify_kernel(daemon, id, response);
 	return;
  err:
-	/* BUG: need to potentially free up unused things here */
-	netlink_notify_kernel(daemon_ctx, id, response);
+	if (fd != -1) 
+		close(fd);
+	if (sock_ctx != NULL) 
+		sock_context_free(sock_ctx);
+
+	netlink_notify_kernel(daemon, id, response);
 	return;
 }
 
@@ -744,58 +754,50 @@ void bind_cb(daemon_context* daemon, unsigned long id, struct sockaddr* int_addr
 }
 
 void connect_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* int_addr, 
-	int int_addrlen, struct sockaddr* rem_addr, int rem_addrlen, int blocking) {
-	
-	int ret;
+		int int_addrlen, struct sockaddr* rem_addr, int rem_addrlen, int blocking) {
 	sock_context* sock_ctx;
-	int port;
-
+	connection* conn;
+	int response = 0, port;
 
 	sock_ctx = (sock_context*)hashmap_get(daemon_ctx->sock_map, id);
 	if (sock_ctx == NULL) {
-		netlink_notify_kernel(daemon_ctx, id, -EBADF);
-		return;
+		response = -EBADF;
+		goto err;
 	}
 
-	int retVal = client_connection_setup(sock_ctx->tls_conn, daemon_ctx, sock_ctx->rem_hostname, sock_ctx->fd, is_accepting(sock_ctx->state));
-	if (retVal != 1) {
-		log_printf(LOG_ERROR, "Client connection setup function failed.");
+	conn = sock_ctx->tls_conn;
+	if (conn->tls == NULL || is_server(sock_ctx->state)) {
+		response = client_ssl_new(&conn->tls);
+		if (response != 0)
+			goto err;
+		set_client(sock_ctx->state);
 	}
+
+	response = client_connection_setup(conn, daemon_ctx, sock_ctx->rem_hostname,
+			sock_ctx->fd, is_accepting(sock_ctx->state));
+	if (response != 0)
+		goto err;
 	
-	set_netlink_cb_params(sock_ctx->tls_conn, daemon_ctx, sock_ctx->id);
+	set_netlink_cb_params(conn, daemon_ctx, sock_ctx->id);
 	/* only connect if we're not already.
 	 * we might already be connected due to a
 	 * socket upgrade */
 	if (!is_connected(sock_ctx->state)) {
 		/* begin connection attempt. NOTE: this function does not block. */
-		ret = bufferevent_socket_connect(sock_ctx->tls_conn->secure.bev, rem_addr, rem_addrlen);
-	}
-	else {
-		ret = 0;
-	}
-
-	if (ret != 0) {
-		netlink_notify_kernel(daemon_ctx, id, -EINVAL);
-		return;
+		if (bufferevent_socket_connect(conn->secure.bev, rem_addr, rem_addrlen)) {
+			/* non-zero return means error */
+			response = EVUTIL_SOCKET_ERROR();
+			goto err;
+		}
 	}
 
-	/* NOTE: this is not a bug. A client connection can call bind
-	 * to set it to a particular port before calling connect.
-	 * See: man bind */
+	/* NOTE: not a bug--socket can be bound before connecting. See man bind */
 	if (!is_bound(sock_ctx->state)) {
 		sock_ctx->int_addr = *int_addr;
 		sock_ctx->int_addrlen = int_addrlen;
 	}
 
-
-	if (int_addr->sa_family == AF_UNIX) {
-		port = strtol(((struct sockaddr_un*)int_addr)->sun_path+1, NULL, 16);
-		log_printf(LOG_INFO, "unix port is %05x", port);
-	}
-	else {
-		port = (int)ntohs(((struct sockaddr_in*)int_addr)->sin_port);
-	}
-
+	port = get_port(int_addr);
 	log_printf(LOG_INFO, "Placing sock_ctx for port %d\n", port);
 	hashmap_add(daemon_ctx->sock_map_port, port, sock_ctx);
 	sock_ctx->rem_addr = *rem_addr;
@@ -808,6 +810,9 @@ void connect_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* i
 	}
 	
 	/* Kernel notified in tls_bev_event_cb once connection established */
+	return;
+ err:
+	netlink_notify_kernel(daemon_ctx, id, response);
 	return;
 }
 
@@ -873,13 +878,7 @@ void associate_cb(daemon_context* daemon, unsigned long id, struct sockaddr* int
 	int response = 0;
 	int port;
 
-	if (int_addr->sa_family == AF_UNIX) {
-		port = strtol(((struct sockaddr_un*)int_addr)->sun_path+1, NULL, 16);
-		log_printf(LOG_INFO, "unix port is %05x", port);
-	}
-	else {
-		port = (int)ntohs(((struct sockaddr_in*)int_addr)->sin_port);
-	}
+	port = get_port(int_addr);
 
 	sock_ctx = hashmap_get(daemon->sock_map_port, port);
 	if (sock_ctx == NULL) {
@@ -951,22 +950,19 @@ void upgrade_cb(daemon_context* daemon_ctx, unsigned long id,
 
 /* This function is provided to the hashmap implementation
  * so that it can correctly free all held data */
-void free_sock_ctx(sock_context* sock_ctx) {
-	if (sock_ctx->listener != NULL) {
+void sock_context_free(sock_context* sock_ctx) {
+	if (sock_ctx->listener != NULL)
 		evconnlistener_free(sock_ctx->listener);
-	}
-	else if (is_connected(sock_ctx->state)) {
+	else if (is_connected(sock_ctx->state))
 		/* connections under the control of the tls_wrapper code
 		 * clean up themselves as a result of the close event
 		 * received from one of the endpoints. In this case we
 		 * only need to clean up the sock_ctx */
-	}
-	else {
+	else 
 		EVUTIL_CLOSESOCKET(sock_ctx->fd);
-	}
-	if (sock_ctx->tls_conn != NULL) {
+	
+	if (sock_ctx->tls_conn != NULL)
 		connection_free(sock_ctx->tls_conn);
-	}
 	free(sock_ctx);
 	return;
 }

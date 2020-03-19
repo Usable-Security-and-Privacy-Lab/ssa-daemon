@@ -30,7 +30,7 @@ typedef struct daemon_context_st {
 	hmap_t* sock_map;
 	hmap_t* sock_map_port;
 	SSL_CTX* client_settings;
-	SSL_CTX* server_settings; /* Modifying settings problems solved with SSL_dup() */
+	SSL_CTX* server_settings;
 } daemon_context;
 
 typedef struct connection_st {
@@ -51,7 +51,7 @@ typedef struct sock_context_st {
 	int int_addrlen;
 	union {
 		struct sockaddr ext_addr;
-		struct sockaddr rem_addr; /* The address we're trying to connect to */
+		struct sockaddr rem_addr;
 	};
 	union {
 		int ext_addrlen;
@@ -68,11 +68,11 @@ typedef struct sock_context_st {
 
 
 /* Bitmap constants for Connection->state */
-#define CONN_SERVER 		0x01 /* 1 for Server, 0 for Client. All of these set to 0 by default */
-#define CONN_BOUND 		0x02 /* Nonzero if we've called bind locally */
-#define CONN_CONNECTED 		0x04
-#define CONN_ACCEPTING 		0x08
-#define CONN_CUSTOM_VALIDATION 	0x10
+#define CONN_SERVER				0x01 /* 1 for Server, 0 for Client. All of these set to 0 by default */
+#define CONN_BOUND				0x02 /* Nonzero if we've called bind locally */
+#define CONN_CONNECTED			0x04
+#define CONN_ACCEPTING			0x08
+#define CONN_CUSTOM_VALIDATION	0x10
 
 /* Macro getters/setters to simplify state bitmap access */
 #define is_server(state) ((state) & CONN_SERVER) /** If it's not a server... it's a client. */

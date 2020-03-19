@@ -18,40 +18,68 @@ int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist);
 int get_ciphers_strlen(STACK_OF(SSL_CIPHER)* ciphers);
 int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len);
 
+int get_port(struct sockaddr* addr) {
+	int port = 0;
+	if (int_addr->sa_family == AF_UNIX) {
+		port = strtol(((struct sockaddr_un*)int_addr)->sun_path+1, NULL, 16);
+		log_printf(LOG_INFO, "unix port is %05x", port);
+	}
+	else {
+		port = (int)ntohs(((struct sockaddr_in*)int_addr)->sin_port);
+	}
+	return port;
+}
 
-void connection_free(connection* ctx) {
-	/* TODO: This function never actually did anything. Change this?? */
-	/* shutdown_tls_conn_ctx(ctx); */
-	ctx->tls = NULL;
-	if (ctx->secure.bev != NULL) {
-		// && ctx->secure.closed == 0) {
-		 bufferevent_free(ctx->secure.bev);
+int sock_context_new(sock_context** ctx) {
+	int ret = 0;
+	*ctx = (sock_context*)calloc(1, sizeof(sock_context));
+	if (*ctx == NULL)
+		ret = -errno;
+		/* could log_printf here; but remember {}s */
+	return ret;
+}
+
+int connection_new(connection** conn) {
+	int ret = 0;
+	*conn = (connection*)calloc(1, sizeof(connection));
+	if (*conn == NULL) {
+		ret = -errno;
+		log_printf(LOG_ERROR, "Failed to allocate connection: %s\n", strerror(errno));
 	}
-	ctx->secure.bev = NULL;
-	if (ctx->plain.bev != NULL) {
-		// && ctx->plain.closed == 1) {
-		 bufferevent_free(ctx->plain.bev);
-	}
-	ctx->plain.bev = NULL;
-	free(ctx);
+	return ret;
+}
+
+void connection_free(connection* conn) {
+	if (conn->tls != NULL)
+		SSL_free(conn->tls);
+	if (conn->secure.bev != NULL)
+		bufferevent_free(conn->secure.bev);
+	
+	if (conn->plain.bev != NULL) {
+		bufferevent_free(conn->plain.bev);
+	
+	free(conn);
 	return;
 }
 
-void associate_fd(connection* conn, evutil_socket_t ifd) {
-	bufferevent_setfd(conn->plain.bev, ifd);
-	bufferevent_enable(conn->plain.bev, EV_READ | EV_WRITE);
+int associate_fd(connection* conn, evutil_socket_t ifd) {
+	int ret = 0;
+	ret = bufferevent_setfd(conn->plain.bev, ifd);
+	if (ret != 0)
+		goto end;
+	ret = bufferevent_enable(conn->plain.bev, EV_READ | EV_WRITE);
+	if (ret != 0)
+		goto end;
 
 	log_printf(LOG_INFO, "plain bev enabled\n");
-	return;
+ end:
+	return ret;
 }
 
-int set_netlink_cb_params(connection* conn, daemon_context* daemon_ctx, unsigned long id) {
-	/*if (conn->tls == NULL) {
-		return 1;
-	}*/
-	conn->daemon = daemon_ctx;
+void set_netlink_cb_params(connection* conn, daemon_context* daemon, 
+		unsigned long id) {
+	conn->daemon = daemon;
 	conn->id = id;
-	return 1;
 }
 
 /*

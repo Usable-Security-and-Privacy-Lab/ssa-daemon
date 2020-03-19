@@ -91,69 +91,64 @@ err_ctx:
 	return NULL;
 }
 
-connection* client_connection_new(daemon_context* daemon) {
-	connection* client_conn;
+int client_ssl_new(SSL** ssl, daemon_context* daemon) {
+	int ret = 0;
 
-	client_conn = (connection*)calloc(1, sizeof(connection));
-	if (client_conn == NULL) {
-		log_printf(LOG_ERROR, "Failed to allocate connection: %s\n", strerror(errno));
-		goto err;
+	if (*ssl != NULL)
+		SSL_free(*ssl);
+	*ssl = SSL_new(daemon->client_settings);
+	if (*ssl == NULL) {
+		/* TODO: get OpenSSL error here and convert to an errno code */
+		ret = -ENOMEM; /* BUG: temporary fix. Replace soon. */
 	}
-
-	client_conn->tls = SSL_new(daemon->client_settings);
-	if (client_conn->tls == NULL) {
-		log_printf(LOG_ERROR, "Failed to allocate SSL object.\n");
-		goto err;
-	}
-	client_conn->daemon = daemon;
-
-	return client_conn;
- err:
-	/* TODO: make connection_free(); */
-	return NULL;
+	return ret;
 }
 
-int client_connection_setup(connection* client_conn, daemon_context* daemon_ctx, char* hostname, evutil_socket_t efd, int is_accepting) {
-	
+int client_connection_setup(connection* client_conn, daemon_context* daemon, 
+		char* hostname, evutil_socket_t efd, int is_accepting) {
+	int ret = 0;
+
 	if (hostname != NULL) {
 		SSL_set_tlsext_host_name(client_conn->tls, hostname);
 	}
 
 	/* socket set to -1 because we set it later */
-	client_conn->plain.bev = bufferevent_socket_new(daemon_ctx->ev_base, -1,
+	client_conn->plain.bev = bufferevent_socket_new(daemon->ev_base, -1,
 			BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
-	//ctx->plain.connected = 1;
 	if (client_conn->plain.bev == NULL) {
-		log_printf(LOG_ERROR, "Failed to set up client facing bufferevent [direct mode]\n");
-		/* Need to close socket because it won't be closed on free since bev creation failed */
-		connection_free(client_conn);
-		return 0;
+		ret = -EVUTIL_SOCKET_ERROR();
+		goto err;
 	}
 
 	enum bufferevent_ssl_state state;
-	if (is_accepting) /* TLS server role */
+	if (is_accepting) /* TLS server role...TODO: why is this here?? */
 		state = BUFFEREVENT_SSL_ACCEPTING;
 	else
 		state = BUFFEREVENT_SSL_CONNECTING;
-
-	client_conn->secure.bev = bufferevent_openssl_socket_new(daemon_ctx->ev_base, efd, 
+	client_conn->secure.bev = bufferevent_openssl_socket_new(daemon->ev_base, efd, 
 			client_conn->tls, state, BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
-	if (client_conn->secure.bev == NULL) {
-		log_printf(LOG_ERROR, "Failed to set up server facing bufferevent [direct mode]\n");
-		connection_free(client_conn);
-		return 0;
+	if (client_conn->secure.bev == NULL) { 
+		ret = -EVUTIL_SOCKET_ERROR();
+		goto err;
 	}
 
 	#if LIBEVENT_VERSION_NUMBER >= 0x02010000
 	/* Comment out this line if you need to do better debugging of OpenSSL behavior */
-	bufferevent_openssl_set_allow_dirty_shutdown(ctx->secure.bev, 1);
+	bufferevent_openssl_set_allow_dirty_shutdown(client_conn->secure.bev, 1);
 	#endif /* LIBEVENT_VERSION_NUMBER >= 0x02010000 */
 
 
 	/* Register callbacks for reading and writing to both bevs */
-	bufferevent_setcb(client_conn->secure.bev, tls_bev_read_cb, tls_bev_write_cb, tls_bev_event_cb, client_conn);
+	bufferevent_setcb(client_conn->secure.bev, tls_bev_read_cb, 
+			tls_bev_write_cb, tls_bev_event_cb, client_conn);
 	bufferevent_enable(client_conn->secure.bev, EV_READ | EV_WRITE);
-	bufferevent_setcb(client_conn->plain.bev, tls_bev_read_cb, tls_bev_write_cb, tls_bev_event_cb, client_conn);
-
-	return 1;
+	/* TODO: check for errors here */
+	bufferevent_setcb(client_conn->plain.bev, tls_bev_read_cb, 
+			tls_bev_write_cb, tls_bev_event_cb, client_conn);
+	return 0;
+ err:
+	log_printf(LOG_ERROR, "Failed to set up client/server facing bufferevent [direct mode]\n");
+	/* Need to close socket because it won't be closed on free since bev creation failed */
+	connection_free(client_conn);
+	return ret;
 }
