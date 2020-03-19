@@ -840,12 +840,6 @@ void listen_cb(daemon_context* daemon, unsigned long id, struct sockaddr* int_ad
 	netlink_notify_kernel(daemon, id, response);
 	
 	/* We're done gathering info, let's set up a server */
-	if (evutil_make_socket_nonblocking(sock_ctx->fd) == -1) {
-		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
-		evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-		EVUTIL_CLOSESOCKET(sock_ctx->fd);
-		return;
-	}
 
 	/* TODO: Eventually clean up this whole section--ripped from tls_opts_server_setup()... */
 	SSL_CTX* server_settings = daemon->server_settings;
