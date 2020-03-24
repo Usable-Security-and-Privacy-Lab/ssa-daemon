@@ -92,13 +92,13 @@ err_ctx:
 	return NULL;
 }
 
-int client_ssl_new(SSL** ssl, daemon_context* daemon) {
+int client_SSL_new(connection* conn, daemon_context* daemon) {
 	int ret = 0;
-
-	if (*ssl != NULL)
-		SSL_free(*ssl);
-	*ssl = SSL_new(daemon->client_settings);
-	if (*ssl == NULL) {
+	
+	if (conn->tls != NULL)
+		SSL_free(conn->tls);
+	conn->tls = SSL_new(daemon->client_settings);
+	if (conn->tls == NULL) {
 		/* TODO: get OpenSSL error here and convert to an errno code */
 		ret = -ENOMEM; /* BUG: temporary fix. Replace soon. */
 	}

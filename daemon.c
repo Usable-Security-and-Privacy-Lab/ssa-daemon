@@ -487,7 +487,7 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 
 	ret = connection_new(&accepting_sock_tls->tls_conn);
 	/* TODO: error check here */
-	ret = accept_ssl_new(&accepting_sock_ctx->tls_conn->tls, listening_sock_ctx);
+	ret = accept_SSL_new(accepting_sock_ctx->tls_conn, listening_sock_ctx->tls_conn);
 	/* TODO: check error here also */
 	ret = accept_connection_setup(accepting_sock_ctx, listening_sock_ctx, ifd);
 	return;
@@ -557,6 +557,13 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 	if (response != 0)
 		goto err;
 
+	/* To maintain consistency with server/client state in sock_ctx,
+	 * we will default to this being a client connection. */
+	response = client_SSL_new(sock_ctx->tls_conn, daemon);
+	if (response != 0)
+		goto err;
+	
+
 	/* whether server or client, we need nonblocking sockets for bufferevent */
 	if (evutil_make_socket_nonblocking(sock_ctx->fd) != 0) {
 		response = -EVUTIL_SOCKET_ERROR();
@@ -608,7 +615,18 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 			response = -1; /* TODO: set specific error reporting errno here */
 		break;
 	case TLS_TRUSTED_PEER_CERTIFICATES:
-		if (set_trusted_peer_certificates(sock_ctx->tls_conn, (char*) value != 1)
+		if (set_trusted_peer_certificates(sock_ctx->tls_conn, (char*) value != 1))
+			response = -1;
+		break;
+	case TLS_CLIENT_CONNECTION:
+		response = client_SSL_new(&sock_ctx->tls_conn->tls, ctx);
+		if (response == 0)
+			set_client(sock_ctx->state);
+		break;
+	case TLS_SERVER_CONNECTION:
+		response = server_SSL_new(sock_ctx->tls_conn, ctx);
+		if (response == 0)
+			set_server(sock_ctx->state);
 		break;
 	case TLS_HOSTNAME:
 		response = -ENOPROTOOPT; /* get only */
@@ -766,8 +784,8 @@ void connect_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* i
 	}
 
 	conn = sock_ctx->tls_conn;
-	if (conn->tls == NULL || is_server(sock_ctx->state)) {
-		response = client_ssl_new(&conn->tls);
+	if (is_server(sock_ctx->state)) {
+		response = client_SSL_new(&conn->tls);
 		if (response != 0)
 			goto err;
 		set_client(sock_ctx->state);
@@ -827,6 +845,14 @@ void listen_cb(daemon_context* daemon, unsigned long id, struct sockaddr* int_ad
 	if (sock_ctx == NULL) {
 		response = -EBADF;
 		goto err;
+	}
+
+	/* TODO: have this behave differently? Return EBADF? Might be safer... */
+	if (!is_server(sock_ctx->state)) {
+		response = server_SSL_new(sock_ctx->tls_conn, daemon);
+		if (response != 0)
+			goto err;
+		set_server(sock_ctx->state);
 	}
 
 	/* set external-facing socket to listen */

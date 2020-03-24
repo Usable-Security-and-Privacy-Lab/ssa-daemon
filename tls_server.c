@@ -25,13 +25,13 @@ int server_SSL_new(connection* conn, daemon_context* daemon) {
 	return 0;
 }
 
-int accept_ssl_new(SSL** ssl, connection* old) {
+int accept_SSL_new(connection* conn, connection* old) {
 	int ret = 0;
 
-	if (*ssl != NULL) 
-		SSL_free(*ssl);
-	*ssl = SSL_dup(old->tls);
-	if (*ssl == NULL) {
+	if (conn->tls != NULL) 
+		SSL_free(conn->tls);
+	conn->tls = SSL_dup(old->tls);
+	if (conn->tls == NULL) {
 		/* TODO: get openssl error and return here */
 		ret = -ENOMEM;
 	}

@@ -16,10 +16,12 @@
 #define TLS_PEER_IDENTITY		  93
 #define TLS_REQUEST_PEER_AUTH		  94
 #define TLS_TRUSTED_CIPHERS               95
+#define TLS_CLIENT_CONNECTION             96
+#define TLS_SERVER_CONNECTION             97
 
 /* Internal use only */
-#define TLS_PEER_CERTIFICATE_CHAIN        96
-#define TLS_ID                            97
+#define TLS_PEER_CERTIFICATE_CHAIN        98
+#define TLS_ID                            99
 
 /* TCP options */
 #define TCP_UPGRADE_TLS         33

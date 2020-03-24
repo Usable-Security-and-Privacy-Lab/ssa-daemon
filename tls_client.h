@@ -30,7 +30,7 @@
 
 SSL_CTX* client_settings_init(char* path);
 
-int client_ssl_new(SSL** ssl, daemon_context* daemon);
+int client_SSL_new(connection* conn, daemon_context* daemon);
 connection* client_connection_new(daemon_context* daemon);
 int client_connection_setup(connection* client_conn, daemon_context* daemon_ctx, char* hostname, evutil_socket_t efd, int is_accepting);
 
