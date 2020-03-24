@@ -440,7 +440,7 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	socklen_t intaddr_len = sizeof(int_addr);
 	sock_context* listening_sock_ctx = (sock_context*)arg;
 	evutil_socket_t ifd;
-	int port;
+	int ret = 0, port;
 	sock_context* accepting_sock_ctx;
 
 	if (evutil_make_socket_nonblocking(efd) == -1) {
@@ -485,19 +485,19 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	port = (int)ntohs((&int_addr)->sin_port);
 	hashmap_add(listening_sock_ctx->daemon->sock_map_port, port, (void*)accepting_sock_ctx);
 
-	accepting_sock_ctx->tls_conn = accept_connection_new(daemon_context, listening_sock_ctx);
-	/* TODO: check errors in both functions */
-	accept_connection_setup(accepting_sock_ctx, listening_sock_ctx, ifd);
+	ret = connection_new(&accepting_sock_tls->tls_conn);
+	/* TODO: error check here */
+	ret = accept_ssl_new(&accepting_sock_ctx->tls_conn->tls, listening_sock_ctx);
+	/* TODO: check error here also */
+	ret = accept_connection_setup(accepting_sock_ctx, listening_sock_ctx, ifd);
 	return;
 }
 
 void listener_accept_error_cb(struct evconnlistener *listener, void *ctx) {
         struct event_base *base = evconnlistener_get_base(listener);
-#ifndef NO_LOG
         int err = EVUTIL_SOCKET_ERROR();
         log_printf(LOG_ERROR, "Got an error %d (%s) on a server listener\n", 
 				err, evutil_socket_error_to_string(err));
-#endif
         event_base_loopexit(base, NULL);
 	return;
 }

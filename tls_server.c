@@ -7,6 +7,7 @@
 #include <event2/bufferevent_ssl.h>
 
 #include "tls_server.h"
+#include "tls_structs.h"
 #include "log.h"
 
 SSL_CTX* server_settings_init(char* path) {
@@ -24,42 +25,17 @@ int server_SSL_new(connection* conn, daemon_context* daemon) {
 	return 0;
 }
 
-connection* server_connection_new(daemon_context* daemon) {
-    connection* server_conn = (connection*)calloc(1, sizeof(connection));
-    if (server_conn == NULL) {
-		log_printf(LOG_ERROR, "Failed to allocate server connection: %s\n", strerror(errno));
-		goto err;
+int accept_ssl_new(SSL** ssl, connection* old) {
+	int ret = 0;
+
+	if (*ssl != NULL) 
+		SSL_free(*ssl);
+	*ssl = SSL_dup(old->tls);
+	if (*ssl == NULL) {
+		/* TODO: get openssl error and return here */
+		ret = -ENOMEM;
 	}
-
-    server_conn->tls = SSL_new(daemon->server_settings);
-	if (server_conn->tls == NULL) {
-        goto err;
-	}
-
-    return server_conn;
-err:
-    /* TODO: connection_free() here */
-    return NULL;
-}
-
-connection* accept_connection_new(daemon_context* daemon, connection* old) {
-	connection* accept_conn = (connection*)calloc(1, sizeof(connection));
-	if (accept_conn == NULL) {
-		log_printf(LOG_ERROR, "Failed to allocate server connection: %s\n", strerror(errno));
-		goto err;
-	}
-
-	/* copy the tls settings of the listening connection--the SSL* 
-	 * associated with the listening port is never actually used, so
-	 * this is safe to do. */
-	accept_conn->tls = SSL_dup(old->tls);
-	if (accept_conn->tls == NULL)
-		goto err;
-
-	return accept_conn;
- err:
-	/* TODO: connection_free(), other cleanup here */
-	return NULL;
+	return ret;
 }
 
 int accept_connection_setup(sock_context* new_sock, sock_context* old_sock, 
@@ -69,11 +45,13 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 	struct sockaddr* internal_addr = &old_sock->int_addr;
 	int internal_addrlen = old_sock->int_addrlen;
 	evutil_socket_t efd = new_sock->fd;
+	int ret = 0;
 
 	accept_conn->secure.bev = bufferevent_openssl_socket_new(daemon->ev_base, 
 			efd, accept_conn->tls, BUFFEREVENT_SSL_ACCEPTING, 
 			BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
 	if (accept_conn->secure.bev == NULL) {
+		ret = EVUTIL_SOCKET_ERROR();
 		log_printf(LOG_ERROR, "Failed to set up client facing bufferevent [listener mode]\n");
 		EVUTIL_CLOSESOCKET(efd);
 		connection_free(accept_conn);
@@ -89,6 +67,7 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 	accept_conn->plain.bev = bufferevent_socket_new(daemon->ev_base, ifd,
 			BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
 	if (accept_conn->plain.bev == NULL) {
+		ret = EVUTIL_SOCKET_ERROR();
 		log_printf(LOG_ERROR, "Failed to set up server facing bufferevent [listener mode]\n");
 		EVUTIL_CLOSESOCKET(ifd);
 		connection_free(accept_conn);
@@ -104,10 +83,10 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 	bufferevent_setcb(accept_conn->secure.bev, tls_bev_read_cb, tls_bev_write_cb, tls_bev_event_cb, accept_conn);
 	bufferevent_enable(accept_conn->secure.bev, EV_READ | EV_WRITE);
 
-    return 1;
+    return ret;
 err:
     /* Do stuff here... */
-    return 0;
+    return ret;
 }
 
 

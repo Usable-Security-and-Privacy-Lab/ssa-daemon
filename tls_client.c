@@ -9,6 +9,7 @@
 #include "log.h"
 #include "tls_client.h"
 #include "tls_common.h"
+#include "tls_structs.h"
 
 
 SSL_CTX* client_settings_init(char* path) {
