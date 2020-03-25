@@ -485,11 +485,12 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	port = (int)ntohs((&int_addr)->sin_port);
 	hashmap_add(listening_sock_ctx->daemon->sock_map_port, port, (void*)accepting_sock_ctx);
 
-	ret = connection_new(&accepting_sock_tls->tls_conn);
+	ret = connection_new(&accepting_sock_ctx->tls_conn, listening_sock_ctx->daemon);
 	/* TODO: error check here */
 	ret = accept_SSL_new(accepting_sock_ctx->tls_conn, listening_sock_ctx->tls_conn);
 	/* TODO: check error here also */
 	ret = accept_connection_setup(accepting_sock_ctx, listening_sock_ctx, ifd);
+	log_printf(LOG_DEBUG, "connection ret val: %i\n", ret);
 	return;
 }
 
@@ -553,7 +554,7 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 	response = sock_context_new(&sock_ctx);
 	if (response != 0)
 		goto err;
-	response = connection_new(&sock_ctx->tls_conn);
+	response = connection_new(&sock_ctx->tls_conn, daemon);
 	if (response != 0)
 		goto err;
 
@@ -615,11 +616,11 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 			response = -1; /* TODO: set specific error reporting errno here */
 		break;
 	case TLS_TRUSTED_PEER_CERTIFICATES:
-		if (set_trusted_peer_certificates(sock_ctx->tls_conn, (char*) value != 1))
+		if (set_trusted_peer_certificates(sock_ctx->tls_conn, (char*) value) != 1)
 			response = -1;
 		break;
 	case TLS_CLIENT_CONNECTION:
-		response = client_SSL_new(&sock_ctx->tls_conn->tls, ctx);
+		response = client_SSL_new(sock_ctx->tls_conn, ctx);
 		if (response == 0)
 			set_client(sock_ctx->state);
 		break;
@@ -691,7 +692,7 @@ void getsockopt_cb(daemon_context* daemon_ctx, unsigned long id, int level, int 
 		need_free = 1;
 		break;
 	case TLS_TRUSTED_CIPHERS:
-		data = get_enabled_ciphers(sock_ctx->tls_conn);
+		get_enabled_ciphers(sock_ctx->tls_conn, &data);
 		if (data == NULL)
 			response = -ENOTCONN;
 		need_free = 1;
@@ -785,7 +786,8 @@ void connect_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* i
 
 	conn = sock_ctx->tls_conn;
 	if (is_server(sock_ctx->state)) {
-		response = client_SSL_new(&conn->tls);
+		response = client_SSL_new(conn, daemon_ctx);
+		
 		if (response != 0)
 			goto err;
 		set_client(sock_ctx->state);
@@ -837,7 +839,6 @@ void connect_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* i
 void listen_cb(daemon_context* daemon, unsigned long id, struct sockaddr* int_addr,
 	int int_addrlen, struct sockaddr* ext_addr, int ext_addrlen) {
 
-	int ret;
 	sock_context* sock_ctx = NULL;
 	int response = 0;
 	
@@ -921,6 +922,7 @@ void associate_cb(daemon_context* daemon, unsigned long id, struct sockaddr* int
 
 void close_cb(daemon_context* daemon_ctx, unsigned long id) {
 	sock_context* sock_ctx;
+	log_printf(LOG_DEBUG, "Called close_cb\n");
 
 	sock_ctx = (sock_context*)hashmap_get(daemon_ctx->sock_map, id);
 	if (sock_ctx == NULL) {
@@ -938,6 +940,7 @@ void close_cb(daemon_context* daemon_ctx, unsigned long id) {
 		return;
 	}
 	if (is_connected(sock_ctx->state)) {
+
 		/* connections under the control of the tls_wrapper code
 		 * clean up themselves as a result of the close event
 		 * received from one of the endpoints. In this case we
@@ -971,15 +974,16 @@ void upgrade_cb(daemon_context* daemon_ctx, unsigned long id,
 /* This function is provided to the hashmap implementation
  * so that it can correctly free all held data */
 void sock_context_free(sock_context* sock_ctx) {
-	if (sock_ctx->listener != NULL)
+	if (sock_ctx->listener != NULL) {
 		evconnlistener_free(sock_ctx->listener);
-	else if (is_connected(sock_ctx->state))
+	} else if (is_connected(sock_ctx->state)) {
 		/* connections under the control of the tls_wrapper code
 		 * clean up themselves as a result of the close event
 		 * received from one of the endpoints. In this case we
 		 * only need to clean up the sock_ctx */
-	else 
+	} else { 
 		EVUTIL_CLOSESOCKET(sock_ctx->fd);
+	}
 	
 	if (sock_ctx->tls_conn != NULL)
 		connection_free(sock_ctx->tls_conn);

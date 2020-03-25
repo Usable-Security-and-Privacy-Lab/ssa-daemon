@@ -1,6 +1,8 @@
-#include <event2/bufferevent.h>
+#include <assert.h>
 #include <errno.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 
 #include <openssl/err.h>
 
@@ -20,12 +22,12 @@ int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len);
 
 int get_port(struct sockaddr* addr) {
 	int port = 0;
-	if (int_addr->sa_family == AF_UNIX) {
-		port = strtol(((struct sockaddr_un*)int_addr)->sun_path+1, NULL, 16);
+	if (addr->sa_family == AF_UNIX) {
+		port = strtol(((struct sockaddr_un*)addr)->sun_path+1, NULL, 16);
 		log_printf(LOG_INFO, "unix port is %05x", port);
 	}
 	else {
-		port = (int)ntohs(((struct sockaddr_in*)int_addr)->sin_port);
+		port = (int)ntohs(((struct sockaddr_in*)addr)->sin_port);
 	}
 	return port;
 }
@@ -39,25 +41,26 @@ int sock_context_new(sock_context** ctx) {
 	return ret;
 }
 
-int connection_new(connection** conn) {
+int connection_new(connection** conn, daemon_context* daemon) {
 	int ret = 0;
 	*conn = (connection*)calloc(1, sizeof(connection));
 	if (*conn == NULL) {
 		ret = -errno;
 		log_printf(LOG_ERROR, "Failed to allocate connection: %s\n", strerror(errno));
 	}
+	(*conn)->daemon = daemon;
 	return ret;
 }
 
 void connection_free(connection* conn) {
-	if (conn->tls != NULL)
-		SSL_free(conn->tls);
+	/* This breaks it for some reason...
+	 * if (conn->tls != NULL)
+	 *     SSL_free(conn->tls);
+	*/
 	if (conn->secure.bev != NULL)
 		bufferevent_free(conn->secure.bev);
-	
-	if (conn->plain.bev != NULL) {
+	if (conn->plain.bev != NULL)
 		bufferevent_free(conn->plain.bev);
-	
 	free(conn);
 	return;
 }
@@ -143,6 +146,7 @@ void tls_bev_read_cb(struct bufferevent *bev, void *arg) {
 }
 
 void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
+	log_printf(LOG_DEBUG, "Made it into bev_event_cb\n");
 	/* TODO: maybe split server and client functionality to make more readable? */
 	connection* ctx = (connection*)arg;
 	unsigned long ssl_err;
@@ -293,7 +297,7 @@ int get_hostname(connection* conn_ctx, char** data, unsigned int* len) {
 	return 1;
 }
 
-char* get_enabled_ciphers(connection* conn, char** data) {
+int get_enabled_ciphers(connection* conn, char** data) {
 	assert(conn);
 	assert(conn->tls);
 
@@ -322,14 +326,14 @@ int set_trusted_peer_certificates(connection* conn, char* value) {
 	/* XXX update this to take in-memory PEM chains as well as file names */
 	/* ^ old comment, maybe still do? */
 
-	if (conn_ctx == NULL)
+	if (conn == NULL)
 		return 0;
 
 	STACK_OF(X509_NAME)* cert_names = SSL_load_client_CA_file(value);
 	if (cert_names == NULL)
 		return 0;
 
-	SSL_set_client_CA_list(conn_ctx->tls, cert_names);
+	SSL_set_client_CA_list(conn->tls, cert_names);
 	return 1;
 }
 
@@ -349,12 +353,12 @@ int disable_cipher(connection* conn, char* cipher) {
 	}
 	
 	if (!SSL_set_cipher_list(conn->tls, ciphers_string)) {
-		free(new_ciphers);
+		free(ciphers_string);
 		/* TODO: figure out standard error code returns for functions */
 		return -1;
 	}
 
-	free(new_ciphers);
+	free(ciphers_string);
 	return 0;
 }
 
@@ -376,9 +380,9 @@ int disable_cipher(connection* conn, char* cipher) {
  */
 int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len) {
 	int index = 0;
-	for (int i = 0; i < sk_SSL_CIPHER_num(cipherlist); i++) {
-		SSL_CIPHER curr = sk_SSL_CIPHER_value(cipherlist, i);
-		char* cipher = SSL_CIPHER_get_name(curr);
+	for (int i = 0; i < sk_SSL_CIPHER_num(ciphers); i++) {
+		const SSL_CIPHER* curr = sk_SSL_CIPHER_value(ciphers, i);
+		const char* cipher = SSL_CIPHER_get_name(curr);
 		
 		if (index + strlen(cipher) >= buf_len) {
 			buf[index-1] = '\0';
@@ -404,7 +408,7 @@ int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len) {
 int get_ciphers_strlen(STACK_OF(SSL_CIPHER)* ciphers) {
 	int len = 0;
 	for (int i = 0; i < sk_SSL_CIPHER_num(ciphers); i++) {
-		char* curr = SSL_CIPHER_get_name(sk_SSL_CIPHER_value(ciphers, i));
+		const char* curr = SSL_CIPHER_get_name(sk_SSL_CIPHER_value(ciphers, i));
 		len += strlen(curr) + 1;
 	}
 	return len;
@@ -423,12 +427,12 @@ int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist) {
 	int length = 0, i = 0;
 
 	while (i < sk_SSL_CIPHER_num(cipherlist)) {
-		SSL_CIPHER curr_cipher = sk_SSL_CIPHER_value(cipherlist, i);
-		char* cipher = SSL_CIPHER_get_name(curr_cipher);
+		const SSL_CIPHER* curr_cipher = sk_SSL_CIPHER_value(cipherlist, i);
+		const char* name = SSL_CIPHER_get_name(curr_cipher);
 		if (strcmp(name, cipher) == 0) {
 			sk_SSL_CIPHER_delete(cipherlist, i);
 		} else {
-			length += strlen(cipher) + 1; /* +1 for ':' or '\0' */
+			length += strlen(name) + 1; /* +1 for ':' or '\0' */
 			i++;
 		}
 	}
