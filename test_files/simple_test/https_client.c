@@ -91,11 +91,13 @@ void print_identity(int fd) {
 	if (getsockopt(fd, IPPROTO_TLS, TLS_PEER_CERTIFICATE_CHAIN, data, &data_len) == -1) {
 		perror("TLS_PEER_CERTIFICATE_CHAIN");
 	}
-	printf("Peer certificate:\n%s\n", data);
+  	printf("Peer certificate:\n%s\n", data);
+    
+	data_len = sizeof(data);
 	if (getsockopt(fd, IPPROTO_TLS, TLS_PEER_IDENTITY, data, &data_len) == -1) {
 		perror("TLS_PEER_IDENTITY");
 	}
 	printf("Peer identity:\n%s\n", data);
-	return;
+	
 }
 

@@ -20,6 +20,7 @@ int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist);
 int get_ciphers_strlen(STACK_OF(SSL_CIPHER)* ciphers);
 int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len);
 
+
 int get_port(struct sockaddr* addr) {
 	int port = 0;
 	if (addr->sa_family == AF_UNIX) {
@@ -53,6 +54,10 @@ int connection_new(connection** conn, daemon_context* daemon) {
 }
 
 void connection_free(connection* conn) {
+	if (conn == NULL) {
+		log_printf(LOG_WARNING, "Tried to free a NULL connection.\n");
+		return;
+	}
 	/* This breaks it for some reason...
 	 * if (conn->tls != NULL)
 	 *     SSL_free(conn->tls);
@@ -227,41 +232,62 @@ void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
  *----------------------------------------------------------------------------- 
  */
 
+/**
+ * Retrieves the peer's certificate (if such exists) and allocates data to a
+ * PEM-formatted string representing that certificate.
+ * @param conn The connection context to retrieve a peer certificate from.
+ * @param data A memory address for the certificate string to be allocated to.
+ * @param len The string length of the certificate.
+ * @returns 0 on success; -errno otherwise.
+ */
 int get_peer_certificate(connection* conn, char** data, unsigned int* len) {
-	X509* cert;
-	BIO* bio;
-	char* bio_data;
-	char* pem_data;
+	X509* cert = NULL;
+	BIO* bio = NULL;
+	char* bio_data = NULL;
+	char* pem_data = NULL;
 	unsigned int cert_len;
-	int did_succeed = 0;
+	int ret = 0;
 
-	if (conn->tls == NULL)
-		return 0;
+	assert(conn);
+	assert(conn->tls);
+
 	cert = SSL_get_peer_certificate(conn->tls);
-	if (cert == NULL)
-		return 0;
+	if (cert == NULL) {
+		/* TODO: get specific error from OpenSSL */
+		ret = -ENOTCONN;
+		goto end;
+	}
 
 	bio = BIO_new(BIO_s_mem());
-	if (bio == NULL)
+	if (bio == NULL) {
+		/* TODO: get specific error from OpenSSL */
+		ret = -ENOMEM;
 		goto end;
-	if (PEM_write_bio_X509(bio, cert) == 0)
+	}
+		
+	if (PEM_write_bio_X509(bio, cert) == 0) {
+		/* TODO: get specific error from OpenSSL */
+		ret = -ENOTSUP;
 		goto end;
-
+	}
+		
 	cert_len = BIO_get_mem_data(bio, &bio_data);
 	pem_data = malloc(cert_len + 1); /* +1 for null terminator */
-	if (pem_data == NULL)
+	if (pem_data == NULL) {
+		ret = -errno;
 		goto end;
+	}
 
 	memcpy(pem_data, bio_data, cert_len);
 	pem_data[cert_len] = '\0';
 
-	did_succeed = 1;
+	ret = 0;
 	*data = pem_data;
-	*len = cert_len; /* BUG: shouldnt this be cert_len + 1?? */
+	*len = cert_len;
  end:
 	X509_free(cert);
 	BIO_free(bio);
-	return did_succeed;
+	return ret;
 }
 
 int get_peer_identity(connection* conn_ctx, char** data, unsigned int* len) {
@@ -297,22 +323,43 @@ int get_hostname(connection* conn_ctx, char** data, unsigned int* len) {
 	return 1;
 }
 
-int get_enabled_ciphers(connection* conn, char** data) {
+/**
+ * Allocates a string list of enabled ciphers to data.
+ * @param conn The specified connection context to retrieve the ciphers from
+ * @param data A pointer to a char pointer where the cipherlist string will be
+ * allocated to, or NULL if no ciphers were available from the given connection.
+ * This should be freed after use.
+ * @returns 0 on success; -errno otherwise.
+ */
+int get_enabled_ciphers(connection* conn, char** data, unsigned int* len) {
+	char* ciphers_str = "";
+	
 	assert(conn);
 	assert(conn->tls);
 
 	STACK_OF(SSL_CIPHER)* ciphers = SSL_get_ciphers(conn->tls);
 	/* TODO: replace this with SSL_get1_supported_ciphers? Maybe... */
+	if (ciphers == NULL)
+		goto end; /* no ciphers available; just return NULL. */
 
 	int ciphers_len = get_ciphers_strlen(ciphers);
-	char* ciphers_str = (char*) malloc(ciphers_len);
-	/* TODO: handle malloc failures... */
-	if (!get_ciphers_string(ciphers, ciphers_str, ciphers_len)) {
-		/* TODO: once again, shouldnt happen... */
-		return 0;
+	if (ciphers_len == 0)
+		goto end;
+
+	ciphers_str = (char*) malloc(ciphers_len + 1);
+	if (ciphers_str == NULL)
+		return -errno;
+
+	if (get_ciphers_string(ciphers, ciphers_str, ciphers_len + 1) != 0) {
+		log_printf(LOG_ERROR, "Buffer wasn't big enough; had to be truncated.\n");
 	}
+
+	*len = ciphers_len + 1;
+ end:
+	log_printf(LOG_DEBUG, "Trusted ciphers:\n%s\n", ciphers_str);
+	log_printf(LOG_DEBUG, "Cipher length: %i\n", *len);
 	*data = ciphers_str;
-	return 1;
+	return 0;
 }
 
 /*
@@ -337,29 +384,55 @@ int set_trusted_peer_certificates(connection* conn, char* value) {
 	return 1;
 }
 
+/**
+ * Removes a given cipher from the set of enabled ciphers for a connection.
+ * @param conn The connection context to remove a cipher from.
+ * @param cipher A string representation of the cipher to be removed.
+ * @returns 0 on success; -errno otherwise. EINVAL means the cipher to be
+ * removed was not found. ENOTSUP means the function failed internally.
+ */
 int disable_cipher(connection* conn, char* cipher) {
+	char* ciphers_string = NULL;
+	int ret = 0;
+
 	assert(conn);
 	assert(conn->tls);
 	assert(cipher);
 
 	STACK_OF(SSL_CIPHER)* cipherlist = SSL_get_ciphers(conn->tls);
+	if (cipherlist == NULL) {
+		ret = -EINVAL;
+		goto end;
+	}
+
 	int ciphers_len = clear_from_cipherlist(cipher, cipherlist);
+	if (ciphers_len == -1) {
+		ret = -EINVAL;
+		goto end;
+	}
 	
-	char* ciphers_string = (char*) malloc(ciphers_len);
-	if (!get_ciphers_string(cipherlist, ciphers_string,ciphers_len)) {
-		/* TODO: print error here. Realistically, this should never
-		happen if we've written this function right... */
-		return -1;
+	ciphers_string = (char*) malloc(ciphers_len);
+	if (ciphers_string == NULL) {
+		ret = -errno;
+		goto end;
+	}
+
+	if (get_ciphers_string(cipherlist, ciphers_string,ciphers_len) != 0) {
+		log_printf(LOG_ERROR, "Buffer for ciphers wasn't big enough...");
+		ret = -ENOTSUP;
+		goto end;
 	}
 	
 	if (!SSL_set_cipher_list(conn->tls, ciphers_string)) {
-		free(ciphers_string);
-		/* TODO: figure out standard error code returns for functions */
-		return -1;
+		/* NOTE: may be returning because ciphers_string is empty?? ("") */
+		ret = -ENOTSUP;
+		goto end;
 	}
 
-	free(ciphers_string);
-	return 0;
+ end:
+	if (ciphers_string != NULL)
+		free(ciphers_string);
+	return ret;
 }
 
 
@@ -375,7 +448,7 @@ int disable_cipher(connection* conn, char* cipher) {
  * @param ciphers The stack of ciphers to convert
  * @param buf the provided buffer to put the string into.
  * @param buf_len The length of the provided buffer.
- * @returns 1 on success; 0 if the buffer was not big enough to store all of
+ * @returns 0 on success; -1 if the buffer was not big enough to store all of
  * the ciphers and had to be truncated.
  */
 int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len) {
@@ -384,33 +457,35 @@ int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len) {
 		const SSL_CIPHER* curr = sk_SSL_CIPHER_value(ciphers, i);
 		const char* cipher = SSL_CIPHER_get_name(curr);
 		
-		if (index + strlen(cipher) >= buf_len) {
+		if ((index + strlen(cipher) + 1) > buf_len) {
 			buf[index-1] = '\0';
-			return 0; /* buf not big enough */
+			return -1; /* buf not big enough */
 		}
 		
 		strcpy(&buf[index], cipher);
-		buf[index + strlen(cipher)] = ':';
-
-		index += strlen(cipher) + 1;
+		index += strlen(cipher);
+		buf[index] = ':';
+		index += 1;
 	}
-	buf[index - 1] = '\0';
-	return 1;
+	buf[index - 1] = '\0'; /* change last ':' to '\0' */
+	return 0;
 }
 
 /**
- * Determine the combined string length of all the cipher strings.
+ * Determines the combined string length of all the cipher strings.
  * @param ciphers The cipher list to measure string lengths from.
  * @returns The combined string length of the ciphers in the list (as if 
- * there were ':' characters between each cipher and a null-terminating
- * '\0' at the end).
+ * there were ':' characters between each cipher and a terminating
+ * '\0' at the end). Never returns an error code.
  */
 int get_ciphers_strlen(STACK_OF(SSL_CIPHER)* ciphers) {
 	int len = 0;
 	for (int i = 0; i < sk_SSL_CIPHER_num(ciphers); i++) {
 		const char* curr = SSL_CIPHER_get_name(sk_SSL_CIPHER_value(ciphers, i));
-		len += strlen(curr) + 1;
+		len += strlen(curr) + 1; /* add ':' */
 	}
+	if (len != 0)
+		len -= 1; /* removes the last ':' */
 	return len;
 }
 
@@ -421,15 +496,16 @@ int get_ciphers_strlen(STACK_OF(SSL_CIPHER)* ciphers) {
  * @param cipherlist The stack of ciphers to be modified.
  * @returns The combined string length of the remaining ciphers in the list
  * (as if there were ':' characters between each cipher and a null-terminating
- * '\0' at the end).
+ * '\0' at the end); or -1 if the cipher was not found.
  */
 int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist) {
-	int length = 0, i = 0;
+	int length = 0, i = 0, has_cipher = 0;
 
 	while (i < sk_SSL_CIPHER_num(cipherlist)) {
 		const SSL_CIPHER* curr_cipher = sk_SSL_CIPHER_value(cipherlist, i);
 		const char* name = SSL_CIPHER_get_name(curr_cipher);
 		if (strcmp(name, cipher) == 0) {
+			has_cipher = 1;
 			sk_SSL_CIPHER_delete(cipherlist, i);
 		} else {
 			length += strlen(name) + 1; /* +1 for ':' or '\0' */
@@ -438,5 +514,8 @@ int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist) {
 	}
 	/* assert: all ciphers to remove now removed */
 
-	return length;
+	if (!has_cipher)
+		return -1;
+	else
+		return length;
 }

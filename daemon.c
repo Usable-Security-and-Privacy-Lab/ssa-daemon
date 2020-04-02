@@ -680,22 +680,20 @@ void getsockopt_cb(daemon_context* daemon_ctx, unsigned long id, int level, int 
 	case TLS_PEER_IDENTITY:
 		if (get_peer_identity(sock_ctx->tls_conn, &data, &len) == 0) {
 			response = -ENOTCONN;
-		}
-		else {
+		} else {
 			need_free = 1;
 		}
 		break;
 	case TLS_PEER_CERTIFICATE_CHAIN:
-		if (get_peer_certificate(sock_ctx->tls_conn, &data, &len) == 0) {
-			response = -ENOTCONN;
-		}
-		need_free = 1;
+		response = get_peer_certificate(sock_ctx->tls_conn, &data, &len);
+		if (response == 0)
+			need_free = 1;
 		break;
 	case TLS_TRUSTED_CIPHERS:
-		get_enabled_ciphers(sock_ctx->tls_conn, &data);
-		if (data == NULL)
-			response = -ENOTCONN;
-		need_free = 1;
+		log_printf(LOG_DEBUG, "Getting trusted ciphers...\n");
+		response = get_enabled_ciphers(sock_ctx->tls_conn, &data, &len);
+		if (response == 0)
+			need_free = 1;
 		break;
 	case TLS_TRUSTED_PEER_CERTIFICATES:
 	case TLS_PRIVATE_KEY:

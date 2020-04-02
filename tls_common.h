@@ -44,5 +44,5 @@ int get_hostname(connection* conn_ctx, char** data, unsigned int* len);
 
 int set_trusted_peer_certificates(connection* conn, char* value);
 int disable_cipher(connection* conn, char* cipher);
-int get_enabled_ciphers(connection* conn, char** data);
+int get_enabled_ciphers(connection* conn, char** data, unsigned int* len);
 
