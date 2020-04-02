@@ -11,10 +11,12 @@
 int connect_to_host(char* host, char* service);
 void print_identity(int fd);
 
+#define RESPONSE_SIZE 5000
+
 int main(int argc, char* argv[]) {
 	int sock_fd;
 	char http_request[2048];
-	char http_response[2048];
+	char http_response[RESPONSE_SIZE];
 
 	if (argc < 3) {
 		printf("USAGE: %s <host name> <port>\n", argv[0]);
@@ -26,8 +28,14 @@ int main(int argc, char* argv[]) {
 
 	memset(http_response, 0, 2048);
 	send(sock_fd, http_request, strlen(http_request), 0);
-	recv(sock_fd, http_response, 750, 0);
-	printf("Received:\n%s\n", http_response);
+    int total_recvd = 0;
+	
+    int num_recvd = recv(sock_fd, http_response, RESPONSE_SIZE, 0);
+    if (num_recvd < 0) {
+        perror("recv failure");
+        exit(1);
+    }
+    printf("Received:\n%s\n", http_response);
 	close(sock_fd);
 	return 0;
 }
