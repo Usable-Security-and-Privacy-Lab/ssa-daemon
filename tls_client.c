@@ -111,7 +111,9 @@ int client_connection_setup(connection* client_conn, daemon_context* daemon,
 	int ret = 0;
 
 	if (hostname != NULL) {
+		log_printf(LOG_INFO, "Hostname passed in is: %s\n", hostname);
 		SSL_set_tlsext_host_name(client_conn->tls, hostname);
+		SSL_set1_host(client_conn->tls, hostname);
 	}
 
 	/* socket set to -1 because we set it later */
