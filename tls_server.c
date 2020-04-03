@@ -41,7 +41,7 @@ int accept_SSL_new(connection* conn, connection* old) {
 int accept_connection_setup(sock_context* new_sock, sock_context* old_sock, 
         evutil_socket_t ifd) {
     daemon_context* daemon = new_sock->daemon;
-	connection* accept_conn = new_sock->tls_conn;
+	connection* accept_conn = new_sock->conn;
 	struct sockaddr* internal_addr = &old_sock->int_addr;
 	int internal_addrlen = old_sock->int_addrlen;
 	evutil_socket_t efd = new_sock->fd;

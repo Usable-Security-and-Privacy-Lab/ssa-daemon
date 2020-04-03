@@ -406,7 +406,7 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	log_printf_addr(&sock_ctx->rem_addr);
 	hashmap_del(daemon->sock_map_port, port);
 
-	associate_fd(sock_ctx->tls_conn, fd);
+	associate_fd(sock_ctx->conn, fd);
 	return;
 }
 
@@ -485,9 +485,9 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	port = (int)ntohs((&int_addr)->sin_port);
 	hashmap_add(listening_sock_ctx->daemon->sock_map_port, port, (void*)accepting_sock_ctx);
 
-	ret = connection_new(&accepting_sock_ctx->tls_conn, listening_sock_ctx->daemon);
+	ret = connection_new(&accepting_sock_ctx->conn, listening_sock_ctx->daemon);
 	/* TODO: error check here */
-	ret = accept_SSL_new(accepting_sock_ctx->tls_conn, listening_sock_ctx->tls_conn);
+	ret = accept_SSL_new(accepting_sock_ctx->conn, listening_sock_ctx->conn);
 	/* TODO: check error here also */
 	ret = accept_connection_setup(accepting_sock_ctx, listening_sock_ctx, ifd);
 	log_printf(LOG_DEBUG, "connection ret val: %i\n", ret);
@@ -554,13 +554,13 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 	response = sock_context_new(&sock_ctx);
 	if (response != 0)
 		goto err;
-	response = connection_new(&sock_ctx->tls_conn, daemon);
+	response = connection_new(&sock_ctx->conn, daemon);
 	if (response != 0)
 		goto err;
 
 	/* To maintain consistency with server/client state in sock_ctx,
 	 * we will default to this being a client connection. */
-	response = client_SSL_new(sock_ctx->tls_conn, daemon);
+	response = client_SSL_new(sock_ctx->conn, daemon);
 	if (response != 0)
 		goto err;
 	
@@ -607,24 +607,24 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 		/* The kernel validated this data for us */
 		memcpy(sock_ctx->rem_hostname, value, len);
 		log_printf(LOG_INFO, "Assigning %s to socket %lu\n", sock_ctx->rem_hostname, id);
-		if (set_remote_hostname(sock_ctx->tls_conn, value) == 0) {
+		if (set_remote_hostname(sock_ctx->conn, value) == 0) {
 			response = -EINVAL;
 		}
 		break;
 	case TLS_DISABLE_CIPHER:
-		response = disable_cipher(sock_ctx->tls_conn, (char*) value);
+		response = disable_cipher(sock_ctx->conn, (char*) value);
 		break;
 	case TLS_TRUSTED_PEER_CERTIFICATES:
-		if (set_trusted_peer_certificates(sock_ctx->tls_conn, (char*) value) != 1)
+		if (set_trusted_peer_certificates(sock_ctx->conn, (char*) value) != 1)
 			response = -1;
 		break;
 	case TLS_CLIENT_CONNECTION:
-		response = client_SSL_new(sock_ctx->tls_conn, ctx);
+		response = client_SSL_new(sock_ctx->conn, ctx);
 		if (response == 0)
 			set_client(sock_ctx->state);
 		break;
 	case TLS_SERVER_CONNECTION:
-		response = server_SSL_new(sock_ctx->tls_conn, ctx);
+		response = server_SSL_new(sock_ctx->conn, ctx);
 		if (response == 0)
 			set_server(sock_ctx->state);
 		break;
@@ -672,25 +672,25 @@ void getsockopt_cb(daemon_context* daemon_ctx, unsigned long id, int level, int 
 		}
 		break;
 	case TLS_HOSTNAME:
-		if(get_hostname(sock_ctx->tls_conn, &data, &len) == 0) {
+		if(get_hostname(sock_ctx->conn, &data, &len) == 0) {
 			response = -EINVAL;
 		}
 		break;
 	case TLS_PEER_IDENTITY:
-		if (get_peer_identity(sock_ctx->tls_conn, &data, &len) == 0) {
+		if (get_peer_identity(sock_ctx->conn, &data, &len) == 0) {
 			response = -ENOTCONN;
 		} else {
 			need_free = 1;
 		}
 		break;
 	case TLS_PEER_CERTIFICATE_CHAIN:
-		response = get_peer_certificate(sock_ctx->tls_conn, &data, &len);
+		response = get_peer_certificate(sock_ctx->conn, &data, &len);
 		if (response == 0)
 			need_free = 1;
 		break;
 	case TLS_TRUSTED_CIPHERS:
 		log_printf(LOG_DEBUG, "Getting trusted ciphers...\n");
-		response = get_enabled_ciphers(sock_ctx->tls_conn, &data, &len);
+		response = get_enabled_ciphers(sock_ctx->conn, &data, &len);
 		if (response == 0)
 			need_free = 1;
 		break;
@@ -757,7 +757,7 @@ void bind_cb(daemon_context* daemon, unsigned long id, struct sockaddr* int_addr
 	/* New stuff added by Nathaniel */ 
 	/* BUG: bind can be reasonably called before connect(), yet if one calls bind
 	 * here the assumption is that it will then be used as a server... */
-	response = server_SSL_new(sock_ctx->tls_conn, daemon);
+	response = server_SSL_new(sock_ctx->conn, daemon);
 	if (response != 0)
 		goto err;
 
@@ -781,7 +781,7 @@ void connect_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* i
 		goto err;
 	}
 
-	conn = sock_ctx->tls_conn;
+	conn = sock_ctx->conn;
 	if (is_server(sock_ctx->state)) {
 		response = client_SSL_new(conn, daemon_ctx);
 		
@@ -847,7 +847,7 @@ void listen_cb(daemon_context* daemon, unsigned long id, struct sockaddr* int_ad
 
 	/* TODO: have this behave differently? Return EBADF? Might be safer... */
 	if (!is_server(sock_ctx->state)) {
-		response = server_SSL_new(sock_ctx->tls_conn, daemon);
+		response = server_SSL_new(sock_ctx->conn, daemon);
 		if (response != 0)
 			goto err;
 		set_server(sock_ctx->state);
@@ -911,7 +911,7 @@ void associate_cb(daemon_context* daemon, unsigned long id, struct sockaddr* int
 	set_connected(sock_ctx->state);
 	hashmap_add(daemon->sock_map, id, (void*)sock_ctx);
 	
-	set_netlink_cb_params(sock_ctx->tls_conn, daemon, id);
+	set_netlink_cb_params(sock_ctx->conn, daemon, id);
 	//log_printf(LOG_INFO, "Socket %lu accepted\n", id);
 	netlink_notify_kernel(daemon, id, response);
 	return;
@@ -932,7 +932,7 @@ void close_cb(daemon_context* daemon_ctx, unsigned long id) {
 		 * But we were given control of the remote peer
 		 * connection */
 		hashmap_del(daemon_ctx->sock_map, id);
-		connection_free(sock_ctx->tls_conn);
+		connection_free(sock_ctx->conn);
 		free(sock_ctx);
 		return;
 	}
@@ -944,7 +944,7 @@ void close_cb(daemon_context* daemon_ctx, unsigned long id) {
 		 * only need to clean up the sock_ctx */
 		//netlink_notify_kernel(ctx, id, 0);
 		hashmap_del(daemon_ctx->sock_map, id);
-		connection_free(sock_ctx->tls_conn);
+		connection_free(sock_ctx->conn);
 		free(sock_ctx);
 		return;
 	}
@@ -982,8 +982,8 @@ void sock_context_free(sock_context* sock_ctx) {
 		EVUTIL_CLOSESOCKET(sock_ctx->fd);
 	}
 	
-	if (sock_ctx->tls_conn != NULL)
-		connection_free(sock_ctx->tls_conn);
+	if (sock_ctx->conn != NULL)
+		connection_free(sock_ctx->conn);
 	free(sock_ctx);
 	return;
 }

@@ -60,7 +60,7 @@ typedef struct sock_context_st {
 
 	struct evconnlistener* listener;
 	char rem_hostname[MAX_HOSTNAME];
-	connection* tls_conn;
+	connection* conn;
 	int state; /** Different states are set independantly of each other */
 	daemon_context* daemon;
 } sock_context;
