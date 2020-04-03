@@ -218,7 +218,9 @@ void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 	/* If both channels are closed now, free everything */
 	if (endpoint->closed == 1 && startpoint->closed == 1) {
 		if (bufferevent_getfd(ctx->plain.bev) == -1) {
-			netlink_handshake_notify_kernel(ctx->daemon, ctx->id, -EHOSTUNREACH);
+			/* The -1 fd indicates that the daemon was attempting to connect when
+			 * an error caused it to abort (such as a validation failure) */
+			netlink_handshake_notify_kernel(ctx->daemon, ctx->id, -ECONNABORTED);
 		}
 		/* TODO: this function never actually did anything. Change this??? */
 		/* shutdown_tls_conn_ctx(ctx); */
