@@ -283,7 +283,7 @@ int get_peer_certificate(connection* conn, char** data, unsigned int* len) {
 
 	ret = 0;
 	*data = pem_data;
-	*len = cert_len;
+	*len = cert_len + 1;
  end:
 	X509_free(cert);
 	BIO_free(bio);
