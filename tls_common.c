@@ -386,55 +386,29 @@ int set_trusted_peer_certificates(connection* conn, char* value) {
 
 /**
  * Removes a given cipher from the set of enabled ciphers for a connection.
+ * TODO: Allow multiple ciphers to be disabled at the same time?
  * @param conn The connection context to remove a cipher from.
  * @param cipher A string representation of the cipher to be removed.
  * @returns 0 on success; -errno otherwise. EINVAL means the cipher to be
  * removed was not found. ENOTSUP means the function failed internally.
  */
 int disable_cipher(connection* conn, char* cipher) {
-	char* ciphers_string = NULL;
-	int ret = 0;
 
 	assert(conn);
 	assert(conn->tls);
 	assert(cipher);
 
 	STACK_OF(SSL_CIPHER)* cipherlist = SSL_get_ciphers(conn->tls);
-	if (cipherlist == NULL) {
-		ret = -EINVAL;
-		goto end;
-	}
+	if (cipherlist == NULL)
+		return -EINVAL;
 
+	int tmp_len = sk_SSL_CIPHER_num(cipherlist);
 	int ciphers_len = clear_from_cipherlist(cipher, cipherlist);
-	if (ciphers_len == -1) {
-		ret = -EINVAL;
-		goto end;
-	}
+	if (ciphers_len == -1)
+		return -EINVAL;
 	
-	ciphers_string = (char*) malloc(ciphers_len);
-	if (ciphers_string == NULL) {
-		ret = -errno;
-		goto end;
-	}
-
-	if (get_ciphers_string(cipherlist, ciphers_string,ciphers_len) != 0) {
-		log_printf(LOG_ERROR, "Buffer for ciphers wasn't big enough...");
-		ret = -ENOTSUP;
-		goto end;
-	}
-	
-	if (!SSL_set_cipher_list(conn->tls, ciphers_string)) {
-		/* NOTE: may be returning because ciphers_string is empty?? ("") */
-		ret = -ENOTSUP;
-		goto end;
-	}
-
- end:
-	if (ciphers_string != NULL)
-		free(ciphers_string);
-	return ret;
+	return 0;
 }
-
 
 /*
  *-----------------------------------------------------------------------------
@@ -494,12 +468,10 @@ int get_ciphers_strlen(STACK_OF(SSL_CIPHER)* ciphers) {
  * the given cipher name. Returns the updated cumulative length of the ciphers.
  * @param cipher The string name of the cipher to be cleared from the list.
  * @param cipherlist The stack of ciphers to be modified.
- * @returns The combined string length of the remaining ciphers in the list
- * (as if there were ':' characters between each cipher and a null-terminating
- * '\0' at the end); or -1 if the cipher was not found.
+ * @returns 0 on success, or -1 if the cipher was not found.
  */
 int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist) {
-	int length = 0, i = 0, has_cipher = 0;
+	int i = 0, has_cipher = 0;
 
 	while (i < sk_SSL_CIPHER_num(cipherlist)) {
 		const SSL_CIPHER* curr_cipher = sk_SSL_CIPHER_value(cipherlist, i);
@@ -508,14 +480,13 @@ int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist) {
 			has_cipher = 1;
 			sk_SSL_CIPHER_delete(cipherlist, i);
 		} else {
-			length += strlen(name) + 1; /* +1 for ':' or '\0' */
 			i++;
 		}
 	}
 	/* assert: all ciphers to remove now removed */
 
-	if (!has_cipher)
-		return -1;
+	if (has_cipher)
+		return 0;
 	else
-		return length;
+		return -1;
 }
