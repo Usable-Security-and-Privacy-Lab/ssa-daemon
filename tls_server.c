@@ -11,7 +11,26 @@
 #include "log.h"
 
 SSL_CTX* server_settings_init(char* path) {
-    return NULL; /* TODO: stub */
+	const char* cipher_list = "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256";
+	SSL_CTX* server_settings = NULL;
+
+	server_settings = SSL_CTX_new(TLS_client_method());
+	if (server_settings == NULL)
+		goto err;
+
+	if (SSL_CTX_set_min_proto_version(server_settings, TLS1_2_VERSION) != 1) 
+		goto err;
+
+	if (SSL_CTX_set_cipher_list(server_settings, cipher_list) != 1) 
+		goto err;
+
+	return server_settings;
+ err:
+	/* TODO: check and return OpenSSL error here? */
+	if (server_settings != NULL)
+		SSL_CTX_free(server_settings);
+	log_printf(LOG_ERROR, "Server setting SSL_CTX failed to be created.\n");
+    return NULL;
 }
 
 int server_SSL_new(connection* conn, daemon_context* daemon) {
