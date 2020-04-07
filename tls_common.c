@@ -81,6 +81,7 @@ int associate_fd(connection* conn, evutil_socket_t ifd) {
 
 	log_printf(LOG_INFO, "plain bev enabled\n");
  end:
+	log_printf(LOG_ERROR, "associate_fd critically failed.\n");
 	return ret;
 }
 
@@ -97,7 +98,9 @@ void set_netlink_cb_params(connection* conn, daemon_context* daemon,
  */
 
 void tls_bev_write_cb(struct bufferevent *bev, void *arg) {
-	//log_printf(LOG_DEBUG, "write event on bev %p\n", bev);
+	
+	log_printf(LOG_DEBUG, "write event on bev %p\n", bev);
+
 	connection* ctx = (connection*)arg;
 	channel* endpoint = (bev == ctx->secure.bev) ? &ctx->plain : &ctx->secure;
 	struct evbuffer* out_buf;
@@ -119,7 +122,9 @@ void tls_bev_write_cb(struct bufferevent *bev, void *arg) {
 }
 
 void tls_bev_read_cb(struct bufferevent *bev, void *arg) {
-	//log_printf(LOG_DEBUG, "read event on bev %p\n", bev);
+	
+	log_printf(LOG_DEBUG, "read event on bev %p\n", bev);
+	
 	connection* ctx = (connection*)arg;
 	channel* endpoint = (bev == ctx->secure.bev) ? &ctx->plain : &ctx->secure;
 	struct evbuffer* in_buf;
@@ -151,6 +156,7 @@ void tls_bev_read_cb(struct bufferevent *bev, void *arg) {
 }
 
 void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
+	
 	log_printf(LOG_DEBUG, "Made it into bev_event_cb\n");
 	/* TODO: maybe split server and client functionality to make more readable? */
 	connection* ctx = (connection*)arg;
@@ -392,7 +398,7 @@ int set_trusted_peer_certificates(connection* conn, char* value) {
  * @param conn The connection context to remove a cipher from.
  * @param cipher A string representation of the cipher to be removed.
  * @returns 0 on success; -errno otherwise. EINVAL means the cipher to be
- * removed was not found. ENOTSUP means the function failed internally.
+ * removed was not found.
  */
 int disable_cipher(connection* conn, char* cipher) {
 
@@ -404,9 +410,8 @@ int disable_cipher(connection* conn, char* cipher) {
 	if (cipherlist == NULL)
 		return -EINVAL;
 
-	int tmp_len = sk_SSL_CIPHER_num(cipherlist);
-	int ciphers_len = clear_from_cipherlist(cipher, cipherlist);
-	if (ciphers_len == -1)
+	int ret = clear_from_cipherlist(cipher, cipherlist);
+	if (ret != 0)
 		return -EINVAL;
 	
 	return 0;
