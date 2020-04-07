@@ -26,7 +26,7 @@ int main() {
 
 	struct sockaddr_in addr;
 	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = inet_addr("0.0.0.0");
+	addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 	addr.sin_port = htons(443);
 
 	int fd = socket(PF_INET, SOCK_STREAM, IPPROTO_TLS);
@@ -49,6 +49,7 @@ int main() {
 		struct sockaddr_storage addr;
 		socklen_t addr_len = sizeof(addr);
 		int c_fd = accept(fd, (struct sockaddr*)&addr, &addr_len);
+        printf("Connection received!\n");
 		if (getsockopt(c_fd, IPPROTO_TLS, TLS_HOSTNAME, servername, &servername_len) == -1) {
 			perror("getsockopt: TLS_HOSTNAME");
 			exit(EXIT_FAILURE);
