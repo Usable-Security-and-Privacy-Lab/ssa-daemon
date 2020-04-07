@@ -142,10 +142,15 @@ int server_create(int port) {
 		.sock_map = hashmap_create(HASHMAP_NUM_BUCKETS),
 		.sock_map_port = hashmap_create(HASHMAP_NUM_BUCKETS),
 		.client_settings = client_settings_init("ssa.cfg"),
-		.server_settings = NULL,
+		.server_settings = server_settings_init("ssa.cfg"),
 	};
+
 	if (context.client_settings == NULL) {
-		log_printf(LOG_ERROR, "Couldn't create SSL_CTX/load settings into it.\n");
+		log_printf(LOG_ERROR, "Couldn't load client SSL_CTX settings.\n");
+		return 1;
+	}
+	if (context.server_settings == NULL) {
+		log_printf(LOG_ERROR, "Couldn't load server SSL_CTX settings.\n");
 		return 1;
 	}
 
@@ -387,6 +392,8 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	sock_context* sock_ctx;
 	int port;
 
+	log_printf(LOG_DEBUG, "Accept_cb called.\n");
+
 	log_printf(LOG_INFO, "Received connection!\n");
 	if (evutil_make_socket_nonblocking(fd) == -1) {
 		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
@@ -407,6 +414,7 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	hashmap_del(daemon->sock_map_port, port);
 
 	associate_fd(sock_ctx->conn, fd);
+	log_printf(LOG_DEBUG, "Finished calling accept_cb\n");
 	return;
 }
 
@@ -443,6 +451,8 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	int ret = 0, port;
 	sock_context* accepting_sock_ctx;
 
+	log_printf(LOG_DEBUG, "Listener_Accept_cb called.\n");
+
 	if (evutil_make_socket_nonblocking(efd) == -1) {
 		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
 			 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
@@ -455,6 +465,7 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 		return;
 	}
 	accepting_sock_ctx->fd = efd;
+	accepting_sock_ctx->daemon = listening_sock_ctx->daemon;
 
 	ifd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (ifd == -1) {
@@ -486,11 +497,13 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	hashmap_add(listening_sock_ctx->daemon->sock_map_port, port, (void*)accepting_sock_ctx);
 
 	ret = connection_new(&accepting_sock_ctx->conn, listening_sock_ctx->daemon);
+	accepting_sock_ctx->conn->daemon = listening_sock_ctx->daemon;
 	/* TODO: error check here */
 	ret = accept_SSL_new(accepting_sock_ctx->conn, listening_sock_ctx->conn);
 	/* TODO: check error here also */
 	ret = accept_connection_setup(accepting_sock_ctx, listening_sock_ctx, ifd);
 	log_printf(LOG_DEBUG, "connection ret val: %i\n", ret);
+	log_printf(LOG_DEBUG, "Listener_Accept_cb finished calling.\n");
 	return;
 }
 
@@ -537,6 +550,8 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 	evutil_socket_t fd = -1;
 	int response = 0;
 
+	log_printf(LOG_DEBUG, "socket_cb called.\n");
+
 	sock_ctx = (sock_context*)hashmap_get(daemon->sock_map, id);
 	if (sock_ctx != NULL) {
 		log_printf(LOG_ERROR, "We have created a socket with this ID already: %lu\n", id);
@@ -557,6 +572,10 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 	response = connection_new(&sock_ctx->conn, daemon);
 	if (response != 0)
 		goto err;
+
+	sock_ctx->daemon = daemon;
+	set_netlink_cb_params(sock_ctx->conn, daemon, id);
+	
 
 	/* To maintain consistency with server/client state in sock_ctx,
 	 * we will default to this being a client connection. */
@@ -585,6 +604,8 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 		close(fd);
 	if (sock_ctx != NULL) 
 		sock_context_free(sock_ctx);
+
+	log_printf(LOG_DEBUG, "socket_cb finished calling with response: %i\n", response);
 
 	netlink_notify_kernel(daemon, id, response);
 	return;
@@ -826,6 +847,7 @@ void connect_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* i
 		netlink_notify_kernel(daemon_ctx, id, -EINPROGRESS);
 	}
 	
+	log_printf(LOG_DEBUG, "Finished connect_cb\n");
 	/* Kernel notified in tls_bev_event_cb once connection established */
 	return;
  err:
@@ -834,11 +856,12 @@ void connect_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* i
 }
 
 void listen_cb(daemon_context* daemon, unsigned long id, struct sockaddr* int_addr,
-	int int_addrlen, struct sockaddr* ext_addr, int ext_addrlen) {
-
+		int int_addrlen, struct sockaddr* ext_addr, int ext_addrlen) {
 	sock_context* sock_ctx = NULL;
 	int response = 0;
 	
+	log_printf(LOG_DEBUG, "Listen_cb called\n");
+
 	sock_ctx = (sock_context*)hashmap_get(daemon->sock_map, id);
 	if (sock_ctx == NULL) {
 		response = -EBADF;
@@ -865,29 +888,18 @@ void listen_cb(daemon_context* daemon, unsigned long id, struct sockaddr* int_ad
 	
 	/* We're done gathering info, let's set up a server */
 
-	/* TODO: Eventually clean up this whole section--ripped from tls_opts_server_setup()... */
-	SSL_CTX* server_settings = daemon->server_settings;
-	SSL_CTX_set_options(server_settings, SSL_OP_ALL);
-	/* There's a billion options we can/should set here by admin config XXX
- 	 * See SSL_CTX_set_options and SSL_CTX_set_cipher_list for details */
-
-	/* XXX We can do all sorts of caching modes and define our own callbacks
-	 * if desired */
-	SSL_CTX_set_session_cache_mode(server_settings, SSL_SESS_CACHE_SERVER);
-	SSL_CTX_use_certificate_chain_file(server_settings, "test_files/localhost_cert.pem");
-	SSL_CTX_use_PrivateKey_file(server_settings, "test_files/localhost_key.pem", SSL_FILETYPE_PEM);
-	/* Thus concludes the TODO. */
-
 	sock_ctx->daemon = daemon; /* XXX I don't want this here */
 	sock_ctx->listener = evconnlistener_new(daemon->ev_base, listener_accept_cb, (void*)sock_ctx,
 		LEV_OPT_CLOSE_ON_FREE | LEV_OPT_THREADSAFE, 0, sock_ctx->fd);
 		/* note: 0 is passed in to signify that we have already called listen() */
 
 	evconnlistener_set_error_cb(sock_ctx->listener, listener_accept_error_cb);
-	return;
 
+	log_printf(LOG_DEBUG, "listen_cb completed.\n");
+	return;
  err:
 	/* TODO: free allocated, print error string...? */
+	log_printf(LOG_DEBUG, "listen_cb failed.\n");
 	return;
 }
 
@@ -895,6 +907,8 @@ void associate_cb(daemon_context* daemon, unsigned long id, struct sockaddr* int
 	sock_context* sock_ctx;
 	int response = 0;
 	int port;
+
+	log_printf(LOG_DEBUG, "associate_cb called.\n");
 
 	port = get_port(int_addr);
 
@@ -914,6 +928,8 @@ void associate_cb(daemon_context* daemon, unsigned long id, struct sockaddr* int
 	set_netlink_cb_params(sock_ctx->conn, daemon, id);
 	//log_printf(LOG_INFO, "Socket %lu accepted\n", id);
 	netlink_notify_kernel(daemon, id, response);
+
+	log_printf(LOG_DEBUG, "associate_cb finished\n");
 	return;
 }
 

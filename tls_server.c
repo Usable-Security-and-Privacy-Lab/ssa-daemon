@@ -5,6 +5,7 @@
 
 #include <event2/bufferevent.h>
 #include <event2/bufferevent_ssl.h>
+#include <openssl/err.h>
 
 #include "tls_server.h"
 #include "tls_structs.h"
@@ -13,10 +14,13 @@
 SSL_CTX* server_settings_init(char* path) {
 	const char* cipher_list = "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256";
 	SSL_CTX* server_settings = NULL;
+	unsigned long ssl_err;
 
 	server_settings = SSL_CTX_new(TLS_client_method());
 	if (server_settings == NULL)
 		goto err;
+
+	SSL_CTX_set_verify(server_settings, SSL_VERIFY_NONE, NULL);
 
 	if (SSL_CTX_set_min_proto_version(server_settings, TLS1_2_VERSION) != 1) 
 		goto err;
@@ -24,12 +28,46 @@ SSL_CTX* server_settings_init(char* path) {
 	if (SSL_CTX_set_cipher_list(server_settings, cipher_list) != 1) 
 		goto err;
 
+	/* DEBUG: Temporary */
+	if (SSL_CTX_load_verify_locations(server_settings, 
+			"test_files/certs/rootCA.pem", NULL) != 1) {
+		log_printf(LOG_DEBUG, "Failed to load verify location.\n");
+		goto err;			
+	}
+
+
+	if (SSL_CTX_use_certificate_chain_file(server_settings, 
+			"test_files/certs/server_chain.pem") != 1) {
+		log_printf(LOG_ERROR, "Failed to load cert chain\n");		
+		goto err;
+	}
+
+	if (SSL_CTX_use_PrivateKey_file(server_settings, "test_files/certs/server_key.pem", 
+			SSL_FILETYPE_PEM) != 1) {
+		log_printf(LOG_ERROR, "Failed to load private key\n");
+		goto err;
+	}
+
+	if (SSL_CTX_check_private_key(server_settings) != 1) {
+		log_printf(LOG_ERROR, "Key and certificate don't match.\n");
+		goto err;
+	}
+
+	if (SSL_CTX_build_cert_chain(server_settings, SSL_BUILD_CHAIN_FLAG_CHECK) != 1) {
+		log_printf(LOG_ERROR, "Certificate chain failed to build.\n");
+		goto err;
+	}
+
 	return server_settings;
  err:
 	/* TODO: check and return OpenSSL error here? */
+	ssl_err = ERR_get_error();
+	char err_string[200] = {0};
+	ERR_error_string_n(ssl_err, err_string, 200);
+	log_printf(LOG_ERROR, "Server SSL_CTX failed with: %s\n", err_string);
+	
 	if (server_settings != NULL)
 		SSL_CTX_free(server_settings);
-	log_printf(LOG_ERROR, "Server setting SSL_CTX failed to be created.\n");
     return NULL;
 }
 
