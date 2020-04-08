@@ -25,6 +25,7 @@ This repository contains the source code for the userspace daemon. Source code f
 * `admin-documentation.md` contains instructions for managing the config file
 * The `developer-documentation` directory contains documentation for developers wanting to contribute to the SSA:
     * `general.md` contains an overview of how the system works as well as information that is relevant to both the daemon and the module.
+    * `daemon.md` contains documentation specific to the ssa-daemon portion of the SSA
     * The `testing` directory contains various testing files
     * The `diagrams` directory contains images referenced in the documentation files.
 
