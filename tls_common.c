@@ -81,7 +81,8 @@ int associate_fd(connection* conn, evutil_socket_t ifd) {
 
 	log_printf(LOG_INFO, "plain bev enabled\n");
  end:
-	log_printf(LOG_ERROR, "associate_fd critically failed.\n");
+	if (ret != 0)
+		log_printf(LOG_ERROR, "associate_fd failed.\n");
 	return ret;
 }
 
