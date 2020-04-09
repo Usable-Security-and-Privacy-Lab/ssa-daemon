@@ -505,5 +505,188 @@ OpenSSL improved significantly with the release of 1.1.0 and 1.1.1, so some init
 * At the end of the program, make sure to call: `ERR_free_strings()`. This ensures that no memory leaks occur. This is also unnecessary as of OpenSSL 1.1.0.
 
 ## TLS Server Documentation
+This is meant as a follow-on to my documentation on how to establish a secure client connection in OpenSSL. Since servers are (generally) a bit more difficult to create than clients, it is recommended that you read the TLS Client Documentation to get a better understanding of things if you haven’t yet. It contains additional information on the various structs used in OpenSSL that this documentation omits.
+
+### Part 1: Setting up SSL_CTX (SSL Context Parameters)
+Much like the client connection, a server needs to follow the regular procedures to initialize OpenSSL, though with different parameters and end uses.
+
+#### Creating a Context
+* A context is most commonly passed into other functions as a pointer, so using SSL_CTX* as the type is recommended.
+
+* To create a new context, assign the pointer to: `SSL_CTX_new(SSL_METHOD *method)`
+
+* `SSL_METHOD` is the return value of a function that describes the acceptable protocols of TLS to use (SSLv3, TLSv1.0, TLSv1.1, etc). Use: `TLS_server_method()` or `TLS_method()`
+
+* NOTE: Older versions of OpenSSL (pre-1.1.0) used: `SSL_v23_method()` as standard. Use of this function is deprecated.
+
+* Error Checking: Returns NULL on failure.
+
+#### Set Context To Proper Cert Verification Mode
+* By default, OpenSSL does the handshake and encrypts/decrypts traffic, but it does not verify the validity of certificates.
+
+* To enable certificate verification, use: `SSL_CTX_set_verify(SSL_CTX *ctx, int mode, <function pointer>)` Note that `<function pointer>` is a callback function; it is automatically called when the verification fails (which allows for finer tuning of success/failure parameters). The default is to set it to NULL. 
+
+* The mode specifies what verification mode to use; for server this can be: `SSL_VERIFY_NONE`. This would indicate that the server does not ask the client for a certificate. 
+
+* Note that `SSL_VERIFY_NONE` indicates that the server will not perform two-way certificate authentication (ideal for an open website server). If two way authentication is desired, use: `SSL_VERIFY_PEER`. Note that this won’t cause the handshake process to fail if a certificate is not sent; to to that you also need the flag: `SSL_VERIFY_FAIL_IF_NO_PEER_CERT`
+
+* Other flags can also be passed in (by ORing them). These flags include: `SSL_VERIFY_CLIENT_ONCE`. This sets the server to ask for and verify the peer’s certificate once, and then never ask again in renegotiation or post-authentication. `SSL_VERIFY_POST_HANDSHAKE`. This only has effect in TLS 1.3 connections. It causes the server to perform client authentication after fully establishing a handshake connection. TODO: Find out why this would be useful/important.
+
+#### Setting Minimum Allowed Protocol Version
+* At this point, any version of TLS is accepted by your server (including SSLv3). This may be the behavior you want (such as if your server intends to allow legacy connections from, say, Internet Explorer on Windows XP); if not, the following functions can allow you to restrict TLS Protocol versions. [This](https://arxiv.org/pdf/1907.12762.pdf) paper shows the spread of what is commonly used.
+
+* To set the minimum allowed TLS protocol, use: `SSL_CTX_set_min_proto_version()`. It has one argument, which can be: `TLS1_VERSION`, `TLS1_1_VERSION`, `TLS1_2_VERSION`, OR `TLS1_3_VERSION`
+
+* We don’t use it, but you can also set a maximum allowed protocol version: `SSL_CTX_set_max_proto_version()`
+
+* Versions of OpenSSL prior to 1.1.0 used: `SSL_CTX_set_options(SSL_OP_NO_SSLv3 | … )`. This is deprecated now, and caused bugs when one failed to list all consecutive previous versions to the minimum version desired.
+
+#### Setting Accepted Ciphers/Ciphersuites
+* This step is identical to that of client connections; see the client documentation for information on how to implement this.
+
+* Note: this is an incredibly important step in securing TLS connections. If not taken, KCI (Key Compromise Impersonation) MITM attacks become incredibly easy against any client connecting to the server with a weak TLS implementation.
+
+#### Add Per-Record Padding
+* The BREACH attack takes advantage of the way that HTTP compression works and guesses sensitive information based on the length of encrypted messages. For instance, such an attack has been shown capable of compromising Session IDs, CSRF tokens or other sensitive information present in an HTTP URI in less than 30 minutes with regular computing power.
+
+* This attack is effective against any TLS protocol and any ciphersuite--the only prerequisite is that HTTP compression is enabled (which is used pretty much everywhere).
+
+* This attack is especially important to mitigate from a server perspective, as it will most likely be the server sending sensitive information that could be compromised this way.
+
+* Since this attack takes advantage of the length of a message, randomly-sized padding is considered an effective way of mitigating such an attack (see [here](https://www.sjoerdlangkemper.nl/2016/11/07/current-state-of-breach-attack/)). 
+
+* Note that per-record padding can only be enabled in TLS 1.3 (since 1.2 never specifies it in the RFC), so connections made over TLS 1.2 and lower will still be vulnerable to BREACH with this setting set.
+
+* To enable session padding, use: `SSL_CTX_set_block_padding(SSL_CTX *ctx, size_t block_size)`. If this function is called, then every record sent will be padded to some multiple of `block size`.
+
+* Note that if `block_size` is set to 1, OpenSSL will still treat it as if it were set to 0. The largest number `block_size` can be set to is a constant defined as: `SSL3_RT_MAX_PLAIN_LENGTH`
+
+* Error Checking: Returns 1 on success, 0 if `block_size` is set out of range.
+
+#### Other Settings to Mitigate Vulnerabilities
+* Some settings were set in the TLS Client Documentation
+
+### Part 2: Loading Certificate Chain/Private Keys into the SSL_CTX
+OpenSSL is designed so that multiple Certificate Chain/private key pairs can be added into a single server context. This is to allow a server to accept a wide variety of possible ciphers that a client could select (such as connecting with DSA vs RSA). An important thing to note, however, is that only one certificate/private key pair can be added per type--adding an additional certificate or private key that is the same type as an older one results in the new one overwriting the old one.
+
+Certificates that are part of the same certificate chain should be added first, followed by the certificate’s private key. 
+
+#### Loading a Certificate Chain into an SSL_CTX
+* The easiest way to add certificates is by passing in a file containing the entire chain of certificates in PEM format. To do this, use: `SSL_CTX_use_certificate_chain_file(SSL_CTX *ctx, char *file)`
+
+* Note that the certificates need to be ordered starting with the end entity certificate and ending with the root CA certificate, with intermediate certificates in the correct chain order.
+
+* Error Reporting: returns 1 on success; otherwise an error occurred.
+
+#### Loading Certificates Individually into an SSL_CTX
+* If one does not have their certificate chain saved all in one PEM-formatted file, OpenSSL specifies several functions that make it easy to sequentially load individual certificates that are part of a chain. The process involves first calling a function to set the End Entity Certificate (the certificate associated with your server/website), and then setting all subsequent certificates using a different function. This must all be done before loading the private key, and must be done in this order (End Entity cert -> Certificate Chain certs -> Private key associated with End Entity cert -> next End Entity cert -> …). For more information, see [here](https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_use_PrivateKey_file.html) and [here](https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_add1_chain_cert.html).
+
+#### Loading the End Entity Certificate
+* To set an End Entity certificate, use: `SSL_CTX_use_certificate(SSL_CTX *ctx, X509 *cert)`. With cert being an X509 struct of the End Entity certificate.
+
+* To set an End Entity certificate that is stored in a file, use: `SSL_CTX_use_certificate_file(SSL_CTX *ctx, char *file, int type)`. Where `file` is a string representing the path to the certificate, and `type` is one of the following constants (depending on the way it’s encoded): `SSL_FILETYPE_PEM` or `SSL_FILETYPE_ASN1`. If multiple certificates are stored in the file (only possible in PEM format), then only the first certificate will be selected.
+
+* Note that an additional function exists for loading from an ASN.1 string: `SSL_CTX_use_certificate_ASN1(SSL_CTX *ctx, int len, unsigned char *d)`
+
+* Error Checking: Returns 1 on success; otherwise there is an error.
+
+#### Loading Subsequent Certificate Chain Certificates
+* The certificates following the End Entity cert must be loaded in the same order that the chain would be in (i.e. End Entity first to Certificate Authority last).
+
+* To load in a single chain certificate, use: `SSL_CTX_add0_chain_cert(SSL_CTX *ctx, X509 *cert)`. Note that `cert` should not be freed once added; it will be freed automatically whenever `ctx` is freed.
+
+* Error Checking: Returns 1 on success, 0 otherwise.
+
+* Do __not__ use `SSL_CTX_add_extra_chain_cert()`. It is a legacy function and exhibits strange behavior when used with the aforementioned functions.
+
+#### Load Private Key into SSL Context
+* Once the certificate chain has been loaded in, we can add its associated private key to the SSL_CTX. If the private key does not match the certificate chain loaded in prior to it then the function will return an error.
+
+* To load the private key into the SSL_CTX context simply, use: `SSL_CTX_use_PrivateKey_file(SSL_CTX *ctx, char *file, int type)` or `SSL_CTX_use_RSAPrivateKey_file(SSL_CTX *ctx, const char *file, int type)`. Note that `file` should be a path to the file stored as a C string, and `type` should either be: `SSL_FILETYPE_PEM` OR `SSL_FILETYPE_ASN1`. These are both file types that OpenSSL is capable of parsing.
+
+* Error Checking: Returns 1 on success; otherwise there is an error.
+
+* Note that other similar functions exist to load in a private key other ways, such as from an ASN.1 string: `SSL_CTX_use_PrivateKey_ASN1(int pk, SSL_CTX *ctx, unsigned char *d, long len)`. These functions can be found [here](https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_use_PrivateKey_file.html).
+
+#### (Optional) More Secure Private Key/Certificate Loading
+* Since private keys are highly sensitive, some servers have hardware and encryption protections in place to keep them from being compromised.
+
+* To load a Certificate chain and Private Key without copying them unencrypted through memory, use: `SSL_CTX_use_cert_and_key(SSL_CTX *ctx, X509 *x, EVP_PKEY *pkey, STACK_OF(X509) *chain, int override)`
+
+* This only actually improves security when used in tandem with the ENGINE interface (check [here](https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_use_certificate_chain_file.html) to learn more). I may look into this more if it becomes pertinent.
+
+#### Verifying that a Private Key and End Entity Certificate Match
+* To be sure that the private key and certificate chain loaded in will work together, use: `SSL_CTX_check_private_key(const SSL_CTX *ctx)`
+
+* This should be called after loading in each cert chain/key pair
+
+* Error Checking: Returns 1 on successful key/cert match; otherwise an error has occurred.
+
+#### Verifying/Building the Certificate Chain
+* Building the chain both verifies the validity of the certificates in the certificate chain and allows for more efficient execution--if the following function is never called, the chain will need to be automatically built for every connection established.
+
+* This function should be called after loading each cert chain/key pair
+
+* To build the certificate chain, use: `SSL_CTX_build_cert_chain(SSL_CTX *ctx, long flags)`. With the following flags: `SSL_BUILD_CHAIN_FLAG_CHECK`
+
+* If the function succeeds, the certificates passed in have formed a proper chain.
+
+* Error Checking: Returns 1 on success; otherwise failure.
+
+#### Additional Behavior
+* If a certificate chain is not complete when `SSL_CTX_build_cert_chain` is called, OpenSSL will attempt to complete the chain using certificates found in the trusted certificates (the ones loaded in by calling `SSL_CTX_set_verify`). This could lead to difficult-to-debug errors if not known about beforehand.
+
+### Part 3, Establishing a Connection, the Server Way
+In order to better understand the way that servers use an SSL_CTX and SSL objects differently to clients, a quick refresher on servers is needed.
+
+#### Setting Up a Server
+* First, a file descriptor pointing to a socket must be created with: `socket(int domain, int type, int protocol)`. This returns an integer file descriptor for us to use.
+
+* Secondly, we bind that socket to a particular port and to our address: `bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)`
+
+* And, to allow the port to begin doing SYN/ACK connections, we call: `int listen(int sockfd, int backlog)`. Note that `backlog` is the maximum amount of connections the server will receive and hold ready for us to begin communicating with.
+
+* Now onto the part where OpenSSL comes in. Servers that accept connections from many different clients normally have a loop to do so; an example of how this may be implemented is shown below: `/* listening_fd already set up */ while(true) { int new_fd = accept(listening_fd, … ); handle_connection(new_fd);}`
+
+* Note that `handle_connection` might be handled by a thread or some other concurrent implementation; what matters is that once a TCP connection has been established, we need to handle the client initiating an HTTPS connection on top of that. 
+
+* So, in order to do this we must have a unique SSL object for every time we call accept() and work with a new client. It might look like this: `/* listening_fd already set up */ /* SSL_CTX *ctx also set up */ while(true) { int new_fd = accept(listening_fd, … ); SSL *ssl = SSL_new(ctx); SSL_set_fd(ssl, new_fd); if (SSL_accept(ssl) <= 0) { handle_failure(); } else { handle_connection(ssl); }}`
+
+#### Providing a Unique SSL Object For Every Connection
+* As explained above, each new accepted connection must have its own unique SSL object in order to function normally and securely. 
+
+* The aforementioned example provided one potential way of doing this: creating and setting up an SSL_CTX, and then creating a new SSL object within the `accept()` loop by calling `SSL_new()`. This is one effective way of maintaining a “fresh” set of settings and connection state (via the SSL_CTX) for each connection.
+
+* Another way of solving this problem is to have one SSL object that is kept in a fresh state (with all the necessary security settings having been applied to it) and then duplicating that object for each new connection. This would be facilitated via the following function: `SSL_dup(SSL *old_ssl)`. This returns a pointer to a new SSL object that is completely independent of `old_ssl`, yet has all the same attributes and settings as it.
+
+* The reason this second method is mentioned is that it is what we use in the SSA Daemon. Since the Daemon is meant to have a set of default secure settings in a configuration file, we apply those settings to the SSL_CTX. However, since we want to allow for individual applications to apply more stringent security options (through `setsockopt()`), we give each server or client connection its own SSL object. Then, when a server’s additional settings have been added, those settings can be propagated into each connection that server receives because of the propagation of settings from `SSL_dup()`.
+
+* Note: if the second implementation is used, it is *crucially important* that the SSL object being duplicated is never used as a connection itself. It needs to be in a clean state for any duplicated objects from it to work.
+
+#### Attach the File Descriptor to the SSL Object
+* As the code above has demonstrated, once we accept a TCP connection we must attach that file descriptor to an SSL Object to be able to perform the TLS handshake.
+
+* To attach the SSL object to I/O, use: `int SSL_set_fd(SSL *ssl, int fd)`
+
+* NOTE: using this function still leads to the automatic generation of a BIO object for the socket, so we don’t have to set that ourselves.
+
+* Error Checking: `SSL_set_fd()` returns 1 on success, 0 on error.
+
+#### Accept a TLS Handshake
+* To wait for and accept an incoming TLS handshake from a client on an already established TCP connection, use: `SSL_accept(SSL* ssl)`
+
+* Error Checking: returns 1 on success; 0 for recoverable error; < 0 for unrecoverable error.
+
+* Alternatively, one could use the following two connections to accept a TLS connection: `SSL_set_accept_state(SSL *ssl)`, which sets the SSL object to act as a server, and `SSL_do_handshake(SSL *ssl)`, which waits to accept an incoming connection.
+
+* Error Reporting: Returns 1 on success, 0 if shut down, < 0 on fatal error.
+
+* Note: `SSL_do_handshake` is called implicitly if one simply begins to use OpenSSL’s read and write functions after setting the error state.
+
+### Part 4: Reading/Writing, Shutdown and Whatnot
+All of the same functions can be used here as they were in the SSL Secure Client notes. To avoid repetition, I will simply refer you to that documentation.
+
+
+
 
 ## OpenSSL Error Reporting
