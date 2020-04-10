@@ -21,15 +21,15 @@
 
 2. [Loading certificate chain](#part-2-loading-certificate-chainprivate-Keys-into-the-ssl_ctx)
 
-3. [Establishing a connection](#part-3,-establishing-a-connection,-the-server-way)
+3. [Establishing a connection](#part-3-establishing-a-connection-the-server-way)
 
-4. [Reading, writing, shutdown, etc](#part-4:-reading/writing,-shutdown-and-whatnot)
+4. [Reading, writing, shutdown, etc](#part-4-readingwriting-shutdown-and-whatnot)
 
 [Error Reporting](#openssl-error-reporting)
 
-1. [General methodology](#part-1:-openSSL's-general-error-methodology)
+1. [General methodology](#part-1-openSSLs-general-error-methodology)
 
-2. [Verification-specific errors](#part-2:-verification-specific-errors)
+2. [Verification-specific errors](#part-2-verification-specific-errors)
 
 ## TLS Client Documentation
 
