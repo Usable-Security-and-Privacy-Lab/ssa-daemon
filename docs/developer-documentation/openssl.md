@@ -9,7 +9,7 @@
 
 2. [Setting up a specific SSL object](#part-2-setting-up-a-specific-ssl-object)
 
-3. [Connection, authentication and certificate revocation](#part-3-connection,-authentication,-and-certificate-revocation)
+3. [Connection, authentication and certificate revocation](#part-3-connection-authentication-and-certificate-revocation)
 
 4. [Post-connection cleanup](#part-4:-post-connection-communication-and-cleanup)
 
