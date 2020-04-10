@@ -17,7 +17,7 @@
 
 [Server Documentation](#tls-server-documentation)
 
-1. [Setting up SSL_CTX](#part-1-setting-up-ssl_ctx2)
+1. [Setting up SSL_CTX](#part-1-setting-up-ssl_ctx-1)
 
 2. [Loading certificate chain](#part-2:-loading-certificate-chain/private-Keys-into-the-ssl_ctx)
 
