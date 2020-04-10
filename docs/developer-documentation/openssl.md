@@ -1,5 +1,36 @@
 # Understanding OpenSSL
 
+## Table of Contents
+[Client Documentation](#tls-client-documentation)
+
+0. [Intro](#intro)
+
+1. [Setting up SSL_CTX](#part-1:-setting-up-ssl_ctx-(for-a-client))
+
+2. [Setting up a specific SSL object](#part-2:-setting-up-a-specific-ssl-object-(and-bio-object))
+
+3. [Connection, authentication and certificate revocation](#part-3:-connection,-authentication,-and-certificate-revocation)
+
+4. [Post-connection cleanup](#part-4:-post-connection-communication-and-cleanup)
+
+5. [Error Checking](#part-5:-error-checking)
+
+[Server Documentation](#tls-server-documentation)
+
+1. [Setting up SSL_CTX](#part-1:-setting-up-ssl_ctx-(for-a-server))
+
+2. [Loading certificate chain](#part-2:-loading-certificate-chain/private-Keys-into-the-ssl_ctx)
+
+3. [Establishing a connection](#part-3,-establishing-a-connection,-the-server-way)
+
+4. [Reading, writing, shutdown, etc](#part-4:-reading/writing,-shutdown-and-whatnot)
+
+[Error Reporting](#openssl-error-reporting)
+
+1. [General methodology](#part-1:-openSSL's-general-error-methodology)
+
+2. [Verification-specific errors](#part-2:-verification-specific-errors)
+
 ## TLS Client Documentation
 
 ### Intro
@@ -18,7 +49,7 @@ In OpenSSL, the most simple way to go about creating a connection requires three
 
 * Lastly, I tend to use the terminology "object" and "struct" interchangeably in this document. Objects and classes are, of course, not implemented in C, and since the structs in OpenSSL have so much functionality my mind tends to think of them more as objects.
 
-### Part 1: Setting up SSL_CTX (SSL Context Parameters)
+### Part 1: Setting up SSL_CTX (for a client)
 The SSL Context is like the list of settings that every SSL connection adheres to when created under the context. Left default, these settings are very insecure, so we have to do a few things here. An important thing to remember is that EVERYTHING in the context has to be configured before you create SSL objects from it; if configuration is done after an SSL object is created then unpredictable bugs can occur.
 
 #### Creating a Context
@@ -507,7 +538,7 @@ OpenSSL improved significantly with the release of 1.1.0 and 1.1.1, so some init
 ## TLS Server Documentation
 This is meant as a follow-on to my documentation on how to establish a secure client connection in OpenSSL. Since servers are (generally) a bit more difficult to create than clients, it is recommended that you read the TLS Client Documentation to get a better understanding of things if you haven’t yet. It contains additional information on the various structs used in OpenSSL that this documentation omits.
 
-### Part 1: Setting up SSL_CTX (SSL Context Parameters)
+### Part 1: Setting up SSL_CTX (for a server)
 Much like the client connection, a server needs to follow the regular procedures to initialize OpenSSL, though with different parameters and end uses.
 
 #### Creating a Context
@@ -686,7 +717,66 @@ In order to better understand the way that servers use an SSL_CTX and SSL object
 ### Part 4: Reading/Writing, Shutdown and Whatnot
 All of the same functions can be used here as they were in the SSL Secure Client notes. To avoid repetition, I will simply refer you to that documentation.
 
-
-
-
 ## OpenSSL Error Reporting
+
+### Part 1: OpenSSL's General Error Methodology
+
+#### Queue-Based Error Reporting
+* OpenSSL uses a queue as its means of recording and processing multiple errors (as a failed function can potentially return several errors).
+
+* To access the queue, there are 3 functions that can be called: `ERR_get_error()`, `ERR_peek_error()`, and `ERR_peek_last_error()`. Each of these returned an error code of type long. 
+
+* Note that `ERR_get_error()` pops the error it returns out of the queue, whereas the respective peek functions do not.
+
+#### Reading Errors
+* To get a string interpretation of an error while debugging, use: `ERR_error_string_n(long err_code, char *buffer, size_t n)`
+
+* Note that `buffer` must have a size of at least `n`, and if `n` is less than 256 then some error codes may be truncated to avoid buffer overflow.
+
+* To read all errors (only for debugging purposes), use: `ERR_print_errors_fp(FILE *fp)`. With `stderr` or `stdout` as the `fp` argument.
+
+* The format of errors is the following: `“error:<hex_err_code>:<library_name>:<function_name>:<err_str>”`. The error code, `<hex_err_code>`, will be the same as the `err_code` input. `<err_str>` will be a string that generically describes the error.
+
+#### Error Checking Functions
+* In most cases, errors are straightforward to check--any function that could throw an error in the OpenSSL library almost always has a return value that indicates such. 
+
+* Upon checking this, you can then refer to the error queue to determine the most recently thrown error and handle it as such. This allows for relatively easy crafting of fallbacks in case a function throws a recoverable error.
+
+#### Error Code Format
+If you look at the OpenSSL manpages on errors or error reporting, you’ll quickly realize that all of the error codes are output as longs. Thankfully, the errors all actually fit within 32 bits; it seems as though they wanted to follow [the standard rules regarding C data types](https://en.wikipedia.org/wiki/C_data_types). It is guaranteed to be no more than 32 bits, as [this](https://www.openssl.org/docs/man1.1.1/man3/ERR_error_string.html) documentation shows that errors are always output as an 8 digit hexadecimal number.
+
+* Output errors can thus be cast into their 32-bit integers equivalents simply by using `(unsigned int)variable_to_cast`.
+
+### Part 2: Verification-Specific Errors
+
+#### Obtaining a Verification Error
+* If a TLS handshake fails for some reason, an error will always be reported to the ERR queue, the string representation of which is something like: `error:1416F086: … :certificate verify failed:...`
+
+* Since this gives us no information on why a handshake failed, OpenSSL provides a more specific error set for verification.
+
+* To obtain a verification error code, use: `SSL_get_verify_result(SSL *ssl)` With the corresponding SSL object you are using for the connection. The output of this function will be the resulting error code.
+
+#### Reading the Error / Possible Verification Errors
+* Error codes are output as integers, but the corresponding error can only be found as a macro (annoying, right?). 
+
+* To read the meaning of the error, use: `X509_verify_cert_error_string(long n)`. It will return a readable string (char*) indicating the nature of the error.
+
+* There are too many error codes to list them all, but a comprehensive list can be found [here](https://www.openssl.org/docs/man1.1.1/man1/verify.html). Also, the macro error codes are mapped to the corresponding strings returned by `X509_verify_cert_error_string()` [here](https://www.openssl.org/docs/man1.1.1/man3/X509_verify_cert_error_string.html).
+
+* If a handshake had no errors, it will return: `X509_V_OK`
+
+#### Handling a Verification Error
+* The best way to handle an error in the handshake process is to catch it as it happens. OpenSSL specifies a callback function that will be called every time an error occurs in the handshake. This can be passed in using: `SSL_CTX_set_verify(SSL_CTX *ctx, int mode, SSL_verify_cb *verify_callback)`
+
+* `verify_callback` is meant to be a function pointer to a function with two parameters: `verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)`
+
+* This function pointer is what we can use to catch and handle errors. To do so, one would write a function containing the above parameters, and then pass the name of the function (without parentheses) in as the third argument for `SSL_CTX_set_verify()`.
+
+* From the manpages of OpenSSL: “Whenever a verification error is found, the error number is stored in `x509_ctx` and `verify_callback` is called with `preverify_ok` = 0.” (found [here](https://www.openssl.org/docs/man1.1.0/man3/SSL_verify_cb.html)).
+
+* From within the `verify_callback` function, it is easy to use a switch statement to determine the error and handle it accordingly.
+
+* If your `verify_callback` function returns a 1, then the handshake will continue normally; if it returns a 0, then it will not establish a connection.
+
+* NOTE: The `certificate verify failed` error will not be pushed onto the queue unless `verify_callback` returns a 0 and the connection fails as a result.
+
