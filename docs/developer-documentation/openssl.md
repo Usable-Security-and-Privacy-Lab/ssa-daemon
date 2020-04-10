@@ -5,7 +5,7 @@
 
 0. [Intro](#intro)
 
-1. [Setting up SSL_CTX](#part-1:-setting-up-ssl_ctx-(for-a-client))
+1. [Setting up SSL_CTX](#part-1:-setting-up-sslctx-for-a-client)
 
 2. [Setting up a specific SSL object](#part-2:-setting-up-a-specific-ssl-object-(and-bio-object))
 
