@@ -11,13 +11,13 @@
 
 3. [Connection, authentication and certificate revocation](#part-3-connection-authentication-and-certificate-revocation)
 
-4. [Post-connection cleanup](#part-4:-post-connection-communication-and-cleanup)
+4. [Post-connection cleanup](#part-4-post-connection-communication-and-cleanup)
 
-5. [Error Checking](#part-5:-error-checking)
+5. [Error Checking](#part-5-error-checking)
 
 [Server Documentation](#tls-server-documentation)
 
-1. [Setting up SSL_CTX](#part-1:-setting-up-ssl_ctx-(for-a-server))
+1. [Setting up SSL_CTX](#part-1-setting-up-ssl_ctx2)
 
 2. [Loading certificate chain](#part-2:-loading-certificate-chain/private-Keys-into-the-ssl_ctx)
 
@@ -538,7 +538,7 @@ OpenSSL improved significantly with the release of 1.1.0 and 1.1.1, so some init
 ## TLS Server Documentation
 This is meant as a follow-on to my documentation on how to establish a secure client connection in OpenSSL. Since servers are (generally) a bit more difficult to create than clients, it is recommended that you read the TLS Client Documentation to get a better understanding of things if you haven’t yet. It contains additional information on the various structs used in OpenSSL that this documentation omits.
 
-### Part 1: Setting up SSL_CTX (for a server)
+### Part 1: Setting up SSL_CTX
 Much like the client connection, a server needs to follow the regular procedures to initialize OpenSSL, though with different parameters and end uses.
 
 #### Creating a Context
