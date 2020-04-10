@@ -5,7 +5,7 @@
 
 0. [Intro](#intro)
 
-1. [Setting up SSL_CTX](#part-1-setting-up-sslctx-for-a-client)
+1. [Setting up SSL_CTX](#part-1-setting-up-sslctx)
 
 2. [Setting up a specific SSL object](#part-2:-setting-up-a-specific-ssl-object-(and-bio-object))
 
@@ -49,7 +49,7 @@ In OpenSSL, the most simple way to go about creating a connection requires three
 
 * Lastly, I tend to use the terminology "object" and "struct" interchangeably in this document. Objects and classes are, of course, not implemented in C, and since the structs in OpenSSL have so much functionality my mind tends to think of them more as objects.
 
-### Part 1: Setting up SSL_CTX (for a client)
+### Part 1: Setting up SSL_CTX
 The SSL Context is like the list of settings that every SSL connection adheres to when created under the context. Left default, these settings are very insecure, so we have to do a few things here. An important thing to remember is that EVERYTHING in the context has to be configured before you create SSL objects from it; if configuration is done after an SSL object is created then unpredictable bugs can occur.
 
 #### Creating a Context
