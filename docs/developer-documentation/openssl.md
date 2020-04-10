@@ -19,7 +19,7 @@
 
 1. [Setting up SSL_CTX](#part-1-setting-up-ssl_ctx-1)
 
-2. [Loading certificate chain](#part-2:-loading-certificate-chain/private-Keys-into-the-ssl_ctx)
+2. [Loading certificate chain](#part-2-loading-certificate-chainprivate-Keys-into-the-ssl_ctx)
 
 3. [Establishing a connection](#part-3,-establishing-a-connection,-the-server-way)
 
