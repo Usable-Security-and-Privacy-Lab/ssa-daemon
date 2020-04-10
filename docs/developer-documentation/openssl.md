@@ -7,7 +7,7 @@
 
 1. [Setting up SSL_CTX](#part-1-setting-up-ssl_ctx)
 
-2. [Setting up a specific SSL object](#part-2:-setting-up-a-specific-ssl-object-(and-bio-object))
+2. [Setting up a specific SSL object](#part-2-setting-up-a-specific-ssl-object)
 
 3. [Connection, authentication and certificate revocation](#part-3:-connection,-authentication,-and-certificate-revocation)
 
@@ -189,7 +189,7 @@ The SSL Context is like the list of settings that every SSL connection adheres t
 
 * Error Checking: Also returns 0 on error, 1 on success.
 
-### Part 2: Setting up a Specific SSL Object (and BIO Object)
+### Part 2: Setting up a Specific SSL Object
 An SSL object takes all of the preset parameters of an SSL_CTX and is used for a single HTTPS connection.
 
 #### Clearing and Reusing an SSL object
