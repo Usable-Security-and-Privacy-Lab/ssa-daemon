@@ -72,8 +72,8 @@ SSL_CTX* server_settings_init(char* path) {
 }
 
 int server_SSL_new(connection* conn, daemon_context* daemon) {
-	/* if (conn->tls != NULL)
-		SSL_free(conn->tls); */
+	if (conn->tls != NULL)
+		SSL_free(conn->tls);
 	conn->tls = SSL_new(daemon->server_settings);
 	if (conn->tls == NULL) {
 		/* TODO: determine if the error was actually an out-of-memory issue */
@@ -114,7 +114,7 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 		connection_free(accept_conn);
 		goto err;
 	}
-	accept_conn->secure.connected = 1;
+	//accept_conn->secure.connected = 1;
 
 	#if LIBEVENT_VERSION_NUMBER >= 0x02010000
 	/* Comment out this line if you need to do better debugging of OpenSSL behavior */
