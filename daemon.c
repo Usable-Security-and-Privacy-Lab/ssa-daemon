@@ -440,13 +440,14 @@ void accept_error_cb(struct evconnlistener *listener, void *ctx) {
  */
 void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	struct sockaddr *address, int addrlen, void *arg) {
+
+	sock_context* listening_sock_ctx = (sock_context*)arg;
 	struct sockaddr_in int_addr = {
 		.sin_family = AF_INET,
 		.sin_port = 0, /* allow kernel to give us a random port */
 		.sin_addr.s_addr = htonl(INADDR_LOOPBACK)
 	};
 	socklen_t intaddr_len = sizeof(int_addr);
-	sock_context* listening_sock_ctx = (sock_context*)arg;
 	evutil_socket_t ifd;
 	int ret = 0, port;
 	sock_context* accepting_sock_ctx;
