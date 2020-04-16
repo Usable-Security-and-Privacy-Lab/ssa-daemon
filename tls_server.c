@@ -16,7 +16,7 @@ SSL_CTX* server_settings_init(char* path) {
 	SSL_CTX* server_settings = NULL;
 	unsigned long ssl_err;
 
-	server_settings = SSL_CTX_new(TLS_client_method());
+	server_settings = SSL_CTX_new(TLS_server_method());
 	if (server_settings == NULL)
 		goto err;
 
@@ -85,8 +85,8 @@ int server_SSL_new(connection* conn, daemon_context* daemon) {
 int accept_SSL_new(connection* conn, connection* old) {
 	int ret = 0;
 
-	/* if (conn->tls != NULL) 
-		SSL_free(conn->tls); */
+	if (conn->tls != NULL) 
+		SSL_free(conn->tls);
 	conn->tls = SSL_dup(old->tls);
 	if (conn->tls == NULL) {
 		/* TODO: get openssl error and return here */
@@ -108,7 +108,7 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 			efd, accept_conn->tls, BUFFEREVENT_SSL_ACCEPTING, 
 			BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
 	if (accept_conn->secure.bev == NULL) {
-		ret = EVUTIL_SOCKET_ERROR();
+		ret = -EVUTIL_SOCKET_ERROR();
 		log_printf(LOG_ERROR, "Failed to set up client facing bufferevent [listener mode]\n");
 		EVUTIL_CLOSESOCKET(efd);
 		connection_free(accept_conn);
@@ -124,7 +124,7 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 	accept_conn->plain.bev = bufferevent_socket_new(daemon->ev_base, ifd,
 			BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
 	if (accept_conn->plain.bev == NULL) {
-		ret = EVUTIL_SOCKET_ERROR();
+		ret = -EVUTIL_SOCKET_ERROR();
 		log_printf(LOG_ERROR, "Failed to set up server facing bufferevent [listener mode]\n");
 		EVUTIL_CLOSESOCKET(ifd);
 		connection_free(accept_conn);
@@ -140,7 +140,7 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 	bufferevent_setcb(accept_conn->secure.bev, tls_bev_read_cb, tls_bev_write_cb, tls_bev_event_cb, accept_conn);
 	bufferevent_enable(accept_conn->secure.bev, EV_READ | EV_WRITE);
 
-    return ret;
+    return 0;
 err:
     /* Do stuff here... */
     return ret;

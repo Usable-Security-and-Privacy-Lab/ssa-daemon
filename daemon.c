@@ -442,6 +442,7 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	struct sockaddr *address, int addrlen, void *arg) {
 
 	sock_context* listening_sock_ctx = (sock_context*)arg;
+	daemon_context* daemon = listening_sock_ctx->daemon;
 	struct sockaddr_in int_addr = {
 		.sin_family = AF_INET,
 		.sin_port = 0, /* allow kernel to give us a random port */
@@ -495,15 +496,17 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 
 	/* now convert the random port the kernel had assigned us */
 	port = (int)ntohs((&int_addr)->sin_port);
-	hashmap_add(listening_sock_ctx->daemon->sock_map_port, port, (void*)accepting_sock_ctx);
+	hashmap_add(daemon->sock_map_port, port, (void*)accepting_sock_ctx);
 
-	ret = connection_new(&accepting_sock_ctx->conn, listening_sock_ctx->daemon);
-	accepting_sock_ctx->conn->daemon = listening_sock_ctx->daemon;
+	ret = connection_new(&accepting_sock_ctx->conn, daemon);
+	log_printf(LOG_DEBUG, "connection_new ret val: %i\n", ret);
+	accepting_sock_ctx->conn->daemon = daemon;
 	/* TODO: error check here */
 	ret = accept_SSL_new(accepting_sock_ctx->conn, listening_sock_ctx->conn);
 	/* TODO: check error here also */
+	log_printf(LOG_DEBUG, "accept_ssl_new ret val: %i\n", ret);
 	ret = accept_connection_setup(accepting_sock_ctx, listening_sock_ctx, ifd);
-	log_printf(LOG_DEBUG, "connection ret val: %i\n", ret);
+	log_printf(LOG_DEBUG, "connection_setup ret val: %i\n", ret);
 	log_printf(LOG_DEBUG, "Listener_Accept_cb finished calling.\n");
 	return;
 }
@@ -869,13 +872,13 @@ void listen_cb(daemon_context* daemon, unsigned long id, struct sockaddr* int_ad
 		goto err;
 	}
 
-	/* TODO: have this behave differently? Return EBADF? Might be safer... */
 	if (!is_server(sock_ctx->state)) {
-		response = server_SSL_new(sock_ctx->conn, daemon);
+	response = server_SSL_new(sock_ctx->conn, daemon);
 		if (response != 0)
 			goto err;
 		set_server(sock_ctx->state);
 	}
+
 
 	/* set external-facing socket to listen */
 	if (listen(sock_ctx->fd, SOMAXCONN) == -1) {
@@ -888,6 +891,13 @@ void listen_cb(daemon_context* daemon, unsigned long id, struct sockaddr* int_ad
 	netlink_notify_kernel(daemon, id, response);
 	
 	/* We're done gathering info, let's set up a server */
+
+	if (evutil_make_socket_nonblocking(sock_ctx->fd) != 0) {
+		response = -EVUTIL_SOCKET_ERROR();
+		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
+			 evutil_socket_error_to_string(-response));
+		goto err;
+	}
 
 	sock_ctx->daemon = daemon; /* XXX I don't want this here */
 	sock_ctx->listener = evconnlistener_new(daemon->ev_base, listener_accept_cb, (void*)sock_ctx,

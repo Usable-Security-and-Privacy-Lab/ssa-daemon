@@ -160,27 +160,27 @@ void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 	
 	log_printf(LOG_DEBUG, "Made it into bev_event_cb\n");
 	/* TODO: maybe split server and client functionality to make more readable? */
-	connection* ctx = (connection*)arg;
+	connection* conn = (connection*)arg;
 	unsigned long ssl_err;
-	channel* endpoint = (bev == ctx->secure.bev) ? &ctx->plain : &ctx->secure;
-	channel* startpoint = (bev == ctx->secure.bev) ? &ctx->secure : &ctx->plain;
+	channel* endpoint = (bev == conn->secure.bev) ? &conn->plain : &conn->secure;
+	channel* startpoint = (bev == conn->secure.bev) ? &conn->secure : &conn->plain;
 	if (events & BEV_EVENT_CONNECTED) {
-		log_printf(LOG_DEBUG, "%s endpoint connected\n", bev == ctx->secure.bev ? "encrypted" : "plaintext");
+		log_printf(LOG_DEBUG, "%s endpoint connected\n", bev == conn->secure.bev ? "encrypted" : "plaintext");
 		
-		if (bev == ctx->secure.bev) {
-			log_printf(LOG_INFO, "Negotiated connection with %s\n", SSL_get_version(ctx->tls));
+		if (bev == conn->secure.bev) {
+			log_printf(LOG_INFO, "Negotiated connection with %s\n", SSL_get_version(conn->tls));
 			
 			/* -1 means that we're the client */
-			if (bufferevent_getfd(ctx->plain.bev) == -1) {
-				netlink_handshake_notify_kernel(ctx->daemon, ctx->id, 0);
+			if (bufferevent_getfd(conn->plain.bev) == -1) {
+				netlink_handshake_notify_kernel(conn->daemon, conn->id, 0);
 			} else {
-				bufferevent_enable(ctx->plain.bev, EV_READ | EV_WRITE);
-				bufferevent_socket_connect(ctx->plain.bev, ctx->addr, ctx->addrlen);
+				bufferevent_enable(conn->plain.bev, EV_READ | EV_WRITE);
+				bufferevent_socket_connect(conn->plain.bev, conn->addr, conn->addrlen);
 			}
 		}
 	}
 	if (events & BEV_EVENT_ERROR) {
-		//log_printf(LOG_DEBUG, "%s endpoint encountered an error\n", bev == ctx->secure.bev ? "encrypted" : "plaintext");
+		log_printf(LOG_DEBUG, "%s endpoint encountered an error\n", bev == conn->secure.bev ? "encrypted" : "plaintext");
 		if (errno) {
 			if (errno == ECONNRESET || errno == EPIPE) {
 				log_printf(LOG_INFO, "Connection closed\n");
@@ -190,7 +190,7 @@ void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 			}
 			startpoint->closed = 1;
 		}
-		if (bev == ctx->secure.bev) {
+		if (bev == conn->secure.bev) {
 			while ((ssl_err = bufferevent_get_openssl_error(bev))) {
 				log_printf(LOG_ERROR, "SSL error from bufferevent: %s [%s]\n",
 					ERR_func_error_string(ssl_err),
@@ -208,13 +208,13 @@ void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 		}
 	}
 	if (events & BEV_EVENT_EOF) {
-		log_printf(LOG_DEBUG, "%s endpoint got EOF\n", bev == ctx->secure.bev ? "encrypted" : "plaintext");
+		log_printf(LOG_DEBUG, "%s endpoint got EOF\n", bev == conn->secure.bev ? "encrypted" : "plaintext");
 		if (bufferevent_getfd(endpoint->bev) == -1) {
 			endpoint->closed = 1;
 		}
 		else if (endpoint->closed == 0) {
 			if (evbuffer_get_length(bufferevent_get_input(startpoint->bev)) > 0) {
-				tls_bev_read_cb(endpoint->bev, ctx);
+				tls_bev_read_cb(endpoint->bev, conn);
 			}
 			if (evbuffer_get_length(bufferevent_get_output(endpoint->bev)) == 0) {
 				endpoint->closed = 1;
@@ -224,10 +224,10 @@ void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 	}
 	/* If both channels are closed now, free everything */
 	if (endpoint->closed == 1 && startpoint->closed == 1) {
-		if (bufferevent_getfd(ctx->plain.bev) == -1) {
+		if (bufferevent_getfd(conn->plain.bev) == -1) {
 			/* The -1 fd indicates that the daemon was attempting to connect when
 			 * an error caused it to abort (such as a validation failure) */
-			netlink_handshake_notify_kernel(ctx->daemon, ctx->id, -ECONNABORTED);
+			netlink_handshake_notify_kernel(conn->daemon, conn->id, -ECONNABORTED);
 		}
 		/* TODO: this function never actually did anything. Change this??? */
 		/* shutdown_tls_conn_ctx(ctx); */
