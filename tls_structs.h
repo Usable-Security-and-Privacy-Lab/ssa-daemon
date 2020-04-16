@@ -16,6 +16,39 @@
 #include "hashmap.h"
 #include "queue.h"
 
+/* for connection and sock_context id */
+#define ID_NOT_SET 0
+
+
+
+/* Bitmap constants for sock_context->state */
+#define CONN_SERVER				0x01 /* 1 for Server, 0 for Client. All of these set to 0 by default */
+#define CONN_BOUND				0x02 /* Nonzero if we've called bind locally */
+#define CONN_CONNECTED			0x04
+#define CONN_ACCEPTING			0x08
+#define CONN_CUSTOM_VALIDATION	0x10
+
+/* Macro getters/setters to simplify state bitmap access */
+#define is_server(state) ((state) & CONN_SERVER) /** If it's not a server... it's a client. */
+#define is_bound(state) ((state) & CONN_BOUND)
+#define is_connected(state) ((state) & CONN_CONNECTED)
+#define is_accepting(state) ((state) & CONN_ACCEPTING)
+#define is_custom_validation(state) ((state) & CONN_CUSTOM_VALIDATION)
+
+#define set_server(state) (state |= CONN_SERVER)
+#define set_bound(state) (state |= CONN_BOUND)
+#define set_connected(state) (state |= CONN_CONNECTED)
+#define set_accepting(state) (state |= CONN_ACCEPTING)
+#define set_custom_validation(state) (state |= CONN_CUSTOM_VALIDATION)
+
+#define set_client(state) (state &= ~CONN_SERVER)
+#define set_unbound(state) (state &= ~CONN_BOUND)
+#define set_unconnected(state) (state &= ~CONN_CONNECTED)
+#define set_not_accepting(state) (state &= ~CONN_ACCEPTING)
+#define set_not_custom_validation(state) (state &= ~CONN_CUSTOM_VALIDATION)
+
+
+
 typedef struct channel_st {
 	struct bufferevent* bev;
 	int closed;
@@ -64,34 +97,5 @@ typedef struct sock_context_st {
 	int state; /** Different states are set independantly of each other */
 	daemon_context* daemon;
 } sock_context;
-
-
-
-/* Bitmap constants for Connection->state */
-#define CONN_SERVER				0x01 /* 1 for Server, 0 for Client. All of these set to 0 by default */
-#define CONN_BOUND				0x02 /* Nonzero if we've called bind locally */
-#define CONN_CONNECTED			0x04
-#define CONN_ACCEPTING			0x08
-#define CONN_CUSTOM_VALIDATION	0x10
-
-/* Macro getters/setters to simplify state bitmap access */
-#define is_server(state) ((state) & CONN_SERVER) /** If it's not a server... it's a client. */
-#define is_bound(state) ((state) & CONN_BOUND)
-#define is_connected(state) ((state) & CONN_CONNECTED)
-#define is_accepting(state) ((state) & CONN_ACCEPTING)
-#define is_custom_validation(state) ((state) & CONN_CUSTOM_VALIDATION)
-
-#define set_server(state) (state |= CONN_SERVER)
-#define set_bound(state) (state |= CONN_BOUND)
-#define set_connected(state) (state |= CONN_CONNECTED)
-#define set_accepting(state) (state |= CONN_ACCEPTING)
-#define set_custom_validation(state) (state |= CONN_CUSTOM_VALIDATION)
-
-#define set_client(state) (state &= ~CONN_SERVER)
-#define set_unbound(state) (state &= ~CONN_BOUND)
-#define set_unconnected(state) (state &= ~CONN_CONNECTED)
-#define set_not_accepting(state) (state &= ~CONN_ACCEPTING)
-#define set_not_custom_validation(state) (state &= ~CONN_CUSTOM_VALIDATION)
-
 
 #endif

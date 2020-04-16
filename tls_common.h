@@ -25,8 +25,8 @@
 #include "tls_structs.h"
 
 int get_port(struct sockaddr* addr);
-int sock_context_new(sock_context** ctx, daemon_context* daemon);
-int connection_new(connection** conn, daemon_context* daemon);
+int sock_context_new(sock_context** ctx, daemon_context* daemon, unsigned long id);
+int connection_new(connection** conn, daemon_context* daemon, unsigned long id);
 void connection_free(connection* ctx);
 
 int associate_fd(connection* conn, evutil_socket_t ifd);

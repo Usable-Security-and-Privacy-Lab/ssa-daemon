@@ -33,21 +33,23 @@ int get_port(struct sockaddr* addr) {
 	return port;
 }
 
-int sock_context_new(sock_context** ctx, daemon_context* daemon) {
+int sock_context_new(sock_context** ctx, daemon_context* daemon, unsigned long id) {
 	*ctx = (sock_context*)calloc(1, sizeof(sock_context));
 	if (*ctx == NULL)
 		return -errno;
 
 	(*ctx)->daemon = daemon;
+	(*ctx)->id = id;
 	return 0;
 }
 
-int connection_new(connection** conn, daemon_context* daemon) {
+int connection_new(connection** conn, daemon_context* daemon, unsigned long id) {
 	*conn = (connection*)calloc(1, sizeof(connection));
 	if (*conn == NULL)
 		return -errno;
 	
 	(*conn)->daemon = daemon;
+	(*conn)->id = id;
 	return 0;
 }
 

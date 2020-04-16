@@ -462,7 +462,7 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 		return;
 	}
 
-	ret = sock_context_new(&accepting_sock_ctx, daemon);
+	ret = sock_context_new(&accepting_sock_ctx, daemon, ID_NOT_SET);
 	if (ret != 0) {
 		return;
 	}
@@ -497,7 +497,7 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	port = (int)ntohs((&int_addr)->sin_port);
 	hashmap_add(daemon->sock_map_port, port, (void*)accepting_sock_ctx);
 
-	ret = connection_new(&accepting_sock_ctx->conn, daemon);
+	ret = connection_new(&accepting_sock_ctx->conn, daemon, ID_NOT_SET);
 	log_printf(LOG_DEBUG, "connection_new ret val: %i\n", ret);
 	/* TODO: error check here */
 
@@ -577,10 +577,10 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 		goto err;
 	}
 	
-	response = sock_context_new(&sock_ctx, daemon);
+	response = sock_context_new(&sock_ctx, daemon, id);
 	if (response != 0)
 		goto err;
-	response = connection_new(&sock_ctx->conn, daemon);
+	response = connection_new(&sock_ctx->conn, daemon, id);
 	if (response != 0)
 		goto err;
 
@@ -591,7 +591,6 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 	if (response != 0)
 		goto err;
 
-	sock_ctx->id = id;
 	sock_ctx->fd = fd;
 	hashmap_add(daemon->sock_map, id, (void*)sock_ctx);
 
@@ -918,6 +917,7 @@ void associate_cb(daemon_context* daemon, unsigned long id, struct sockaddr* int
 	}
 	hashmap_del(daemon->sock_map_port, port);
 
+	
 	sock_ctx->id = id;
 	sock_ctx->conn->id = id;
 	set_connected(sock_ctx->state);
