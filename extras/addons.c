@@ -33,12 +33,12 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
 	}
 
 	/* Determine socket type */
+	/* FEATURE: in the future, do this over DTLS */
 	type_len = sizeof(type);
 	if (getsockopt(sockfd, SOL_SOCKET, SO_TYPE, &type, &type_len) == -1) {
 		errno = EPROTOTYPE;
 		return -1;
 	}
-
 
 	/* Set hostname (only works on TLS sockets, so we check retval) */
 	host_addr = (struct sockaddr_host*)addr;

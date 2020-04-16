@@ -33,7 +33,7 @@
 #define AF_HOSTNAME     43
 
 struct host_addr {
-        unsigned char name[255];
+        unsigned char name[255]; /* max hostname size in lunux */
 };
 
 struct sockaddr_host {
