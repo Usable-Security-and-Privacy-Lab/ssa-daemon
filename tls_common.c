@@ -33,24 +33,22 @@ int get_port(struct sockaddr* addr) {
 	return port;
 }
 
-int sock_context_new(sock_context** ctx) {
-	int ret = 0;
+int sock_context_new(sock_context** ctx, daemon_context* daemon) {
 	*ctx = (sock_context*)calloc(1, sizeof(sock_context));
 	if (*ctx == NULL)
-		ret = -errno;
-		/* could log_printf here; but remember {}s */
-	return ret;
+		return -errno;
+
+	(*ctx)->daemon = daemon;
+	return 0;
 }
 
 int connection_new(connection** conn, daemon_context* daemon) {
-	int ret = 0;
 	*conn = (connection*)calloc(1, sizeof(connection));
-	if (*conn == NULL) {
-		ret = -errno;
-		log_printf(LOG_ERROR, "Failed to allocate connection: %s\n", strerror(errno));
-	}
+	if (*conn == NULL)
+		return -errno;
+	
 	(*conn)->daemon = daemon;
-	return ret;
+	return 0;
 }
 
 void connection_free(connection* conn) {
@@ -84,12 +82,6 @@ int associate_fd(connection* conn, evutil_socket_t ifd) {
 	if (ret != 0)
 		log_printf(LOG_ERROR, "associate_fd failed.\n");
 	return ret;
-}
-
-void set_netlink_cb_params(connection* conn, daemon_context* daemon, 
-		unsigned long id) {
-	conn->daemon = daemon;
-	conn->id = id;
 }
 
 /*

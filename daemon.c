@@ -462,12 +462,11 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 		return;
 	}
 
-	accepting_sock_ctx = (sock_context*)calloc(1, sizeof(sock_context));
-	if (accepting_sock_ctx == NULL) {
+	ret = sock_context_new(&accepting_sock_ctx, daemon);
+	if (ret != 0) {
 		return;
 	}
 	accepting_sock_ctx->fd = efd;
-	accepting_sock_ctx->daemon = listening_sock_ctx->daemon;
 
 	ifd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (ifd == -1) {
@@ -500,8 +499,8 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 
 	ret = connection_new(&accepting_sock_ctx->conn, daemon);
 	log_printf(LOG_DEBUG, "connection_new ret val: %i\n", ret);
-	accepting_sock_ctx->conn->daemon = daemon;
 	/* TODO: error check here */
+
 	ret = accept_SSL_new(accepting_sock_ctx->conn, listening_sock_ctx->conn);
 	/* TODO: check error here also */
 	log_printf(LOG_DEBUG, "accept_ssl_new ret val: %i\n", ret);
@@ -578,16 +577,13 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 		goto err;
 	}
 	
-	response = sock_context_new(&sock_ctx);
+	response = sock_context_new(&sock_ctx, daemon);
 	if (response != 0)
 		goto err;
 	response = connection_new(&sock_ctx->conn, daemon);
 	if (response != 0)
 		goto err;
 
-	sock_ctx->daemon = daemon;
-	set_netlink_cb_params(sock_ctx->conn, daemon, id);
-	
 
 	/* To maintain consistency with server/client state in sock_ctx,
 	 * we will default to this being a client connection. */
@@ -819,7 +815,6 @@ void connect_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* i
 	if (response != 0)
 		goto err;
 	
-	set_netlink_cb_params(conn, daemon_ctx, sock_ctx->id);
 	/* only connect if we're not already.
 	 * we might already be connected due to a
 	 * socket upgrade */
@@ -891,7 +886,6 @@ void listen_cb(daemon_context* daemon, unsigned long id, struct sockaddr* int_ad
 	
 	/* We're done gathering info, let's set up a server */
 
-	sock_ctx->daemon = daemon; /* XXX I don't want this here */
 	sock_ctx->listener = evconnlistener_new(daemon->ev_base, listener_accept_cb, (void*)sock_ctx,
 		LEV_OPT_CLOSE_ON_FREE | LEV_OPT_THREADSAFE, 0, sock_ctx->fd);
 		/* note: 0 is passed in to signify that we have already called listen() */
@@ -925,13 +919,11 @@ void associate_cb(daemon_context* daemon, unsigned long id, struct sockaddr* int
 	hashmap_del(daemon->sock_map_port, port);
 
 	sock_ctx->id = id;
+	sock_ctx->conn->id = id;
 	set_connected(sock_ctx->state);
 	hashmap_add(daemon->sock_map, id, (void*)sock_ctx);
 	
-	set_netlink_cb_params(sock_ctx->conn, daemon, id);
-	//log_printf(LOG_INFO, "Socket %lu accepted\n", id);
 	netlink_notify_kernel(daemon, id, response);
-
 	log_printf(LOG_DEBUG, "associate_cb finished\n");
 	return;
 }

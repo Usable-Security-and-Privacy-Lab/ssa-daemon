@@ -25,12 +25,11 @@
 #include "tls_structs.h"
 
 int get_port(struct sockaddr* addr);
-int sock_context_new(sock_context** ctx);
+int sock_context_new(sock_context** ctx, daemon_context* daemon);
 int connection_new(connection** conn, daemon_context* daemon);
 void connection_free(connection* ctx);
 
 int associate_fd(connection* conn, evutil_socket_t ifd);
-void set_netlink_cb_params(connection* conn, daemon_context* daemon, unsigned long id);
 
 void tls_bev_write_cb(struct bufferevent *bev, void *arg);
 void tls_bev_read_cb(struct bufferevent *bev, void *arg);
