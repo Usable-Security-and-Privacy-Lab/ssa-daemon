@@ -61,3 +61,4 @@ test_files/*
 *.swp
 *.swo
 .vscode/settings.json
+ssa_daemon

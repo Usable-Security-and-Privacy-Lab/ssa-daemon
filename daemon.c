@@ -164,7 +164,7 @@ int server_create(int port) {
 	}
 	evconnlistener_set_error_cb(listener, accept_error_cb);
 
-	/* Set up netlink socket with event base */
+	/* Set up non-blocking netlink socket with event base */
 	netlink_sock = netlink_connect(&context);
 	if (netlink_sock == NULL) {
 		log_printf(LOG_ERROR, "Couldn't create Netlink socket\n");
@@ -474,6 +474,13 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 		return;
 	}
 
+	if (evutil_make_socket_nonblocking(ifd) == -1) {
+		log_printf(LOG_ERROR, "Failed in ifd evutil_make_socket_nonblocking: %s\n",
+			 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+		EVUTIL_CLOSESOCKET(ifd);
+		return;
+	}
+
 	if (bind(ifd, (struct sockaddr*)&int_addr, sizeof(int_addr)) == -1) {
 		perror("bind");
 		EVUTIL_CLOSESOCKET(ifd);
@@ -483,13 +490,6 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	/* refresh the sockaddr info to get the port the kernel assigned us */
 	if (getsockname(ifd, (struct sockaddr*)&int_addr, &intaddr_len) == -1) {
 		perror("getsockname");
-		EVUTIL_CLOSESOCKET(ifd);
-		return;
-	}
-
-	if (evutil_make_socket_nonblocking(ifd) == -1) {
-		log_printf(LOG_ERROR, "Failed in ifd evutil_make_socket_nonblocking: %s\n",
-			 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
 		EVUTIL_CLOSESOCKET(ifd);
 		return;
 	}
@@ -569,6 +569,14 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 		response = -errno;
 		goto err;
 	}
+
+	/* whether server or client, we need nonblocking sockets for bufferevent */
+	if (evutil_make_socket_nonblocking(fd) != 0) {
+		response = -EVUTIL_SOCKET_ERROR();
+		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
+			 evutil_socket_error_to_string(-response));
+		goto err;
+	}
 	
 	response = sock_context_new(&sock_ctx);
 	if (response != 0)
@@ -586,15 +594,6 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 	response = client_SSL_new(sock_ctx->conn, daemon);
 	if (response != 0)
 		goto err;
-	
-
-	/* whether server or client, we need nonblocking sockets for bufferevent */
-	if (evutil_make_socket_nonblocking(sock_ctx->fd) != 0) {
-		response = -EVUTIL_SOCKET_ERROR();
-		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
-			 evutil_socket_error_to_string(-response));
-		goto err;
-	}
 
 	sock_ctx->id = id;
 	sock_ctx->fd = fd;
@@ -891,13 +890,6 @@ void listen_cb(daemon_context* daemon, unsigned long id, struct sockaddr* int_ad
 	netlink_notify_kernel(daemon, id, response);
 	
 	/* We're done gathering info, let's set up a server */
-
-	if (evutil_make_socket_nonblocking(sock_ctx->fd) != 0) {
-		response = -EVUTIL_SOCKET_ERROR();
-		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
-			 evutil_socket_error_to_string(-response));
-		goto err;
-	}
 
 	sock_ctx->daemon = daemon; /* XXX I don't want this here */
 	sock_ctx->listener = evconnlistener_new(daemon->ev_base, listener_accept_cb, (void*)sock_ctx,

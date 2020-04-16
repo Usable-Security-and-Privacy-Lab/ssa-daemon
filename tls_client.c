@@ -53,7 +53,12 @@ SSL_CTX* client_settings_init(char* path) {
 		//const char* CA_file = "/etc/pki/tls/certs/ca-bundle.crt";
 		const char* CA_folder = "/etc/ssl/certs";
 		const char* CA_file = "test_files/certs/rootCA.pem";
-		const char* cipher_list = "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256";
+		const char* cipher_list = "ECDHE-ECDSA-AES256-GCM-SHA384:"
+								  "ECDHE-RSA-AES256-GCM-SHA384:"
+								  "ECDHE-ECDSA-CHACHA20-POLY1305:"
+								  "ECDHE-RSA-CHACHA20-POLY1305:"
+								  "ECDHE-ECDSA-AES128-GCM-SHA256:"
+								  "ECDHE-RSA-AES128-GCM-SHA256";
 		/* const char *ciphersuites = "TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_SHA256:TLS_AES_128_CCM_8_SHA256";
 		*/
 		/* TODO: Uncomment this eventually */
