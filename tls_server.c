@@ -88,51 +88,59 @@ int server_SSL_new(connection* conn, daemon_context* daemon) {
 }
 
 int accept_SSL_new(connection* conn, connection* old) {
-	int ret = 0;
-
 	if (conn->tls != NULL) 
 		SSL_free(conn->tls);
+
 	conn->tls = SSL_dup(old->tls);
 	if (conn->tls == NULL) {
 		/* TODO: get openssl error and return here */
-		ret = -ENOMEM;
+		return -ENOMEM;
+	} else {
+		return 0;
 	}
-	return ret;
 }
 
+/**
+ * Sets up and begins bufferevents for both the inner facing connection and
+ * the secure external-facing TLS connection.
+ * 
+ * @returns 0 on success, or a negative errno error code otherwise. On error,
+ * ifd and new_sock->fd will both be closed, and new_sock->fd will be set to
+ * -1. ifd cannot be changed, as it is an argument to the function. As well,
+ * the SSL object associated with new_sock will be freed.
+ */
 int accept_connection_setup(sock_context* new_sock, sock_context* old_sock, 
         evutil_socket_t ifd) {
     daemon_context* daemon = new_sock->daemon;
 	connection* accept_conn = new_sock->conn;
 	struct sockaddr* internal_addr = &old_sock->int_addr;
 	int internal_addrlen = old_sock->int_addrlen;
-	evutil_socket_t efd = new_sock->fd;
 	int ret = 0;
 
 	accept_conn->secure.bev = bufferevent_openssl_socket_new(daemon->ev_base, 
-			efd, accept_conn->tls, BUFFEREVENT_SSL_ACCEPTING, 
+			new_sock->fd, new_sock->conn->tls, BUFFEREVENT_SSL_ACCEPTING, 
 			BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
 	if (accept_conn->secure.bev == NULL) {
 		ret = -EVUTIL_SOCKET_ERROR();
-		log_printf(LOG_ERROR, "Failed to set up client facing bufferevent [listener mode]\n");
-		EVUTIL_CLOSESOCKET(efd);
-		connection_free(accept_conn);
+		/* free the SSL here (BEV_OPT_CLOSE_ON_FREE does everywhere else) */
+		SSL_free(accept_conn->tls);
+		log_printf(LOG_ERROR, "Client bufferevent setup failed [listener]\n");
 		goto err;
 	}
-	//accept_conn->secure.connected = 1;
 
+	/* accept_conn->secure.connected = 1; TODO: keep this? */
+
+	/* TODO: use this?
 	#if LIBEVENT_VERSION_NUMBER >= 0x02010000
-	/* Comment out this line if you need to do better debugging of OpenSSL behavior */
 	bufferevent_openssl_set_allow_dirty_shutdown(accept_conn->secure.bev, 1);
-	#endif /* LIBEVENT_VERSION_NUMBER >= 0x02010000 */
+	*/
 
 	accept_conn->plain.bev = bufferevent_socket_new(daemon->ev_base, ifd,
 			BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
 	if (accept_conn->plain.bev == NULL) {
 		ret = -EVUTIL_SOCKET_ERROR();
-		log_printf(LOG_ERROR, "Failed to set up server facing bufferevent [listener mode]\n");
+		log_printf(LOG_ERROR, "Server bufferevent setup failed [listener]\n");
 		EVUTIL_CLOSESOCKET(ifd);
-		connection_free(accept_conn);
 		goto err;
 	}
 
@@ -140,14 +148,36 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 	accept_conn->addrlen = internal_addrlen;
 	
 	/* Register callbacks for reading and writing to both bevs */
-	bufferevent_setcb(accept_conn->plain.bev, tls_bev_read_cb, tls_bev_write_cb, tls_bev_event_cb, accept_conn);
-	//bufferevent_enable(ctx->plain.bev, EV_READ | EV_WRITE);
-	bufferevent_setcb(accept_conn->secure.bev, tls_bev_read_cb, tls_bev_write_cb, tls_bev_event_cb, accept_conn);
-	bufferevent_enable(accept_conn->secure.bev, EV_READ | EV_WRITE);
+	bufferevent_setcb(accept_conn->plain.bev, tls_bev_read_cb, 
+					  tls_bev_write_cb, tls_bev_event_cb, accept_conn);
+	bufferevent_setcb(accept_conn->secure.bev, tls_bev_read_cb, 
+					  tls_bev_write_cb, tls_bev_event_cb, accept_conn);
+	
+	ret = bufferevent_enable(accept_conn->secure.bev, EV_READ | EV_WRITE);
+	if (ret != 0) {
+		ret = -EVUTIL_SOCKET_ERROR();
+		log_printf(LOG_ERROR, "Failed to enable secure bufferevent [listener]\n");
+		goto err;
+	}
 
     return 0;
 err:
-    /* Do stuff here... */
+	if (accept_conn->secure.bev != NULL) {
+    	bufferevent_free(accept_conn->secure.bev);
+		accept_conn->secure.bev = NULL;
+	} else {
+		EVUTIL_CLOSESOCKET(new_sock->fd);
+	}
+	new_sock->fd = -1;
+
+	if (accept_conn->plain.bev != NULL) {
+		bufferevent_free(accept_conn->plain.bev);
+		accept_conn->plain.bev = NULL;
+	} else {
+		EVUTIL_CLOSESOCKET(ifd);
+	}
+
+	accept_conn->tls = NULL;
     return ret;
 }
 

@@ -40,6 +40,7 @@ int sock_context_new(sock_context** ctx, daemon_context* daemon, unsigned long i
 
 	(*ctx)->daemon = daemon;
 	(*ctx)->id = id;
+	(*ctx)->fd = -1; /* standard to show not connected */
 	return 0;
 }
 
@@ -71,19 +72,17 @@ void connection_free(connection* conn) {
 }
 
 int associate_fd(connection* conn, evutil_socket_t ifd) {
-	int ret = 0;
-	ret = bufferevent_setfd(conn->plain.bev, ifd);
-	if (ret != 0)
-		goto end;
-	ret = bufferevent_enable(conn->plain.bev, EV_READ | EV_WRITE);
-	if (ret != 0)
-		goto end;
+
+	if (bufferevent_setfd(conn->plain.bev, ifd) != 0)
+		goto err;
+	if (bufferevent_enable(conn->plain.bev, EV_READ | EV_WRITE) != 0)
+		goto err;
 
 	log_printf(LOG_INFO, "plain bev enabled\n");
- end:
-	if (ret != 0)
-		log_printf(LOG_ERROR, "associate_fd failed.\n");
-	return ret;
+	return 0;
+ err:
+	log_printf(LOG_ERROR, "associate_fd failed.\n");
+	return -1; /* No return info available; lookup libevent log */
 }
 
 /*
