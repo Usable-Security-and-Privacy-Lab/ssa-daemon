@@ -206,10 +206,13 @@ void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 			endpoint->closed = 1;
 		}
 		else if (endpoint->closed == 0) {
+			log_printf(LOG_DEBUG, "Other endpoint not yet closed.\n");
 			if (evbuffer_get_length(bufferevent_get_input(startpoint->bev)) > 0) {
+				log_printf(LOG_DEBUG, "Startpoint buffer size greater than 0.\n");
 				tls_bev_read_cb(endpoint->bev, conn);
 			}
 			if (evbuffer_get_length(bufferevent_get_output(endpoint->bev)) == 0) {
+				log_printf(LOG_DEBUG, "Startpoint buffer now is 0 size.\n");
 				endpoint->closed = 1;
 			}
 		}
@@ -224,6 +227,8 @@ void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 		}
 		/* TODO: this function never actually did anything. Change this??? */
 		/* shutdown_tls_conn_ctx(ctx); */
+
+		/* TODO: need to do stuff here to shut down endpoint properly. */
 	}
 	return;
 }

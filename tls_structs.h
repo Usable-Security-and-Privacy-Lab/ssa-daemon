@@ -52,7 +52,6 @@
 typedef struct channel_st {
 	struct bufferevent* bev;
 	int closed;
-	int connected;
 } channel;
 
 typedef struct daemon_context_st {

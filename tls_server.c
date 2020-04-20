@@ -128,8 +128,6 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 		goto err;
 	}
 
-	/* accept_conn->secure.connected = 1; TODO: keep this? */
-
 	/* TODO: use this?
 	#if LIBEVENT_VERSION_NUMBER >= 0x02010000
 	bufferevent_openssl_set_allow_dirty_shutdown(accept_conn->secure.bev, 1);
