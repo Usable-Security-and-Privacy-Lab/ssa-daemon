@@ -51,6 +51,8 @@ SSL_CTX* client_settings_init(char* path) {
 		log_printf(LOG_INFO, "Unable to find ssa configuration\n");
 		*/
 		//const char* CA_file = "/etc/pki/tls/certs/ca-bundle.crt";
+		const char* test_CA_file = "test_files/certs/rootCA.pem";
+
 		const char* CA_folder = "/etc/ssl/certs";
 		const char* cipher_list = "ECDHE-ECDSA-AES256-GCM-SHA384:"
 								  "ECDHE-RSA-AES256-GCM-SHA384:"
@@ -75,7 +77,7 @@ SSL_CTX* client_settings_init(char* path) {
 		*/
 		if (SSL_CTX_set_cipher_list(client_settings, cipher_list) != 1) 
 			goto err;
-		if (SSL_CTX_load_verify_locations(client_settings, NULL, CA_folder) != 1)
+		if (SSL_CTX_load_verify_locations(client_settings, test_CA_file, CA_folder) != 1)
 			goto err;
 
 		/* TODO: Eventually enable OCSP Stapling, CRL checking and OCSP checking
