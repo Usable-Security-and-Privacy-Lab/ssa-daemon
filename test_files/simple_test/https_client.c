@@ -34,8 +34,11 @@ int main(int argc, char* argv[]) {
     if (num_recvd < 0) {
         perror("recv failure");
         exit(1);
+    } else if (num_recvd == 0) {
+        printf("NOTE: Client received EOF from server.\n");
+    } else {
+        printf("Received:\n%s\n", http_response);
     }
-    printf("Received:\n%s\n", http_response);
 	close(sock_fd);
 	return 0;
 }
