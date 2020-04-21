@@ -15,7 +15,7 @@
 #define KEY_FILE_B	"../key_b.pem"
 #define BUFFER_SIZE	2048
 
-void handle_req(char* req, char* resp);
+void handle_req(char* req, char* resp, int num_received);
 
 int main() {
 	char servername[255];
@@ -55,15 +55,18 @@ int main() {
 			exit(EXIT_FAILURE);
 		}
 		printf("Client requested host %d %s\n", servername_len,  servername);
-		recv(c_fd, request, BUFFER_SIZE, 0);
-		handle_req(request, response);
-		send(c_fd, response, BUFFER_SIZE, 0);
+		int num_received = recv(c_fd, request, BUFFER_SIZE, 0);
+		printf("Received %i bytes from client.\n", num_received);
+		handle_req(request, response, num_received);
+		int num_sent = send(c_fd, response, num_received+1, 0); /* +1 for EOF */
+		printf("Sent %i bytes to client.\n", num_sent);
 		close(c_fd);
 	}
 	return 0;
 }
 
-void handle_req(char* req, char* resp) {
-	memcpy(resp, req, BUFFER_SIZE);
+void handle_req(char* req, char* resp, int num_received) {
+	memcpy(resp, req, num_received);
+	resp[num_received] = '\0';
 	return;
 }
