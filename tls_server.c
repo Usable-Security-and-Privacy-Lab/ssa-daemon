@@ -8,7 +8,7 @@
 #include <openssl/err.h>
 
 #include "tls_server.h"
-#include "tls_structs.h"
+#include "daemon_structs.h"
 #include "log.h"
 
 SSL_CTX* server_settings_init(char* path) {
@@ -146,15 +146,16 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 	accept_conn->addrlen = internal_addrlen;
 	
 	/* Register callbacks for reading and writing to both bevs */
+	/* tls_bev_event_cb gets the full socket_context */
 	bufferevent_setcb(accept_conn->plain.bev, tls_bev_read_cb, 
-					  tls_bev_write_cb, tls_bev_event_cb, accept_conn);
+			tls_bev_write_cb, tls_bev_event_cb, new_sock);
 	bufferevent_setcb(accept_conn->secure.bev, tls_bev_read_cb, 
-					  tls_bev_write_cb, tls_bev_event_cb, accept_conn);
+			tls_bev_write_cb, tls_bev_event_cb, new_sock);
 	
 	ret = bufferevent_enable(accept_conn->secure.bev, EV_READ | EV_WRITE);
 	if (ret != 0) {
 		ret = -EVUTIL_SOCKET_ERROR();
-		log_printf(LOG_ERROR, "Failed to enable secure bufferevent [listener]\n");
+		log_printf(LOG_ERROR, "Secure bufferevent enable failed [listener]\n");
 		goto err;
 	}
 

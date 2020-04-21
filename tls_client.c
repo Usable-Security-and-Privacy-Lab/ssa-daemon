@@ -9,7 +9,7 @@
 #include "log.h"
 #include "tls_client.h"
 #include "tls_common.h"
-#include "tls_structs.h"
+#include "daemon_structs.h"
 
 
 SSL_CTX* client_settings_init(char* path) {
@@ -78,8 +78,13 @@ int client_SSL_new(connection* conn, daemon_context* daemon) {
 	return ret;
 }
 
-int client_connection_setup(connection* client_conn, daemon_context* daemon, 
-		char* hostname, evutil_socket_t efd, int is_accepting) {
+/* TODO: finish error reporting & cleanup within this function */
+int client_connection_setup(sock_context* sock_ctx) {
+
+	daemon_context* daemon = sock_ctx->daemon;
+	connection* client_conn = sock_ctx->conn;
+	char* hostname = sock_ctx->rem_hostname;
+	evutil_socket_t efd = sock_ctx->fd;
 	int ret = 0;
 
 	if (hostname != NULL) {
@@ -88,8 +93,9 @@ int client_connection_setup(connection* client_conn, daemon_context* daemon,
 		SSL_set1_host(client_conn->tls, hostname);
 	}
 
+	
 	/* socket set to -1 because we set it later */
-	client_conn->plain.bev = bufferevent_socket_new(daemon->ev_base, -1,
+	client_conn->plain.bev = bufferevent_socket_new(daemon->ev_base, NOT_CONN_BEV,
 			BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
 	if (client_conn->plain.bev == NULL) {
 		ret = -EVUTIL_SOCKET_ERROR();
@@ -97,30 +103,36 @@ int client_connection_setup(connection* client_conn, daemon_context* daemon,
 	}
 
 	enum bufferevent_ssl_state state;
-	if (is_accepting) /* TLS server role...TODO: why is this here?? */
+	if (is_accepting(sock_ctx->state)) /* TODO: why is server stuff here?? */
 		state = BUFFEREVENT_SSL_ACCEPTING;
 	else
 		state = BUFFEREVENT_SSL_CONNECTING;
-	client_conn->secure.bev = bufferevent_openssl_socket_new(daemon->ev_base, efd, 
-			client_conn->tls, state, BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
+	client_conn->secure.bev = bufferevent_openssl_socket_new(daemon->ev_base, 
+			efd, client_conn->tls, state, 
+			BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
 	if (client_conn->secure.bev == NULL) { 
 		ret = -EVUTIL_SOCKET_ERROR();
 		goto err;
 	}
 
 	#if LIBEVENT_VERSION_NUMBER >= 0x02010000
-	/* Comment out this line if you need to do better debugging of OpenSSL behavior */
+	/* Comment out this line if you need to do better debugging of OpenSSL */
 	bufferevent_openssl_set_allow_dirty_shutdown(client_conn->secure.bev, 1);
 	#endif /* LIBEVENT_VERSION_NUMBER >= 0x02010000 */
 
 
 	/* Register callbacks for reading and writing to both bevs */
 	bufferevent_setcb(client_conn->secure.bev, tls_bev_read_cb, 
-			tls_bev_write_cb, tls_bev_event_cb, client_conn);
-	bufferevent_enable(client_conn->secure.bev, EV_READ | EV_WRITE);
-	/* TODO: check for errors here */
+			tls_bev_write_cb, tls_bev_event_cb, sock_ctx);
+
+	ret = bufferevent_enable(client_conn->secure.bev, EV_READ | EV_WRITE);
+	if (ret < 0) {
+		ret = -EVUTIL_SOCKET_ERROR(); /* TODO: will this get the error?? */
+		goto err;
+	}
+
 	bufferevent_setcb(client_conn->plain.bev, tls_bev_read_cb, 
-			tls_bev_write_cb, tls_bev_event_cb, client_conn);
+			tls_bev_write_cb, tls_bev_event_cb, sock_ctx);
 	return 0;
  err:
 	log_printf(LOG_ERROR, "Failed to set up client/server facing bufferevent [direct mode]\n");

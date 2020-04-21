@@ -20,83 +20,21 @@ int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist);
 int get_ciphers_strlen(STACK_OF(SSL_CIPHER)* ciphers);
 int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len);
 
-
-int get_port(struct sockaddr* addr) {
-	int port = 0;
-	if (addr->sa_family == AF_UNIX) {
-		port = strtol(((struct sockaddr_un*)addr)->sun_path+1, NULL, 16);
-		log_printf(LOG_INFO, "unix port is %05x", port);
-	}
-	else {
-		port = (int)ntohs(((struct sockaddr_in*)addr)->sin_port);
-	}
-	return port;
-}
-
-int sock_context_new(sock_context** ctx, daemon_context* daemon, unsigned long id) {
-	*ctx = (sock_context*)calloc(1, sizeof(sock_context));
-	if (*ctx == NULL)
-		return -errno;
-
-	(*ctx)->daemon = daemon;
-	(*ctx)->id = id;
-	(*ctx)->fd = -1; /* standard to show not connected */
-	return 0;
-}
-
-int connection_new(connection** conn, daemon_context* daemon, unsigned long id) {
-	*conn = (connection*)calloc(1, sizeof(connection));
-	if (*conn == NULL)
-		return -errno;
-	
-	(*conn)->daemon = daemon;
-	(*conn)->id = id;
-	return 0;
-}
-
-void connection_free(connection* conn) {
-	if (conn == NULL) {
-		log_printf(LOG_WARNING, "Tried to free a NULL connection.\n");
-		return;
-	}
-	/* This breaks it for some reason...
-	 * if (conn->tls != NULL)
-	 *     SSL_free(conn->tls);
-	*/
-	if (conn->secure.bev != NULL)
-		bufferevent_free(conn->secure.bev);
-	if (conn->plain.bev != NULL)
-		bufferevent_free(conn->plain.bev);
-	free(conn);
-	return;
-}
-
-int associate_fd(connection* conn, evutil_socket_t ifd) {
-
-	if (bufferevent_setfd(conn->plain.bev, ifd) != 0)
-		goto err;
-	if (bufferevent_enable(conn->plain.bev, EV_READ | EV_WRITE) != 0)
-		goto err;
-
-	log_printf(LOG_INFO, "plain bev enabled\n");
-	return 0;
- err:
-	log_printf(LOG_ERROR, "associate_fd failed.\n");
-	return -1; /* No return info available; lookup libevent log */
-}
+int handle_event_connected(connection* conn, int id, 
+		daemon_context* daemon, channel* startpoint, channel* endpoint);
 
 /*
- *-----------------------------------------------------------------------------
- *                            CALLBACK FUNCTIONS
- *----------------------------------------------------------------------------- 
+ *******************************************************************************
+ *                       BUFFEREVENT CALLBACK FUNCTIONS
+ *******************************************************************************
  */
 
 void tls_bev_write_cb(struct bufferevent *bev, void *arg) {
 	
 	log_printf(LOG_DEBUG, "write event on bev %p\n", bev);
 
-	connection* ctx = (connection*)arg;
-	channel* endpoint = (bev == ctx->secure.bev) ? &ctx->plain : &ctx->secure;
+	connection* conn = ((sock_context*)arg)->conn;
+	channel* endpoint = (bev == conn->secure.bev) ? &conn->plain : &conn->secure;
 	struct evbuffer* out_buf;
 
 	if (endpoint->closed == 1) {
@@ -115,12 +53,12 @@ void tls_bev_write_cb(struct bufferevent *bev, void *arg) {
 	return;
 }
 
-void tls_bev_read_cb(struct bufferevent *bev, void *arg) {
+void tls_bev_read_cb(struct bufferevent* bev, void* arg) {
 	
 	log_printf(LOG_DEBUG, "read event on bev %p\n", bev);
 	
-	connection* ctx = (connection*)arg;
-	channel* endpoint = (bev == ctx->secure.bev) ? &ctx->plain : &ctx->secure;
+	connection* conn = ((sock_context*)arg)->conn;
+	channel* endpoint = (bev == conn->secure.bev) ? &conn->plain : &conn->secure;
 	struct evbuffer* in_buf;
 	struct evbuffer* out_buf;
 	size_t in_len;
@@ -149,23 +87,31 @@ void tls_bev_read_cb(struct bufferevent *bev, void *arg) {
 	return;
 }
 
+/* TODO: maybe split server and client functionality to make more readable? */
 void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 	
 	log_printf(LOG_DEBUG, "Made it into bev_event_cb\n");
-	/* TODO: maybe split server and client functionality to make more readable? */
-	connection* conn = (connection*)arg;
+
+	sock_context* sock_ctx = (sock_context*) arg;
+	daemon_context* daemon = sock_ctx->daemon;
+	connection* conn = sock_ctx->conn;
+	unsigned long id = sock_ctx->id;
 	unsigned long ssl_err;
+
 	channel* endpoint = (bev == conn->secure.bev) ? &conn->plain : &conn->secure;
 	channel* startpoint = (bev == conn->secure.bev) ? &conn->secure : &conn->plain;
+
 	if (events & BEV_EVENT_CONNECTED) {
-		log_printf(LOG_DEBUG, "%s endpoint connected\n", bev == conn->secure.bev ? "encrypted" : "plaintext");
 		
-		if (bev == conn->secure.bev) {
-			log_printf(LOG_INFO, "Negotiated connection with %s\n", SSL_get_version(conn->tls));
-			
-			/* -1 means that we're the client */
-			if (bufferevent_getfd(conn->plain.bev) == -1) {
-				netlink_handshake_notify_kernel(conn->daemon, conn->id, 0);
+		log_printf(LOG_DEBUG, "%s endpoint connected\n",
+			   startpoint->bev == conn->secure.bev ? "encrypted" : "plaintext");
+
+		if (startpoint->bev == conn->secure.bev) {
+			log_printf(LOG_INFO, "Negotiated connection with %s\n", 
+					SSL_get_version(conn->tls));
+
+			if (bufferevent_getfd(conn->plain.bev) == NOT_CONN_BEV) {
+				netlink_handshake_notify_kernel(daemon, id, 0);
 			} else {
 				bufferevent_enable(conn->plain.bev, EV_READ | EV_WRITE);
 				bufferevent_socket_connect(conn->plain.bev, conn->addr, conn->addrlen);
@@ -173,7 +119,8 @@ void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 		}
 	}
 	if (events & BEV_EVENT_ERROR) {
-		log_printf(LOG_DEBUG, "%s endpoint encountered an error\n", bev == conn->secure.bev ? "encrypted" : "plaintext");
+		log_printf(LOG_DEBUG, "%s endpoint encountered an error\n", 
+				bev == conn->secure.bev ? "encrypted" : "plaintext");
 		if (errno) {
 			if (errno == ECONNRESET || errno == EPIPE) {
 				log_printf(LOG_INFO, "Connection closed\n");
@@ -186,8 +133,8 @@ void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 		if (bev == conn->secure.bev) {
 			while ((ssl_err = bufferevent_get_openssl_error(bev))) {
 				log_printf(LOG_ERROR, "SSL error from bufferevent: %s [%s]\n",
-					ERR_func_error_string(ssl_err),
-					 ERR_reason_error_string(ssl_err));
+						ERR_func_error_string(ssl_err),
+						ERR_reason_error_string(ssl_err));
 			}
 		}
 		if (endpoint->closed == 0) {
@@ -201,7 +148,8 @@ void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 		}
 	}
 	if (events & BEV_EVENT_EOF) {
-		log_printf(LOG_DEBUG, "%s endpoint got EOF\n", bev == conn->secure.bev ? "encrypted" : "plaintext");
+		log_printf(LOG_DEBUG, "%s endpoint got EOF\n", 
+				bev == conn->secure.bev ? "encrypted" : "plaintext");
 		if (bufferevent_getfd(endpoint->bev) == -1) {
 			endpoint->closed = 1;
 		}
@@ -214,16 +162,25 @@ void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 			if (evbuffer_get_length(bufferevent_get_output(endpoint->bev)) == 0) {
 				log_printf(LOG_DEBUG, "Startpoint buffer now is 0 size.\n");
 				endpoint->closed = 1;
+				/*
+				bufferevent_free(endpoint->bev);
+				endpoint->bev = NULL;
+				*/
 			}
 		}
 		startpoint->closed = 1;
+		/*
+		bufferevent_free(startpoint->bev);
+		startpoint->bev = NULL;
+		*/
+		return;
 	}
 	/* If both channels are closed now, free everything */
 	if (endpoint->closed == 1 && startpoint->closed == 1) {
-		if (bufferevent_getfd(conn->plain.bev) == -1) {
-			/* The -1 fd indicates that the daemon was attempting to connect when
-			 * an error caused it to abort (such as a validation failure) */
-			netlink_handshake_notify_kernel(conn->daemon, conn->id, -ECONNABORTED);
+		if (bufferevent_getfd(conn->plain.bev) == NOT_CONN_BEV) {
+			/* NOT_CONN_BEV indicates that the daemon was attempting to connect 
+			 * when an error caused it to abort (ex. a validation failure) */
+			netlink_handshake_notify_kernel(daemon, id, -ECONNABORTED);
 		}
 		/* TODO: this function never actually did anything. Change this??? */
 		/* shutdown_tls_conn_ctx(ctx); */
@@ -234,9 +191,65 @@ void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 }
 
 /*
- *-----------------------------------------------------------------------------
- *                           GETSOCKOPT FUNCTIONS 
- *----------------------------------------------------------------------------- 
+ *******************************************************************************
+ *                   BUFFEREVENT CALLBACK HELPER FUNCTIONS
+ *******************************************************************************
+ */
+
+/**
+ * Handles the case where a given channel's bufferevent connected successfully.
+ * This function is called when a client's secure channel connects, or when a
+ * server's secure OR plain channel connects. However, it is not called when a 
+ * client's plain channel is connected; when accept_cb is called the file 
+ * descriptor passed in is already connected, so when it is associated with the
+ * plain channel bufferevent (in associate_fd()) it will not trigger 
+ * connected event.
+ * @param startpoint The channel that triggered the bufferevent.
+ * @param endpoint The other channel associated with conn (for instance, if the 
+ * secure channel triggered this event then the endpoint would be the plain 
+ * channel, and vice versa).
+ * @returns 0 on success, or -errno if an error occurred.
+ */
+int handle_event_connected(connection* conn, int id, 
+		daemon_context* daemon, channel* startpoint, channel* endpoint) {
+
+	
+
+	return 0;
+}
+
+
+/*
+int handle_event_eof(connection* conn, channel* startpoint, channel* endpoint) {
+	log_printf(LOG_DEBUG, "%s endpoint got EOF\n", 
+				bev == conn->secure.bev ? "encrypted" : "plaintext");
+		if (bufferevent_getfd(endpoint->bev) == -1) {
+			endpoint->closed = 1;
+		}
+		else if (endpoint->closed == 0) {
+			log_printf(LOG_DEBUG, "Other endpoint not yet closed.\n");
+			if (evbuffer_get_length(bufferevent_get_input(startpoint->bev)) > 0) {
+				log_printf(LOG_DEBUG, "Startpoint buffer size greater than 0.\n");
+				tls_bev_read_cb(endpoint->bev, conn);
+			}
+			if (evbuffer_get_length(bufferevent_get_output(endpoint->bev)) == 0) {
+				log_printf(LOG_DEBUG, "Startpoint buffer now is 0 size.\n");
+				endpoint->closed = 1;
+				bufferevent_free(endpoint->bev);
+				endpoint->bev = NULL;
+			}
+		}
+		startpoint->closed = 1;
+		bufferevent_free(startpoint->bev);
+		startpoint->bev = NULL;
+		return;
+}
+*/
+
+/*
+ *******************************************************************************
+ *                            GETSOCKOPT FUNCTIONS 
+ *******************************************************************************
  */
 
 /**

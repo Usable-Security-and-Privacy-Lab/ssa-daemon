@@ -62,7 +62,7 @@
 #include "tls_client.h"
 #include "tls_common.h"
 #include "tls_server.h"
-#include "tls_structs.h"
+#include "daemon_structs.h"
 
 #define MAX_UPGRADE_SOCKET  18
 #define HASHMAP_NUM_BUCKETS	100
@@ -71,7 +71,7 @@
 int auth_info_index;
 #endif
 
-void sock_context_free(sock_context* sock_ctx);
+int get_port(struct sockaddr* addr);
 
 /* SSA direct functions */
 static void accept_error_cb(struct evconnlistener *listener, void *ctx);
@@ -504,7 +504,7 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	port = (int)ntohs((&int_addr)->sin_port);
 	hashmap_add(daemon->sock_map_port, port, (void*)accepting_sock_ctx);
 
-	ret = connection_new(&accepting_sock_ctx->conn, daemon, ID_NOT_SET);
+	ret = connection_new(&accepting_sock_ctx->conn);
 	if (ret != 0)
 		goto err;
 	ret = accept_SSL_new(accepting_sock_ctx->conn, listening_sock_ctx->conn);
@@ -604,7 +604,7 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 	response = sock_context_new(&sock_ctx, daemon, id);
 	if (response != 0)
 		goto err;
-	response = connection_new(&sock_ctx->conn, daemon, id);
+	response = connection_new(&sock_ctx->conn);
 	if (response != 0)
 		goto err;
 
@@ -851,8 +851,7 @@ void connect_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* i
 		set_client(sock_ctx->state);
 	}
 
-	response = client_connection_setup(conn, daemon_ctx, sock_ctx->rem_hostname,
-			sock_ctx->fd, is_accepting(sock_ctx->state));
+	response = client_connection_setup(sock_ctx);
 	if (response != 0)
 		goto err;
 
@@ -967,7 +966,6 @@ void associate_cb(daemon_context* daemon, unsigned long id,
 	hashmap_del(daemon->sock_map_port, port);
 
 	sock_ctx->id = id;
-	sock_ctx->conn->id = id;
 	set_connected(sock_ctx->state);
 	hashmap_add(daemon->sock_map, id, (void*)sock_ctx);
 	
@@ -1027,26 +1025,6 @@ void close_cb(daemon_context* daemon_ctx, unsigned long id) {
 void upgrade_cb(daemon_context* daemon_ctx, unsigned long id, 
 		struct sockaddr* int_addr, int int_addrlen) {
 	/* This was implemented in the kernel directly. */
-	return;
-}
-
-/* This function is provided to the hashmap implementation
- * so that it can correctly free all held data */
-void sock_context_free(sock_context* sock_ctx) {
-	if (sock_ctx->listener != NULL) {
-		evconnlistener_free(sock_ctx->listener);
-	} else if (is_connected(sock_ctx->state)) {
-		/* connections under the control of the tls_wrapper code
-		 * clean up themselves as a result of the close event
-		 * received from one of the endpoints. In this case we
-		 * only need to clean up the sock_ctx */
-	} else { 
-		EVUTIL_CLOSESOCKET(sock_ctx->fd);
-	}
-	
-	if (sock_ctx->conn != NULL)
-		connection_free(sock_ctx->conn);
-	free(sock_ctx);
 	return;
 }
 
@@ -1157,3 +1135,15 @@ ssize_t recv_fd_from(int fd, void *ptr, size_t nbytes, int *recvfd, struct socka
 	return n;
 }
 
+
+int get_port(struct sockaddr* addr) {
+	int port = 0;
+	if (addr->sa_family == AF_UNIX) {
+		port = strtol(((struct sockaddr_un*)addr)->sun_path+1, NULL, 16);
+		log_printf(LOG_INFO, "unix port is %05x", port);
+	}
+	else {
+		port = (int)ntohs(((struct sockaddr_in*)addr)->sin_port);
+	}
+	return port;
+}

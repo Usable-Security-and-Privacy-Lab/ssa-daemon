@@ -30,7 +30,7 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 
-#include "tls_structs.h"
+#include "daemon_structs.h"
 
 int server_create(int port);
 void socket_cb(daemon_context* ctx, unsigned long id, char* comm);

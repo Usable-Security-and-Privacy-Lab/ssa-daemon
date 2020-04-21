@@ -26,12 +26,12 @@
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 
-#include "tls_structs.h"
+#include "daemon_structs.h"
 
 SSL_CTX* client_settings_init(char* path);
 
 int client_SSL_new(connection* conn, daemon_context* daemon);
-int client_connection_setup(connection* client_conn, daemon_context* daemon_ctx, char* hostname, evutil_socket_t efd, int is_accepting);
+int client_connection_setup(sock_context* sock_ctx);
 
 
 
