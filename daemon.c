@@ -419,14 +419,39 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	return;
 }
 
+/**
+ * Callback function that is called whenever an accept() call fails on the 
+ * main connection listener. This function ignores several errno values; the 
+ * reason for this can be found in man accept(2), under RETURN VALUE. 
+ * Additionally, this function ignores ECONNABORTED. The reason can be found
+ * here: https://bit.ly/3eHZzFZ
+ * Lastly, it ignores EINTR as that error simply means that a signal 
+ * interrupted the system call before a connection came in.
+ */
 void accept_error_cb(struct evconnlistener *listener, void *ctx) {
-        struct event_base *base = evconnlistener_get_base(listener);
+    
+	struct event_base* base = NULL;
+	int err = EVUTIL_SOCKET_ERROR();
+	log_printf(LOG_ERROR, "Got an error %d (%s) on the listener\n", 
+			err, evutil_socket_error_to_string(err));
 
-        int err = EVUTIL_SOCKET_ERROR();
-        log_printf(LOG_ERROR, "Got an error %d (%s) on the listener\n", 
-				err, evutil_socket_error_to_string(err));
-
-        event_base_loopexit(base, NULL);
+	switch (err) {
+	case ENETDOWN:
+	case EPROTO:
+	case ENOPROTOOPT:
+	case EHOSTDOWN:
+	case ENONET:
+	case EHOSTUNREACH:
+	case EOPNOTSUPP:
+	case ENETUNREACH:
+	case ECONNABORTED:
+	case EINTR:
+		/* all these errors can be ignored */
+		break;
+	default:
+		base = evconnlistener_get_base(listener);
+		event_base_loopexit(base, NULL);
+	}
 	return;
 }
 
@@ -535,11 +560,30 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 }
 
 void listener_accept_error_cb(struct evconnlistener *listener, void *ctx) {
-	struct event_base *base = evconnlistener_get_base(listener);
+
 	int err = EVUTIL_SOCKET_ERROR();
+
 	log_printf(LOG_ERROR, "Got an error %d (%s) on a server listener\n", 
 			err, evutil_socket_error_to_string(err));
-	event_base_loopexit(base, NULL);
+
+	switch (err) {
+	case ENETDOWN:
+	case EPROTO:
+	case ENOPROTOOPT:
+	case EHOSTDOWN:
+	case ENONET:
+	case EHOSTUNREACH:
+	case EOPNOTSUPP:
+	case ENETUNREACH:
+	case ECONNABORTED:
+	case EINTR:
+		/* all these errors can be ignored */
+		break;
+	default:
+		/* TODO: determine appropriate way to handle error. */
+		/* (shutting down the daemon is not appropriate) */
+		break;
+	}
 	return;
 }
 
@@ -627,7 +671,7 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 	if (sock_ctx != NULL) 
 		sock_context_free(sock_ctx);
 
-	log_printf(LOG_DEBUG, "socket_cb finished calling with response: %i\n", response);
+	log_printf(LOG_DEBUG, "socket_cb failed with response: %i\n", response);
 
 	netlink_notify_kernel(daemon, id, response);
 	return;
@@ -842,6 +886,13 @@ void connect_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* i
 		goto err;
 	}
 
+	/* BUG: This breaks socket upgrade functionality when already connected.
+	 * However, it's really important to have if someone tries to connect twice. */
+	if (is_connected(sock_ctx->state)) {
+		response = -EISCONN;
+		goto err;
+	}
+
 	conn = sock_ctx->conn;
 	if (is_server(sock_ctx->state)) {
 		response = client_SSL_new(conn, daemon_ctx);
@@ -854,13 +905,6 @@ void connect_cb(daemon_context* daemon_ctx, unsigned long id, struct sockaddr* i
 	response = client_connection_setup(sock_ctx);
 	if (response != 0)
 		goto err;
-
-	/* BUG: This breaks socket upgrade functionality when already connected.
-	 * However, it's really important to have if someone tries to connect twice. */
-	if (is_connected(sock_ctx->state)) {
-		response = -EISCONN;
-		goto err;
-	}
 	
 	if (bufferevent_socket_connect(conn->secure.bev, rem_addr, rem_addrlen) != 0) {
 		response = EVUTIL_SOCKET_ERROR();
