@@ -1,17 +1,32 @@
 #include "daemon_structs.h"
+
 #include "log.h"
+#include "event2/bufferevent.h"
+#include "event2/listener.h"
 
 
 
-int sock_context_new(sock_context** ctx, daemon_context* daemon, unsigned long id) {
-	*ctx = (sock_context*)calloc(1, sizeof(sock_context));
-	if (*ctx == NULL)
+int sock_context_new(sock_context** sock_ctx, 
+		daemon_context* daemon, unsigned long id) {
+	
+	*sock_ctx = (sock_context*)calloc(1, sizeof(sock_context));
+	if (*sock_ctx == NULL)
 		return -errno;
 
-	(*ctx)->daemon = daemon;
-	(*ctx)->id = id;
-	(*ctx)->fd = -1; /* standard to show not connected */
+	(*sock_ctx)->daemon = daemon;
+	(*sock_ctx)->id = id;
+	(*sock_ctx)->fd = -1; /* standard to show not connected */
 	return 0;
+}
+
+int sock_context_reset(sock_context* sock_ctx) {
+
+	if (sock_ctx->conn) {
+		connection_shutdown(sock_ctx->conn);
+
+	}
+
+	return -1; /* TODO: Stub */
 }
 
 /* This function is provided to the hashmap implementation
@@ -47,7 +62,15 @@ int connection_new(connection** conn) {
 }
 
 void connection_shutdown(connection* conn) {
+	
 	SSL_shutdown(conn->tls);
+
+	bufferevent_free(conn->secure.bev);
+	conn->secure.bev = NULL;
+	bufferevent_free(conn->plain.bev);
+	conn->plain.bev = NULL;
+
+	return;
 }
 
 void connection_free(connection* conn) {

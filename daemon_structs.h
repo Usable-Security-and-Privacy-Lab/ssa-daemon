@@ -68,7 +68,7 @@ typedef struct connection_st {
 	channel plain;
 	channel secure;
 	SSL* tls;
-	struct sockaddr* addr;
+	struct sockaddr* addr; /* Used only for server-side connections */
 	int addrlen;
 } connection;
 
