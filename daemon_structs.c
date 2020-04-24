@@ -19,15 +19,30 @@ int sock_context_new(sock_context** sock_ctx,
 	return 0;
 }
 
+/* TODO: Finish this function */
+/*
 int sock_context_reset(sock_context* sock_ctx) {
 
-	if (sock_ctx->conn) {
-		connection_shutdown(sock_ctx->conn);
+	connection* conn = sock_ctx->conn;
 
+	if (conn != NULL) {
+		connection_shutdown(sock_ctx->conn);
+		conn->addr = NULL;
+		conn->addrlen = 0;
 	}
 
-	return -1; /* TODO: Stub */
+	sock_ctx->fd = -1;
+
+	set_client(sock_ctx->state);
+	set_disconnected(sock_ctx->state);
+	set_not_accepting(sock_ctx->state);
+	set_unbound(sock_ctx->state);
+	set_not_custom_validation(sock_ctx->state);
+
+
+	return -1; 
 }
+*/
 
 /* This function is provided to the hashmap implementation
  * so that it can correctly free all held data 
@@ -65,11 +80,16 @@ void connection_shutdown(connection* conn) {
 	
 	SSL_shutdown(conn->tls);
 
-	bufferevent_free(conn->secure.bev);
+	if (conn->secure.bev != NULL)
+		bufferevent_free(conn->secure.bev);
 	conn->secure.bev = NULL;
-	bufferevent_free(conn->plain.bev);
+	
+	if (conn->plain.bev != NULL)
+		bufferevent_free(conn->plain.bev);
 	conn->plain.bev = NULL;
 
+	/* conn->tls is automatically freed by bufferevent */
+	conn->tls = NULL;
 	return;
 }
 
