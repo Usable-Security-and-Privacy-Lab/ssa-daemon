@@ -107,7 +107,7 @@ int main2(int argc, char* argv[]) {
 	    exit(EXIT_FAILURE);
     }
 	
-	/* Multiple daemons allows for really easy concurrency */
+	/* Multiple daemons is a really easy way to implement concurrency */
 	/* TODO: set this to however many processors are available */
 	worker_count = 1;
 
