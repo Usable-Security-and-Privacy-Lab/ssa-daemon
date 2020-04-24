@@ -18,19 +18,23 @@ SSL_CTX* client_settings_init(char* path) {
 	if (client_settings == NULL)
 		goto err_ctx;
 
-	//const char* CA_file = "/etc/pki/tls/certs/ca-bundle.crt";
+	/* TODO: eventually move these things to a config file */
 	const char* test_CA_file = "test_files/certs/rootCA.pem";
-
+	const char* CA_file = "/etc/pki/tls/certs/ca-bundle.crt";
 	const char* CA_folder = "/etc/ssl/certs";
+
 	const char* cipher_list = "ECDHE-ECDSA-AES256-GCM-SHA384:"
-								"ECDHE-RSA-AES256-GCM-SHA384:"
-								"ECDHE-ECDSA-CHACHA20-POLY1305:"
-								"ECDHE-RSA-CHACHA20-POLY1305:"
-								"ECDHE-ECDSA-AES128-GCM-SHA256:"
-								"ECDHE-RSA-AES128-GCM-SHA256";
-	/* const char *ciphersuites = "TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_SHA256:TLS_AES_128_CCM_8_SHA256";
-	*/
-	/* TODO: Uncomment this eventually */
+	                          "ECDHE-RSA-AES256-GCM-SHA384:"
+							  "ECDHE-ECDSA-CHACHA20-POLY1305:"
+							  "ECDHE-RSA-CHACHA20-POLY1305:"
+							  "ECDHE-ECDSA-AES128-GCM-SHA256:"
+							  "ECDHE-RSA-AES128-GCM-SHA256";
+
+	const char *ciphersuites = "TLS_AES_256_GCM_SHA384:"
+                               "TLS_AES_128_GCM_SHA256:"
+							   "TLS_CHACHA20_POLY1305_SHA256:"
+							   "TLS_AES_128_CCM_SHA256:"
+							   "TLS_AES_128_CCM_8_SHA256";
 	
 	SSL_CTX_set_verify(client_settings, SSL_VERIFY_PEER, NULL);
 	SSL_CTX_set_options(client_settings, SSL_OP_NO_COMPRESSION | SSL_OP_NO_TICKET);
@@ -39,12 +43,13 @@ SSL_CTX* client_settings_init(char* path) {
 		goto err;
 	if (SSL_CTX_set_max_proto_version(client_settings, TLS_MAX_VERSION) != 1) 
 		goto err;
-	/* TODO: Get my personal working with OpenSSL 1.1.1 before this will work
+
 	if (SSL_CTX_set_ciphersuites(client_settings, ciphersuites) != 1) 
 		goto err;
-	*/
+
 	if (SSL_CTX_set_cipher_list(client_settings, cipher_list) != 1) 
 		goto err;
+
 	if (SSL_CTX_load_verify_locations(client_settings, test_CA_file, CA_folder) != 1)
 		goto err;
 
@@ -84,7 +89,6 @@ int client_connection_setup(sock_context* sock_ctx) {
 	daemon_context* daemon = sock_ctx->daemon;
 	connection* client_conn = sock_ctx->conn;
 	char* hostname = sock_ctx->rem_hostname;
-	evutil_socket_t efd = sock_ctx->fd;
 	int ret = 0;
 
 	if (hostname != NULL) {
@@ -95,21 +99,18 @@ int client_connection_setup(sock_context* sock_ctx) {
 
 	
 	/* socket set to -1 because we set it later */
-	client_conn->plain.bev = bufferevent_socket_new(daemon->ev_base, NOT_CONN_BEV,
-			BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
+	client_conn->plain.bev = bufferevent_socket_new(daemon->ev_base, 
+			NOT_CONN_BEV, BEV_OPT_CLOSE_ON_FREE);
 	if (client_conn->plain.bev == NULL) {
 		ret = -EVUTIL_SOCKET_ERROR();
 		goto err;
 	}
 
-	enum bufferevent_ssl_state state;
-	if (is_accepting(sock_ctx->state)) /* TODO: why is server stuff here?? */
-		state = BUFFEREVENT_SSL_ACCEPTING;
-	else
-		state = BUFFEREVENT_SSL_CONNECTING;
+	enum bufferevent_ssl_state state = (is_accepting(sock_ctx->state))
+			? BUFFEREVENT_SSL_ACCEPTING : BUFFEREVENT_SSL_CONNECTING;
+
 	client_conn->secure.bev = bufferevent_openssl_socket_new(daemon->ev_base, 
-			efd, client_conn->tls, state, 
-			BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
+			sock_ctx->fd, client_conn->tls, state, BEV_OPT_CLOSE_ON_FREE);
 	if (client_conn->secure.bev == NULL) { 
 		ret = -EVUTIL_SOCKET_ERROR();
 		goto err;
@@ -124,19 +125,20 @@ int client_connection_setup(sock_context* sock_ctx) {
 	/* Register callbacks for reading and writing to both bevs */
 	bufferevent_setcb(client_conn->secure.bev, tls_bev_read_cb, 
 			tls_bev_write_cb, tls_bev_event_cb, sock_ctx);
+	bufferevent_setcb(client_conn->plain.bev, tls_bev_read_cb, 
+			tls_bev_write_cb, tls_bev_event_cb, sock_ctx);
 
 	ret = bufferevent_enable(client_conn->secure.bev, EV_READ | EV_WRITE);
 	if (ret < 0) {
-		ret = -EVUTIL_SOCKET_ERROR(); /* TODO: will this get the error?? */
+		ret = -ENOMEM; /* BUG: Not the best errno output */
 		goto err;
 	}
-
-	bufferevent_setcb(client_conn->plain.bev, tls_bev_read_cb, 
-			tls_bev_write_cb, tls_bev_event_cb, sock_ctx);
+	
 	return 0;
  err:
+
 	log_printf(LOG_ERROR, "Failed to set up client/server facing bufferevent [direct mode]\n");
 	/* Need to close socket because it won't be closed on free since bev creation failed */
-	connection_free(client_conn);
+	/* TODO: clean up here */
 	return ret;
 }
