@@ -32,22 +32,34 @@ int handle_event_eof(connection* conn, channel* startpoint, channel* endpoint);
  *******************************************************************************
  */
 
+/**
+ * Bufferevents automatically read data in from their fd to their read buffer,
+ * as well as reading data out from their write buffer to their fd. All that
+ * these callbacks to is notify you when these read/write operations have been
+ * triggered. Since we don't modify the watermarks of the read_cb, it is 
+ * triggered every time new information is read in from a file descriptor, and
+ * never stops reading. 
+ * This write_cb has functionality that works in tandem with the read callback;
+ * when too much data has been put into the write buffer (out_buf >= MAX_BUFFER)
+ * the read_cb temporarily disables itself from reading in new data and sets
+ * the other bufferevent's writing watermarks so that it will not trigger
+ * a write callback until half of that data has been written out. Once that
+ * happens, the write_cb re-enables the other bufferevent's reading capabilities
+ * and resets its own writing watermarks to 0, so that its write_cb will not be
+ * triggered until no data is left to be written.
+ * Note that this function is not called every time a write operation occurs, 
+ * and it certainly does not cause data to be written from the write buffer to
+ * the fd. It merely reports once all data to be written from a buffer has been
+ * written.
+ *
+ */
 void tls_bev_write_cb(struct bufferevent *bev, void *arg) {
-	
-	log_printf(LOG_DEBUG, "write event on bev %p\n", bev);
 
 	connection* conn = ((sock_context*)arg)->conn;
 	channel* endpoint = (bev == conn->secure.bev) ? &conn->plain : &conn->secure;
-	struct evbuffer* out_buf;
-
-	if (endpoint->closed == 1) {
-		out_buf = bufferevent_get_output(bev);
-		if (evbuffer_get_length(out_buf) == 0) {
-			//bufferevent_free(bev);
-			//shutdown_tls_conn_ctx(ctx);
-		}
-		return;
-	}
+	
+	log_printf(LOG_DEBUG, "write event on bev %p (%s)\n", bev, 
+			(bev == conn->secure.bev) ? "secure" : "plain");
 
 	if (endpoint->bev && !(bufferevent_get_enabled(endpoint->bev) & EV_READ)) {
 		bufferevent_setwatermark(bev, EV_WRITE, 0, 0);
@@ -56,29 +68,39 @@ void tls_bev_write_cb(struct bufferevent *bev, void *arg) {
 	return;
 }
 
+/**
+ * Every time data is read into a bufferevent from its associated fd, this
+ * function will be called. It takes that data and writes it to the write buffer
+ * of the other bufferevent. If too much data is being fed through, the read 
+ * operation of this bufferevent will be turned off until the other buffer has
+ * written enough data out.
+ */
 void tls_bev_read_cb(struct bufferevent* bev, void* arg) {
-	
-	log_printf(LOG_DEBUG, "read event on bev %p\n", bev);
+	/* TODO: set read high-water mark?? */
 	
 	connection* conn = ((sock_context*)arg)->conn;
-	channel* endpoint = (bev == conn->secure.bev) ? &conn->plain : &conn->secure;
+	channel* endpoint = (bev == conn->secure.bev) 
+			? &conn->plain : &conn->secure;
 	struct evbuffer* in_buf;
 	struct evbuffer* out_buf;
 	size_t in_len;
 
+	log_printf(LOG_DEBUG, "read event on bev %p (%s)\n", bev, 
+			(bev == conn->secure.bev) ? "secure" : "plain");
+
 	in_buf = bufferevent_get_input(bev);
 	in_len = evbuffer_get_length(in_buf);
+	if (in_len == 0)
+		return;
 
 	/* clear read buffer if already closed */
 	if (endpoint->closed == 1) {
+		log_printf(LOG_DEBUG, "drained buffer.\n");
 		evbuffer_drain(in_buf, in_len);
 		return;
 	}
 
-	if (in_len == 0)
-		return;
-
-	/* copy content from external buffer to internal buffer */
+	/* copy content to the output buffer of the other bufferevent */
 	out_buf = bufferevent_get_output(endpoint->bev);
 	evbuffer_add_buffer(out_buf, in_buf);
 
@@ -91,7 +113,7 @@ void tls_bev_read_cb(struct bufferevent* bev, void* arg) {
 	return;
 }
 
-/* TODO: maybe split server and client functionality to make more readable? */
+/* FEATURE: Maybe split client and server events to be more readable?? */
 void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 	
 	log_printf(LOG_DEBUG, "Made it into bev_event_cb\n");
