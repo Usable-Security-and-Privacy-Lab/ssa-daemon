@@ -37,7 +37,7 @@ SSL_CTX* server_settings_init(char* path) {
 	if (SSL_CTX_load_verify_locations(server_settings, 
 			"test_files/certs/rootCA.pem", NULL) != 1) {
 		log_printf(LOG_DEBUG, "Failed to load verify location.\n");
-		goto err;			
+		goto err;
 	}
 
 
@@ -119,7 +119,8 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 
 	accept_conn->secure.bev = bufferevent_openssl_socket_new(daemon->ev_base, 
 			new_sock->fd, new_sock->conn->tls, BUFFEREVENT_SSL_ACCEPTING, 
-			BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
+			BEV_OPT_CLOSE_ON_FREE);
+
 	if (accept_conn->secure.bev == NULL) {
 		ret = -EVUTIL_SOCKET_ERROR();
 		/* free the SSL here (BEV_OPT_CLOSE_ON_FREE does everywhere else) */
@@ -133,8 +134,9 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 	bufferevent_openssl_set_allow_dirty_shutdown(accept_conn->secure.bev, 1);
 	*/
 
-	accept_conn->plain.bev = bufferevent_socket_new(daemon->ev_base, ifd,
-			BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS);
+	accept_conn->plain.bev = bufferevent_socket_new(daemon->ev_base, 
+			ifd, BEV_OPT_CLOSE_ON_FREE);
+
 	if (accept_conn->plain.bev == NULL) {
 		ret = -EVUTIL_SOCKET_ERROR();
 		log_printf(LOG_ERROR, "Server bufferevent setup failed [listener]\n");
