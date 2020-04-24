@@ -42,9 +42,27 @@
 
 #define set_client(state) (state &= ~CONN_SERVER)
 #define set_unbound(state) (state &= ~CONN_BOUND)
-#define set_unconnected(state) (state &= ~CONN_CONNECTED)
+#define set_disconnected(state) (state &= ~CONN_CONNECTED)
 #define set_not_accepting(state) (state &= ~CONN_ACCEPTING)
 #define set_not_custom_validation(state) (state &= ~CONN_CUSTOM_VALIDATION)
+
+
+
+enum connection_state {
+	ERR_UNREUSEABLE,
+	CLIENT_ERR_REUSEABLE,
+	CLIENT_NEW,
+	CLIENT_CONNECTING,
+	CLIENT_CONNECTED,
+	CLIENT_DISCONNECTED,
+	SERVER_ERR_REUSEABLE,
+	SERVER_NEW,
+	SERVER_LISTENING,
+	SERVER_NEW,
+	SERVER_CONNECTING,
+	SERVER_CONNECTED,
+	SERVER_DISCONNECTED,
+};
 
 
 
@@ -68,8 +86,9 @@ typedef struct connection_st {
 	channel plain;
 	channel secure;
 	SSL* tls;
-	struct sockaddr* addr; /* Used only for server-side connections */
+	struct sockaddr* addr; /* TODO: Used only for server-side connections?? */
 	int addrlen;
+	enum connection_state state;
 } connection;
 
 typedef struct sock_context_st {
