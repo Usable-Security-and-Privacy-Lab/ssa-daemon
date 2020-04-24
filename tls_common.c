@@ -12,6 +12,8 @@
 
 #include "netlink.h"
 #include "tls_common.h"
+#include "tls_client.h"
+#include "tls_server.h"
 #include "log.h"
 
 #define MAX_BUFFER	1024*1024*10 /* 10 Megabits */
@@ -269,6 +271,7 @@ int handle_event_eof(connection* conn, channel* startpoint, channel* endpoint) {
 		}
 	}
 	startpoint->closed = 1;
+	conn->state = CLIENT_DISCONNECTED; /* TODO: does this go here? */
 	/*
 	bufferevent_free(startpoint->bev);
 	startpoint->bev = NULL;
@@ -414,10 +417,33 @@ int get_enabled_ciphers(connection* conn, char** data, unsigned int* len) {
 }
 
 /*
- *-----------------------------------------------------------------------------
+ *******************************************************************************
  *                           SETSOCKOPT FUNCTIONS
- *----------------------------------------------------------------------------- 
+ *******************************************************************************
  */
+
+int set_connection_type(connection* conn, daemon_context* daemon, int type) {
+	
+	int ret = 0;
+	
+	switch(conn->state) {
+	case CLIENT_NEW:
+	case SERVER_NEW:
+		if (type == CLIENT_CONN)
+			ret = client_SSL_new(conn, daemon);
+		else /* type == SERVER_CONN */
+			ret = server_SSL_new(conn, daemon);
+		
+		if (ret == 0)
+			conn->state = (type == CLIENT_CONN) ? CLIENT_NEW : SERVER_NEW;
+		break;
+	default:
+		ret = -ENOPROTOOPT;
+		break;
+	}
+
+	return ret;
+}
 
 /* TODO: Test this */
 int set_trusted_peer_certificates(connection* conn, char* value) {

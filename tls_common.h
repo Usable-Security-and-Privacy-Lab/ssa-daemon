@@ -21,8 +21,15 @@
  */
 
 #include <event2/util.h>
-
 #include "daemon_structs.h"
+
+
+/* for set_conn_type */
+#define SERVER_CONN 0
+#define CLIENT_CONN 1
+
+
+
 
 void tls_bev_write_cb(struct bufferevent *bev, void *arg);
 void tls_bev_read_cb(struct bufferevent *bev, void *arg);
@@ -34,6 +41,7 @@ int get_peer_certificate(connection* conn, char** data, unsigned int* len);
 int get_peer_identity(connection* conn_ctx, char** data, unsigned int* len);
 int get_hostname(connection* conn_ctx, char** data, unsigned int* len);
 
+int set_connection_type(connection* conn, daemon_context* daemon, int type);
 int set_trusted_peer_certificates(connection* conn, char* value);
 int disable_cipher(connection* conn, char* cipher);
 int get_enabled_ciphers(connection* conn, char** data, unsigned int* len);

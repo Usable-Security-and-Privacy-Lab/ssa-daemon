@@ -431,10 +431,13 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 		EVUTIL_CLOSESOCKET(fd);
 		return;
 	}
+
 	log_printf_addr(&sock_ctx->rem_addr);
 	hashmap_del(daemon->sock_map_port, port);
 
 	associate_fd(sock_ctx->conn, fd);
+
+	sock_ctx->conn->state = CLIENT_CONNECTED;
 	log_printf(LOG_DEBUG, "Finished calling accept_cb\n");
 	return;
 }
@@ -552,6 +555,8 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	ret = connection_new(&accepting_sock_ctx->conn);
 	if (ret != 0)
 		goto err;
+	accepting_sock_ctx->conn->state = SERVER_CONNECTING;
+
 	ret = accept_SSL_new(accepting_sock_ctx->conn, listening_sock_ctx->conn);
 	if (ret != 0)
 		goto err;
@@ -689,6 +694,7 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 		goto err;
 
 	sock_ctx->fd = fd;
+	sock_ctx->conn->state = CLIENT_NEW;
 	hashmap_add(daemon->sock_map, id, (void*)sock_ctx);
 
 	log_printf(LOG_INFO, "Socket created on behalf of application %s\n", comm);
@@ -736,13 +742,13 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 			response = -1;
 		break;
 	case TLS_CLIENT_CONNECTION:
-		response = client_SSL_new(sock_ctx->conn, ctx);
-		if (response == 0)
+		response = set_connection_type(sock_ctx->conn, ctx, CLIENT_CONN);
+		if (response == 0) 
 			set_client(sock_ctx->state);
 		break;
 	case TLS_SERVER_CONNECTION:
-		response = server_SSL_new(sock_ctx->conn, ctx);
-		if (response == 0)
+		response = set_connection_type(sock_ctx->conn, ctx, SERVER_CONN);
+		if (response == 0) 
 			set_server(sock_ctx->state);
 		break;
 	case TLS_HOSTNAME:
@@ -856,6 +862,15 @@ void bind_cb(daemon_context* daemon, unsigned long id,
 		goto err;
 	}
 
+	switch (sock_ctx->conn->state) {
+	case CLIENT_NEW:
+	case SERVER_NEW:
+		break; /* safe */
+	default:
+		response = -EBADF; /* TODO: better errno for this? */
+		goto err;
+	}
+
 	if (evutil_make_listen_socket_reuseable(sock_ctx->fd) == -1) {
 		log_printf(LOG_ERROR, 
 				"Failed in evutil_make_listen_socket_reuseable: %s\n",
@@ -878,11 +893,12 @@ void bind_cb(daemon_context* daemon, unsigned long id,
 	sock_ctx->ext_addrlen = ext_addrlen;
 
 	/* New stuff added by Nathaniel */ 
-	/* BUG: bind can be reasonably called before connect(), yet if one calls 
-	 * bind here the assumption is that it will then be used as a server... */
+	/* BUG: this is only temporary until test cases are changed */
 	response = server_SSL_new(sock_ctx->conn, daemon);
 	if (response != 0)
 		goto err;
+	sock_ctx->conn->state = SERVER_NEW;
+	/* end BUG */
 
 	netlink_notify_kernel(daemon, id, response);
 	return;
@@ -915,7 +931,7 @@ void connect_cb(daemon_context* daemon_ctx, unsigned long id,
 				struct sockaddr* rem_addr, int rem_addrlen, int blocking) {
 	sock_context* sock_ctx;
 	connection* conn;
-	int response = 0, port;
+	int response = 0, port, ret;
 
 	sock_ctx = (sock_context*)hashmap_get(daemon_ctx->sock_map, id);
 	if (sock_ctx == NULL) {
@@ -923,14 +939,26 @@ void connect_cb(daemon_context* daemon_ctx, unsigned long id,
 		goto err;
 	}
 
-	/* BUG: This breaks socket upgrade functionality when already connected.
-	 * However, it's really important to catch if someone calls connect twice */
+	conn = sock_ctx->conn;
+
+	/* Make sure the socket is in the right state to be connecting */
+	switch(conn->state) {
+	case CLIENT_NEW:
+	case CLIENT_ERR_REUSEABLE:
+		break; /* both safe states to initiate a connection in */
+	case CLIENT_CONNECTED:
+		response = -EISCONN;
+	default:
+		response = -EBADF; /* TODO: set this to something more descriptive? */
+		goto err;
+	}
+
+	/*
 	if (is_connected(sock_ctx->state)) {
 		response = -EISCONN;
 		goto err;
 	}
 
-	conn = sock_ctx->conn;
 	if (is_server(sock_ctx->state)) {
 		response = client_SSL_new(conn, daemon_ctx);
 		if (response != 0)
@@ -938,12 +966,14 @@ void connect_cb(daemon_context* daemon_ctx, unsigned long id,
 
 		set_client(sock_ctx->state);
 	}
+	*/
 
 	response = client_connection_setup(sock_ctx);
 	if (response != 0)
 		goto err;
 	
-	if (bufferevent_socket_connect(conn->secure.bev, rem_addr, rem_addrlen) != 0) {
+	ret = bufferevent_socket_connect(conn->secure.bev, rem_addr, rem_addrlen);
+	if (ret != 0) {
 		response = EVUTIL_SOCKET_ERROR();
 		goto err;
 	}
@@ -960,7 +990,8 @@ void connect_cb(daemon_context* daemon_ctx, unsigned long id,
 	hashmap_add(daemon_ctx->sock_map_port, port, sock_ctx);
 	sock_ctx->rem_addr = *rem_addr;
 	sock_ctx->rem_addrlen = rem_addrlen;
-	set_connected(sock_ctx->state);
+	/* set_connected(sock_ctx->state); */
+	sock_ctx->conn->state = CLIENT_CONNECTING;
 
 	if (!blocking) {
 		log_printf(LOG_INFO, "Nonblocking connect requested\n");
@@ -968,6 +999,8 @@ void connect_cb(daemon_context* daemon_ctx, unsigned long id,
 	}
 	return;
  err:
+	/* TODO: do cleanup here */
+
 	netlink_notify_kernel(daemon_ctx, id, response);
 	return;
 }
@@ -987,12 +1020,23 @@ void listen_cb(daemon_context* daemon, unsigned long id,
 		goto err;
 	}
 
+	switch (sock_ctx->conn->state) {
+	case SERVER_NEW:
+	case SERVER_ERR_REUSEABLE:
+		break;
+	default:
+		response = -EBADF;
+		goto err;
+	}
+
+	/* BUG: this should be removed once tests get updated */
 	if (!is_server(sock_ctx->state)) {
 	response = server_SSL_new(sock_ctx->conn, daemon);
 		if (response != 0)
 			goto err;
 		set_server(sock_ctx->state);
 	}
+	/* end BUG */
 
 	/* set external-facing socket to listen */
 	if (listen(sock_ctx->fd, SOMAXCONN) == -1) {
@@ -1007,8 +1051,9 @@ void listen_cb(daemon_context* daemon, unsigned long id,
 		response = -errno;
 		goto err;
 	}
-
 	evconnlistener_set_error_cb(sock_ctx->listener, listener_accept_error_cb);
+
+	sock_ctx->conn->state = SERVER_LISTENING;
 
 	netlink_notify_kernel(daemon, id, response);
 	log_printf(LOG_DEBUG, "listen_cb completed.\n");
@@ -1047,8 +1092,9 @@ void associate_cb(daemon_context* daemon, unsigned long id,
 	hashmap_del(daemon->sock_map_port, port);
 
 	sock_ctx->id = id;
-	set_connected(sock_ctx->state);
+	sock_ctx->conn->state = SERVER_CONNECTED;
 	hashmap_add(daemon->sock_map, id, (void*)sock_ctx);
+
 	
 	netlink_notify_kernel(daemon, id, 0);
 	log_printf(LOG_DEBUG, "associate_cb finished\n");
@@ -1066,11 +1112,12 @@ void close_cb(daemon_context* daemon_ctx, unsigned long id) {
 
 	sock_ctx = (sock_context*)hashmap_get(daemon_ctx->sock_map, id);
 	if (sock_ctx == NULL) {
+		/* TODO: return error here */
 		return;
 	}
 
-	/* close things here */
-	if (is_accepting(sock_ctx->state)) {
+	switch (sock_ctx->conn->state) {
+	case SERVER_CONNECTED:
 		/* This is an orphan server connection.
 		 * We don't host its corresponding listen socket
 		 * But we were given control of the remote peer
@@ -1079,11 +1126,8 @@ void close_cb(daemon_context* daemon_ctx, unsigned long id) {
 		connection_free(sock_ctx->conn);
 		free(sock_ctx);
 		return;
-	}
-
-
-	if (is_connected(sock_ctx->state)) {
-
+	case CLIENT_CONNECTED:
+	case CLIENT_CONNECTING: /* TODO: maybe here?? */
 		/* connections under the control of the tls_wrapper code
 		 * clean up themselves as a result of the close event
 		 * received from one of the endpoints. In this case we
@@ -1092,17 +1136,18 @@ void close_cb(daemon_context* daemon_ctx, unsigned long id) {
 		connection_free(sock_ctx->conn);
 		free(sock_ctx);
 		return;
-	}
-	if (sock_ctx->listener != NULL) {
+	case SERVER_LISTENING:
 		hashmap_del(daemon_ctx->sock_map, id);
 		evconnlistener_free(sock_ctx->listener);
+		free(sock_ctx->conn);
+		free(sock_ctx);
+		return;
+	default:
+		hashmap_del(daemon_ctx->sock_map, id);
+		EVUTIL_CLOSESOCKET(sock_ctx->fd);
 		free(sock_ctx);
 		return;
 	}
-	hashmap_del(daemon_ctx->sock_map, id);
-	EVUTIL_CLOSESOCKET(sock_ctx->fd);
-	free(sock_ctx);
-	return;
 }
 
 void upgrade_cb(daemon_context* daemon_ctx, unsigned long id, 
@@ -1142,7 +1187,7 @@ void upgrade_recv(evutil_socket_t fd, short events, void *arg) {
 	}
 	EVUTIL_CLOSESOCKET(sock_ctx->fd);
 	sock_ctx->fd = new_fd;
-	set_connected(sock_ctx->state);
+	/* set_connected(sock_ctx->state); */
 
 	if (is_accepting == 1) {
 		/* TODO: Eventually clean up this whole section--ripped from tls_opts_server_setup()... */
@@ -1158,7 +1203,7 @@ void upgrade_recv(evutil_socket_t fd, short events, void *arg) {
 		SSL_CTX_use_PrivateKey_file(server_settings, "test_files/localhost_key.pem", SSL_FILETYPE_PEM);
 		/* Thus concludes the TODO. */
 
-		set_accepting(sock_ctx->state);
+		/* set_accepting(sock_ctx->state); */
 	}
 	else {
 		/* used to have tls_opts_client_setup(sock_ctx->tls_opts); */

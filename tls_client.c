@@ -70,17 +70,24 @@ err_ctx:
 	return NULL;
 }
 
+/**
+ * Attempts to create a new SSL struct and attach it to the given connection.
+ * If unsuccessful, the connection's state will not be altered--if it
+ * contained an SSL struct prior to this call, that struct will remain.
+ * @param conn The connection to assign a new client SSL struct to.
+ * @returns 0 on success; -errno otherwise.
+ */
 int client_SSL_new(connection* conn, daemon_context* daemon) {
 	int ret = 0;
+	SSL* new_ssl = SSL_new(daemon->client_settings);
+	if (new_ssl == NULL)
+		return -ENOMEM; /* BUG: temporary fix. Replace with OpenSSL error. */
 	
 	if (conn->tls != NULL)
 		SSL_free(conn->tls);
-	conn->tls = SSL_new(daemon->client_settings);
-	if (conn->tls == NULL) {
-		/* TODO: get OpenSSL error here and convert to an errno code */
-		ret = -ENOMEM; /* BUG: temporary fix. Replace soon. */
-	}
-	return ret;
+	conn->tls = new_ssl;
+
+	return 0;
 }
 
 /* TODO: finish error reporting & cleanup within this function */

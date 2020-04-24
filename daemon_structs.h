@@ -37,7 +37,6 @@
 #define set_server(state) (state |= CONN_SERVER)
 #define set_bound(state) (state |= CONN_BOUND)
 #define set_connected(state) (state |= CONN_CONNECTED)
-#define set_accepting(state) (state |= CONN_ACCEPTING)
 #define set_custom_validation(state) (state |= CONN_CUSTOM_VALIDATION)
 
 #define set_client(state) (state &= ~CONN_SERVER)
@@ -58,7 +57,6 @@ enum connection_state {
 	SERVER_ERR_REUSEABLE,
 	SERVER_NEW,
 	SERVER_LISTENING,
-	SERVER_NEW,
 	SERVER_CONNECTING,
 	SERVER_CONNECTED,
 	SERVER_DISCONNECTED,
