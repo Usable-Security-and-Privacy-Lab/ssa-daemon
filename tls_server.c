@@ -111,20 +111,18 @@ int accept_SSL_new(connection* conn, connection* old) {
  */
 int accept_connection_setup(sock_context* new_sock, sock_context* old_sock, 
         evutil_socket_t ifd) {
-    daemon_context* daemon = new_sock->daemon;
+    daemon_context* daemon = old_sock->daemon;
 	connection* accept_conn = new_sock->conn;
 	struct sockaddr* internal_addr = &old_sock->int_addr;
 	int internal_addrlen = old_sock->int_addrlen;
 	int ret = 0;
 
 	accept_conn->secure.bev = bufferevent_openssl_socket_new(daemon->ev_base, 
-			new_sock->fd, new_sock->conn->tls, BUFFEREVENT_SSL_ACCEPTING, 
-			BEV_OPT_CLOSE_ON_FREE);
+			new_sock->fd, new_sock->conn->tls, BUFFEREVENT_SSL_ACCEPTING, 0);
 
 	if (accept_conn->secure.bev == NULL) {
 		ret = -EVUTIL_SOCKET_ERROR();
 		/* free the SSL here (BEV_OPT_CLOSE_ON_FREE does everywhere else) */
-		SSL_free(accept_conn->tls);
 		log_printf(LOG_ERROR, "Client bufferevent setup failed [listener]\n");
 		goto err;
 	}
@@ -140,7 +138,6 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 	if (accept_conn->plain.bev == NULL) {
 		ret = -EVUTIL_SOCKET_ERROR();
 		log_printf(LOG_ERROR, "Server bufferevent setup failed [listener]\n");
-		EVUTIL_CLOSESOCKET(ifd);
 		goto err;
 	}
 
@@ -148,11 +145,11 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 	accept_conn->addrlen = internal_addrlen;
 	
 	/* Register callbacks for reading and writing to both bevs */
-	/* tls_bev_event_cb gets the full socket_context */
-	bufferevent_setcb(accept_conn->plain.bev, tls_bev_read_cb, 
-			tls_bev_write_cb, tls_bev_event_cb, new_sock);
-	bufferevent_setcb(accept_conn->secure.bev, tls_bev_read_cb, 
-			tls_bev_write_cb, tls_bev_event_cb, new_sock);
+	/* server_bev_event_cb gets the full socket_context */
+	bufferevent_setcb(accept_conn->plain.bev, common_bev_read_cb, 
+			common_bev_write_cb, server_bev_event_cb, new_sock);
+	bufferevent_setcb(accept_conn->secure.bev, common_bev_read_cb, 
+			common_bev_write_cb, server_bev_event_cb, new_sock);
 	
 	ret = bufferevent_enable(accept_conn->secure.bev, EV_READ | EV_WRITE);
 	if (ret != 0) {
@@ -163,22 +160,7 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 
     return 0;
 err:
-	if (accept_conn->secure.bev != NULL) {
-    	bufferevent_free(accept_conn->secure.bev);
-		accept_conn->secure.bev = NULL;
-	} else {
-		EVUTIL_CLOSESOCKET(new_sock->fd);
-	}
-	new_sock->fd = -1;
-
-	if (accept_conn->plain.bev != NULL) {
-		bufferevent_free(accept_conn->plain.bev);
-		accept_conn->plain.bev = NULL;
-	} else {
-		EVUTIL_CLOSESOCKET(ifd);
-	}
-
-	accept_conn->tls = NULL;
+	/* closing/freeing is left up to the calling function */
     return ret;
 }
 

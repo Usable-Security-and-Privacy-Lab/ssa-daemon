@@ -1,8 +1,9 @@
 #include "daemon_structs.h"
-
 #include "log.h"
+
 #include "event2/bufferevent.h"
 #include "event2/listener.h"
+#include "unistd.h"
 
 
 
@@ -19,42 +20,12 @@ int sock_context_new(sock_context** sock_ctx,
 	return 0;
 }
 
-/* TODO: Finish this function */
-/*
-int sock_context_reset(sock_context* sock_ctx) {
-
-	connection* conn = sock_ctx->conn;
-
-	if (conn != NULL) {
-		connection_shutdown(sock_ctx->conn);
-		conn->addr = NULL;
-		conn->addrlen = 0;
-	}
-
-	sock_ctx->fd = -1;
-
-	set_client(sock_ctx->state);
-	set_disconnected(sock_ctx->state);
-	set_not_accepting(sock_ctx->state);
-	set_unbound(sock_ctx->state);
-	set_not_custom_validation(sock_ctx->state);
-
-
-	return -1; 
-}
-*/
-
 /* This function is provided to the hashmap implementation
  * so that it can correctly free all held data 
  * TODO: this function needs to be updated and debugged */
 void sock_context_free(sock_context* sock_ctx) {
 	if (sock_ctx->listener != NULL) {
 		evconnlistener_free(sock_ctx->listener);
-	} else if (is_connected(sock_ctx->state)) {
-		/* connections under the control of the tls_wrapper code
-		 * clean up themselves as a result of the close event
-		 * received from one of the endpoints. In this case we
-		 * only need to clean up the sock_ctx */
 	} else { 
 		EVUTIL_CLOSESOCKET(sock_ctx->fd);
 	}
@@ -69,27 +40,47 @@ void sock_context_free(sock_context* sock_ctx) {
 
 int connection_new(connection** conn) {
 
-	*conn = (connection*)calloc(1, sizeof(connection));
+	(*conn) = (connection*)calloc(1, sizeof(connection));
 	if (*conn == NULL)
 		return -errno;
 
 	return 0;
 }
 
-void connection_shutdown(connection* conn) {
+/**
+ * Closes and frees all of the appropriate file descriptors/structs within a 
+ * given sock_context. This function should be called before the connection
+ * is set to a different state, as it checks the state to do particular
+ * shutdown tasks. This function does not alter state.
+ */
+void connection_shutdown(sock_context* sock_ctx) {
 	
-	SSL_shutdown(conn->tls);
+	connection* conn = sock_ctx->conn;
+
+	if (conn->tls != NULL)
+		SSL_shutdown(conn->tls);
+
+	if (sock_ctx->listener != NULL) 
+		evconnlistener_free(sock_ctx->listener);
 
 	if (conn->secure.bev != NULL)
 		bufferevent_free(conn->secure.bev);
 	conn->secure.bev = NULL;
+	conn->secure.closed = 1;
 	
 	if (conn->plain.bev != NULL)
 		bufferevent_free(conn->plain.bev);
 	conn->plain.bev = NULL;
+	conn->plain.closed = 1;
 
-	/* conn->tls is automatically freed by bufferevent */
+	if (sock_ctx->fd != -1)
+		close(sock_ctx->fd);
+	sock_ctx->fd = -1;
+
+	if (conn->tls != NULL)
+		SSL_free(conn->tls);
 	conn->tls = NULL;
+	
 	return;
 }
 
@@ -123,5 +114,5 @@ int associate_fd(connection* conn, evutil_socket_t ifd) {
 	return 0;
  err:
 	log_printf(LOG_ERROR, "associate_fd failed.\n");
-	return -1; /* No return info available; lookup libevent log */
+	return -ENOMEM; /* TODO: choose better errno code? */
 }

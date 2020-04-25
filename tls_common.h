@@ -24,16 +24,9 @@
 #include "daemon_structs.h"
 
 
-/* for set_conn_type */
+/* for set_connection_type() */
 #define SERVER_CONN 0
 #define CLIENT_CONN 1
-
-
-
-
-void tls_bev_write_cb(struct bufferevent *bev, void *arg);
-void tls_bev_read_cb(struct bufferevent *bev, void *arg);
-void tls_bev_event_cb(struct bufferevent *bev, short events, void *arg);
 
 /* setsockopt/getsockopt */
 
