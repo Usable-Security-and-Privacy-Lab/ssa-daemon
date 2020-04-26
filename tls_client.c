@@ -4,12 +4,14 @@
 #include <openssl/ssl.h>
 #include <event2/bufferevent.h>
 #include <event2/bufferevent_ssl.h>
+#include <event2/event.h>
 
 #include "config.h"
 #include "log.h"
 #include "tls_client.h"
 #include "tls_common.h"
 #include "daemon_structs.h"
+#include "bev_callbacks.h"
 
 
 SSL_CTX* client_settings_init(char* path) {
@@ -90,7 +92,14 @@ int client_SSL_new(connection* conn, daemon_context* daemon) {
 	return 0;
 }
 
-/* TODO: finish error reporting & cleanup within this function */
+/**
+ * Prepares a client connection by creating/configuring bufferevents and 
+ * setting hostname validation.
+ * 
+ * @param sock_ctx The socket context of the connection to be set up.
+ * @returns 0 on success; -errno on failure. In the event of a failure, it is
+ * left to the calling function to clean up sock_ctx and set its error state.
+ */
 int client_connection_setup(sock_context* sock_ctx) {
 
 	daemon_context* daemon = sock_ctx->daemon;
@@ -144,6 +153,6 @@ int client_connection_setup(sock_context* sock_ctx) {
  err:
 	log_printf(LOG_ERROR, "Failed to set up client/server facing bufferevent [direct mode]\n");
 
-	/* left for the calling function to clean up */
+	/* left for the calling function to clean up errors */
 	return ret;
 }

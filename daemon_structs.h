@@ -9,7 +9,6 @@
 
 #define ID_NOT_SET 0 /* for connection and sock_context id */
 #define MAX_HOSTNAME 255
-
 #define NOT_CONN_BEV -1 /** Designation for bufferevent with no set fd */
 
 enum connection_state {

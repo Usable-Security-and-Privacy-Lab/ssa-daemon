@@ -416,29 +416,45 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	log_printf(LOG_DEBUG, "Accept_cb called.\n");
 
 	log_printf(LOG_INFO, "Received connection!\n");
-	if (evutil_make_socket_nonblocking(fd) == -1) {
-		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
-			 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-		EVUTIL_CLOSESOCKET(fd);
-		return;
-	}
-
+	
 	port = get_port(address);
 
 	sock_ctx = (sock_context*)hashmap_get(daemon->sock_map_port, port);
 	if (sock_ctx == NULL) {
-		log_printf(LOG_ERROR, "Got an unauthorized connection on port %d\n", port);
+		log_printf(LOG_ERROR,
+				"Got an unauthorized connection on port %d\n", port);
 		EVUTIL_CLOSESOCKET(fd);
 		return;
 	}
 
+	switch(sock_ctx->conn->state) {
+	case CLIENT_CONNECTING:
+		break; /* safe state */
+	default:
+		log_printf(LOG_ERROR, "Bad connection accepted; shouldn't happen\n");
+		goto err;
+	}
+
+	if (evutil_make_socket_nonblocking(fd) == -1) {
+		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
+			 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+		goto err;
+	}
+
 	log_printf_addr(&sock_ctx->rem_addr);
+	int ret = associate_fd(sock_ctx->conn, fd);
+	if (ret < 0)
+		goto err;
+
 	hashmap_del(daemon->sock_map_port, port);
-
-	associate_fd(sock_ctx->conn, fd);
-
 	sock_ctx->conn->state = CLIENT_CONNECTED;
-	log_printf(LOG_DEBUG, "Finished calling accept_cb\n");
+	return;
+ err:
+
+	hashmap_del(daemon->sock_map_port, port); /* TODO: is this safe? */
+	connection_shutdown(sock_ctx);
+	EVUTIL_CLOSESOCKET(fd);
+	sock_ctx->conn->state = CONN_ERROR;
 	return;
 }
 
@@ -455,8 +471,6 @@ void accept_error_cb(struct evconnlistener *listener, void *ctx) {
     
 	struct event_base* base = NULL;
 	int err = EVUTIL_SOCKET_ERROR();
-	log_printf(LOG_ERROR, "Got an error %d (%s) on the listener\n", 
-			err, evutil_socket_error_to_string(err));
 
 	switch (err) {
 	case ENETDOWN:
@@ -470,8 +484,12 @@ void accept_error_cb(struct evconnlistener *listener, void *ctx) {
 	case ECONNABORTED:
 	case EINTR:
 		/* all these errors can be ignored */
+		log_printf(LOG_INFO, "Got a nonfatal error %d (%s) on the listener\n", 
+				err, evutil_socket_error_to_string(err));
 		break;
 	default:
+		log_printf(LOG_ERROR, "Fatal error %d (%s) on the main listener\n", 
+				err, evutil_socket_error_to_string(err));
 		base = evconnlistener_get_base(listener);
 		event_base_loopexit(base, NULL);
 	}
@@ -509,7 +527,7 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	evutil_socket_t ifd = -1;
 	int ret = 0, port;
 
-	log_printf(LOG_DEBUG, "Listener_Accept_cb called.\n");
+	log_printf(LOG_INFO, "New connection incoming for server\n");
 
 	ret = evutil_make_socket_nonblocking(efd);
 	if (ret != 0) { 
@@ -521,7 +539,18 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	ret = sock_context_new(&accepting_sock_ctx, daemon, ID_NOT_SET);
 	if (ret != 0)
 		goto err;
+
 	accepting_sock_ctx->fd = efd;
+
+	ret = connection_new(&(accepting_sock_ctx->conn));
+	if (ret != 0)
+		goto err;
+
+	accepting_sock_ctx->conn->state = SERVER_CONNECTING;
+
+	ret = accept_SSL_new(accepting_sock_ctx->conn, listening_sock_ctx->conn);
+	if (ret != 0)
+		goto err;
 
 	ifd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (ifd == -1) {
@@ -537,36 +566,24 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 		goto err;
 	}
 
-	if (bind(ifd, (struct sockaddr*)&int_addr, sizeof(int_addr)) == -1) {
-		perror("listener_accept_cb bind failed");
+	if (bind(ifd, (struct sockaddr*)&int_addr, sizeof(int_addr)) == -1)
 		goto err;
-	}
 
 	/* refresh the sockaddr info to get the port the kernel assigned us */
-	if (getsockname(ifd, (struct sockaddr*)&int_addr, &intaddr_len) == -1) {
-		perror("getsockname in listener_accept_cb failed");
+	if (getsockname(ifd, (struct sockaddr*)&int_addr, &intaddr_len) == -1)
 		goto err;
-	}
 
-	ret = connection_new(&(accepting_sock_ctx->conn));
-	if (ret != 0)
-		goto err;
-	accepting_sock_ctx->conn->state = SERVER_CONNECTING;
-
-	ret = accept_SSL_new(accepting_sock_ctx->conn, listening_sock_ctx->conn);
-	if (ret != 0)
-		goto err;
 	ret = accept_connection_setup(accepting_sock_ctx, listening_sock_ctx, ifd);
 	if (ret != 0)
 		goto err;
-	
+
 	/* now convert the random port the kernel had assigned us */
 	port = (int)ntohs((&int_addr)->sin_port);
 	hashmap_add(daemon->sock_map_port, port, (void*)accepting_sock_ctx);
 	return;
  err:
 	log_printf(LOG_ERROR, "Failed to receive remote client connection: "
-			  "closing connection.\n");
+			"closing connection.\n");
 
 	if (accepting_sock_ctx != NULL) {
 		if (accepting_sock_ctx->conn != NULL)
@@ -576,7 +593,7 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	}
 
 	if (ifd != -1)
-		EVUTIL_CLOSESOCKET(ifd); /* closes twice if bufferevent assigned */
+		EVUTIL_CLOSESOCKET(ifd); /* BUG: Closes twice if bufferevent assigned */
 	return;
 }
 
@@ -596,7 +613,7 @@ void listener_accept_error_cb(struct evconnlistener *listener, void *arg) {
 	case ENETUNREACH:
 	case ECONNABORTED:
 	case EINTR:
-		log_printf(LOG_INFO, "Caught an error %d (%s) on a server listener\n", 
+		log_printf(LOG_INFO, "Recoverable error %d (%s) on a server listener\n",
 				err, evutil_socket_error_to_string(err));
 		/* all these errors can be ignored */
 		break;
@@ -607,9 +624,9 @@ void listener_accept_error_cb(struct evconnlistener *listener, void *arg) {
 		SSL_free(sock_ctx->conn->tls);
 		evconnlistener_free(listener);
 		sock_ctx->fd = -1;
+		sock_ctx->conn->state = CONN_ERROR;
 
-		/* TODO: determine appropriate way to handle error. */
-		/* (shutting down the daemon is not appropriate) */
+		/* TODO: determine appropriate way to send error report to program */
 		break;
 	}
 	return;
@@ -908,7 +925,10 @@ void bind_cb(daemon_context* daemon, unsigned long id,
  * @param id The ID of the socket to attempt to connect. This is used along
  * with a hashmap (sock_map) found in the daemon context in order to retrieve
  * the context specific to the socket being called by the user.
- * TODO: Fill in the other parameters here.
+ * @param int_addr The address of the internal peer calling these functions.
+ * @param int_addrlen The length of int_addr.
+ * @param ext_addr The address of the server we're attempting to connect to.
+ * @param ext_addlen The length of ext_addr
  * @param blocking Set as 1 if the user's socket is blocking, or 0
  * if it is set as non-blocking. If it is non-blocking, then this function 
  * will notify the kernel with the EINPROGRESS errno code before returning.
@@ -950,9 +970,10 @@ void connect_cb(daemon_context* daemon, unsigned long id,
 		goto err;
 	}
 
-	/* TODO: test to see if this overrides bind() in bad ways */
 	sock_ctx->int_addr = *int_addr;
 	sock_ctx->int_addrlen = int_addrlen;
+	sock_ctx->rem_addr = *rem_addr;
+	sock_ctx->rem_addrlen = rem_addrlen;
 
 	response = client_connection_setup(sock_ctx);
 	if (response != 0)
@@ -963,14 +984,11 @@ void connect_cb(daemon_context* daemon, unsigned long id,
 		response = -EVUTIL_SOCKET_ERROR();
 		goto err;
 	}
-	
+
 	port = get_port(int_addr);
 	log_printf(LOG_INFO, "Placing sock_ctx for port %d\n", port);
 
 	hashmap_add(daemon->sock_map_port, port, sock_ctx);
-	sock_ctx->rem_addr = *rem_addr;
-	sock_ctx->rem_addrlen = rem_addrlen;
-
 	sock_ctx->conn->state = CLIENT_CONNECTING;
 
 	if (!blocking) {
@@ -992,8 +1010,6 @@ void listen_cb(daemon_context* daemon, unsigned long id,
 	
 	sock_context* sock_ctx = NULL;
 	int response = 0;
-	
-	log_printf(LOG_DEBUG, "Listen_cb called\n");
 
 	sock_ctx = (sock_context*)hashmap_get(daemon->sock_map, id);
 	if (sock_ctx == NULL) {
@@ -1036,10 +1052,17 @@ void listen_cb(daemon_context* daemon, unsigned long id,
 	sock_ctx->conn->state = SERVER_LISTENING;
 
 	netlink_notify_kernel(daemon, id, response);
-	log_printf(LOG_DEBUG, "listen_cb completed.\n");
+	log_printf(LOG_DEBUG, "port now listening for incoming connections\n");
 	return;
  err:
-	log_printf(LOG_ERROR, "listen_cb failed: .\n");
+	log_printf(LOG_ERROR, "listen_cb failed: %i.\n", response);
+	netlink_notify_kernel(daemon, id, response);
+
+	/* listener is the last failable thing set; no need to check it */
+	SSL_free(sock_ctx->conn->tls);
+	EVUTIL_CLOSESOCKET(sock_ctx->fd);
+
+	sock_ctx->conn->state = CONN_ERROR;
 	return;
 }
 
@@ -1064,7 +1087,7 @@ void associate_cb(daemon_context* daemon, unsigned long id,
 	port = get_port(int_addr);
 	sock_ctx = hashmap_get(daemon->sock_map_port, port);
 	if (sock_ctx == NULL) {
-		log_printf(LOG_ERROR, "port provided in associate_cb not found");
+		log_printf(LOG_ERROR, "port provided in associate_cb not found\n");
 		netlink_notify_kernel(daemon, id, -EBADF);
 		return;
 	}
@@ -1091,42 +1114,38 @@ void close_cb(daemon_context* daemon_ctx, unsigned long id) {
 
 	sock_ctx = (sock_context*)hashmap_get(daemon_ctx->sock_map, id);
 	if (sock_ctx == NULL) {
-		/* TODO: return error here */
+		/* TODO: return error here? */
 		return;
 	}
 
 	switch (sock_ctx->conn->state) {
-	case SERVER_CONNECTED:
-		/* This is an orphan server connection.
-		 * We don't host its corresponding listen socket
-		 * But we were given control of the remote peer
-		 * connection */
-		hashmap_del(daemon_ctx->sock_map, id);
-		connection_free(sock_ctx->conn);
-		free(sock_ctx);
-		return;
-	case CLIENT_CONNECTED:
-	case CLIENT_CONNECTING: /* TODO: maybe here?? */
-		/* connections under the control of the tls_wrapper code
-		 * clean up themselves as a result of the close event
-		 * received from one of the endpoints. In this case we
-		 * only need to clean up the sock_ctx */
-		hashmap_del(daemon_ctx->sock_map, id);
-		connection_free(sock_ctx->conn);
-		free(sock_ctx);
-		return;
-	case SERVER_LISTENING:
-		hashmap_del(daemon_ctx->sock_map, id);
-		evconnlistener_free(sock_ctx->listener);
+	case CONN_ERROR:
+	case DISCONNECTED:
+		/* sockets in this state should have everything freed/closed */
 		free(sock_ctx->conn);
-		free(sock_ctx);
-		return;
-	default:
-		hashmap_del(daemon_ctx->sock_map, id);
-		EVUTIL_CLOSESOCKET(sock_ctx->fd);
-		free(sock_ctx);
-		return;
+		break;
+	case CLIENT_NEW:
+	case SERVER_NEW:
+		SSL_free(sock_ctx->conn->tls);
+		free(sock_ctx->conn);
+		break;
+	case CLIENT_CONNECTING:
+	case SERVER_CONNECTING:
+	case CLIENT_CONNECTED:
+	case SERVER_CONNECTED:
+		connection_shutdown(sock_ctx);
+		connection_free(sock_ctx->conn);
+		break;
+	case SERVER_LISTENING:
+		evconnlistener_free(sock_ctx->listener);
+		SSL_free(sock_ctx->conn->tls);
+		free(sock_ctx->conn);
+		break;
 	}
+
+	free(sock_ctx);
+	hashmap_del(daemon_ctx->sock_map, id);
+	return;
 }
 
 void upgrade_cb(daemon_context* daemon_ctx, unsigned long id, 

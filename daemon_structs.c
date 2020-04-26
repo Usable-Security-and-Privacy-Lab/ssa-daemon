@@ -57,8 +57,19 @@ void connection_shutdown(sock_context* sock_ctx) {
 	
 	connection* conn = sock_ctx->conn;
 
-	if (conn->tls != NULL)
-		SSL_shutdown(conn->tls);
+	if (conn->tls != NULL) {
+		switch (conn->state) {
+		case CLIENT_CONNECTED:
+		case SERVER_CONNECTED:
+			SSL_shutdown(conn->tls);
+			break;
+		default:
+			break;
+		}
+		
+		SSL_free(conn->tls);
+	}
+	conn->tls = NULL;
 
 	if (sock_ctx->listener != NULL) 
 		evconnlistener_free(sock_ctx->listener);
@@ -77,10 +88,6 @@ void connection_shutdown(sock_context* sock_ctx) {
 		close(sock_ctx->fd);
 	sock_ctx->fd = -1;
 
-	if (conn->tls != NULL)
-		SSL_free(conn->tls);
-	conn->tls = NULL;
-	
 	return;
 }
 

@@ -5,11 +5,13 @@
 
 #include <event2/bufferevent.h>
 #include <event2/bufferevent_ssl.h>
+#include <event2/event.h>
 #include <openssl/err.h>
 
-#include "tls_server.h"
+#include "bev_callbacks.h"
 #include "daemon_structs.h"
 #include "log.h"
+#include "tls_server.h"
 
 SSL_CTX* server_settings_init(char* path) {
 	const char* cipher_list = "ECDHE-ECDSA-AES256-GCM-SHA384:"
@@ -76,14 +78,23 @@ SSL_CTX* server_settings_init(char* path) {
     return NULL;
 }
 
+/**
+ * Allocates a new SSL struct set with the daemon's set server settings.
+ * On failure, the old SSL struct is preserved in the connection.
+ */
 int server_SSL_new(connection* conn, daemon_context* daemon) {
-	if (conn->tls != NULL)
-		SSL_free(conn->tls);
-	conn->tls = SSL_new(daemon->server_settings);
-	if (conn->tls == NULL) {
+	
+	SSL* temp = SSL_new(daemon->server_settings);
+	if (temp == NULL) {
 		/* TODO: determine if the error was actually an out-of-memory issue */
 		return -ENOMEM;
 	}
+	
+	if (conn->tls != NULL)
+		SSL_free(conn->tls);
+
+	conn->tls = temp;
+
 	return 0;
 }
 
@@ -127,11 +138,10 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 		goto err;
 	}
 
-	/* TODO: use this?
 	#if LIBEVENT_VERSION_NUMBER >= 0x02010000
 	bufferevent_openssl_set_allow_dirty_shutdown(accept_conn->secure.bev, 1);
-	*/
-
+	#endif
+	
 	accept_conn->plain.bev = bufferevent_socket_new(daemon->ev_base, 
 			ifd, BEV_OPT_CLOSE_ON_FREE);
 
@@ -144,13 +154,12 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 	accept_conn->addr = internal_addr;
 	accept_conn->addrlen = internal_addrlen;
 	
-	/* Register callbacks for reading and writing to both bevs */
-	/* server_bev_event_cb gets the full socket_context */
 	bufferevent_setcb(accept_conn->plain.bev, common_bev_read_cb, 
 			common_bev_write_cb, server_bev_event_cb, new_sock);
 	bufferevent_setcb(accept_conn->secure.bev, common_bev_read_cb, 
 			common_bev_write_cb, server_bev_event_cb, new_sock);
 	
+	/* This will still result in a CONNECTED event--TLS also has to connect */
 	ret = bufferevent_enable(accept_conn->secure.bev, EV_READ | EV_WRITE);
 	if (ret != 0) {
 		ret = -EVUTIL_SOCKET_ERROR();
