@@ -233,18 +233,26 @@ The downside is that you have to keep track of a BIO pointer with this, and you 
 #### Creating a File Descriptor
 * This isn’t specific to OpenSSL, but I thought it would be useful to add just for the sake of not having to look it up in case you forget the c socket method.
 
-* In simpler days, creating a file descriptor to a socket was done only using `int socket(int domain, int type, int protocol)`. Now, however, we need to do more than this (partially because there are both IPv4 and IPv6 internet addresses, among other things).
+* In simpler days, creating a file descriptor to a socket was done only using `int socket(int domain, int type, int protocol)`. Now, however, we need to do more than his (partially because there are both IPv4 and IPv6 internet addresses, among other things).
 
 * To get a linked list of potential domains, types and protocols, use `int getaddrinfo(char *host, char *service, struct addrinfo *hints, struct addrinfo **result)`. With the proper inputs, result will yield a list of structs with all the info needed to both create a socket (by using `socket()`) and connect to it (by using `connect()`).
 
 * Error Checking: `socket()` will return -1 and set errno in the event of an error. On the other hand, `getaddrinfo()` will return 0 on success and a non-zero error code on failure.
 
 #### Temporarily Disable Nagle's Algorithm (Optional)
-* Nagle’s Algorithm is implemented by default in TCP connections; in an oversimplified way, it makes packets more efficient by holding off on sending them until they are full. However, due to the fact that TLS 1.3 has only one server response in the official handshake, this can sometimes cause the connection to hang for up to a few seconds before beginning to transmit/receive packets.
+* Nagle’s Algorithm is implemented by default in TCP connections. A simplified way to describe it is that it makes packets more efficient by holding off on sending them until they are full of data. However, due to the fact that TLS 1.3 has only one server response in the official handshake, this can sometimes cause the connection to hang for up to a few seconds before beginning to transmit/receive packets. For this reason, it is usually considered good practice to disable Nagle’s algorithm during the TLS handshake.
 
-* For this reason, it is sometimes considered good practice to disable Nagle’s algorithm during the TLS handshake.
+* To do this, use `setsockopt(int fd, int lvl, int optname, void *optval, socklen_t *oplen)`. Note that `fd` is the socket file descriptor you have successfully connected using; `lvl` should be set to `IPPROTO_TCP`; optname should be set to `TCP_NODELAY`; `optval` should be the addres of an int with value 1, cast to a char pointer; and oplen should be set to sizeof(int). The last two are mostly legacy use, from what I can tell. Taken together, this looks like: 
 
-* To do this, use `setsockopt(int fd, int lvl, int optname, void *optval, socklen_t *oplen)`. Note that `fd` is the socket file descriptor you have successfully connected using; `lvl` should be set to `IPPROTO_TCP`; optname should be set to `TCP_NODELAY`; `optval` should be the addres of an int with value 1, cast to a char pointer; and oplen should be set to sizeof(int). The last two are mostly legacy use, from what I can tell. To demonstrate more clearly, use `int sockopt_flag = 1; setsockopt(clientfd, IPPROTO_TCP, TCP_NODELAY, (char *)&sockopt_flag, sizeof(int));`.
+    ```C
+    #include <sys/types.h>
+    #include <sys/socket.h>
+
+    int flag = 1; 
+    setsosckopt(clientfd, IPPROTO_TCP, TCP_NODELAY, 
+            (char*) &flag, sizeof(int));
+
+    ```
 
 * Presumably, you can re-enable Nagle’s Algorithm afterwards by using the same function, but with `~TCP_NODELAY` instead. I have not tested this though, so check before using.
 
@@ -358,7 +366,18 @@ This part covers everything that involves the actual handshake, exchanging of ce
 
 * This function is NOT documented at all in OpenSSL’s man pages, even though it works reliably and would be incredibly useful to know about… its source can be found [here](https://github.com/openssl/openssl/blob/e7fb44e7c3f7a37ff83a6b69ba51a738e549bf5c/crypto/ocsp/ocsp_prn.c).
 
-* To create a BIO object that will work for such a function, use `BIO *bio = BIO_new(BIO_s_fd()); BIO_set_fd(bio, 2, BIO_NOCLOSE); /* 2=file descriptor for stderr, NOCLOSE to not close fd after use */`. To avoid memory leaks, once finished with the object use: `BIO_free_all(bio);`
+* To create a BIO object that will work for such a function, see the following code snippet:  
+
+    ```C
+    #include <openssl/bio.h>
+
+    BIO *bio = BIO_new(BIO_s_fd());
+    BIO_set_fd(bio, 2, BIO_NOCLOSE);
+    /* 2=file descriptor for stderr, NOCLOSE to not close fd after use */
+    ```
+
+
+    To avoid memory leaks, once finished with the object use: `BIO_free_all(bio);`
 
 * An OCSP Response may have several responses chained together. To check this, use `OCSP_resp_count(OCSP_BASICRESP *basic_resp)`. This returns the number responses (which should correspond to the number of certificates you are trying to verify).
 
@@ -677,11 +696,37 @@ In order to better understand the way that servers use an SSL_CTX and SSL object
 
 * And, to allow the port to begin doing SYN/ACK connections, we call `int listen(int sockfd, int backlog)`. Note that `backlog` is the maximum amount of connections the server will receive and hold ready for us to begin communicating with.
 
-* Now onto the part where OpenSSL comes in. Servers that accept connections from many different clients normally have a loop to do so; an example of how this may be implemented is shown below: `/* listening_fd already set up */ while(true) { int new_fd = accept(listening_fd, … ); handle_connection(new_fd);}`
+* Now onto the part where OpenSSL comes in. Servers that accept connections from many different clients normally have a loop to do so; an example of how this may be implemented is shown below: 
+    ```C
+    #include <sys/socket.h>
 
-* Note that `handle_connection` might be handled by a thread or some other concurrent implementation; what matters is that once a TCP connection has been established, we need to handle the client initiating an HTTPS connection on top of that. 
+    /* listening_fd already set up beforehand */ 
+    while(1) { 
+        int new_fd = accept(listening_fd, ...); 
+        handle_connection(new_fd);
+    }
+    ```
+    Note that `handle_connection` might be handled by a thread or some other concurrent implementation; what matters is that once a TCP connection has been established, we need to handle the client initiating an HTTPS connection on top of that. 
 
-* So, in order to do this we must have a unique SSL object for every time we call accept() and work with a new client. It might look like this: `/* listening_fd already set up */ /* SSL_CTX *ctx also set up */ while(true) { int new_fd = accept(listening_fd, … ); SSL *ssl = SSL_new(ctx); SSL_set_fd(ssl, new_fd); if (SSL_accept(ssl) <= 0) { handle_failure(); } else { handle_connection(ssl); }}`
+* So, in order to do this we must have a unique SSL object for every time we call accept() and work with a new client. It might look like this: 
+
+    ```C
+    #include <sys/socket.h>
+    #include <openssl/ssl.h>
+
+    /* listening_fd already set up */
+    /* SSL_CTX *ctx also set up */
+    while(true) { 
+        int new_fd = accept(listening_fd, ...);
+        SSL *ssl = SSL_new(ctx);
+        SSL_set_fd(ssl, new_fd);
+        if (SSL_accept(ssl) <= 0) {
+            handle_failure(); 
+        } else { 
+            handle_connection(ssl);
+        }
+    }
+    ```
 
 #### Providing a Unique SSL Object For Every Connection
 * As explained above, each new accepted connection must have its own unique SSL object in order to function normally and securely. 
@@ -768,7 +813,7 @@ If you look at the OpenSSL manpages on errors or error reporting, you’ll quick
 #### Handling a Verification Error
 * The best way to handle an error in the handshake process is to catch it as it happens. OpenSSL specifies a callback function that will be called every time an error occurs in the handshake. This can be passed in using `SSL_CTX_set_verify(SSL_CTX *ctx, int mode, SSL_verify_cb *verify_callback)`.
 
-* `verify_callback` is meant to be a function pointer to a function with two parameters: `verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)`.
+* `verify_callback` is meant to be a function pointer to a function with two parameters: `verify_callback(int preverify_ok, X509_STORE_CTX *x509_ctx)`
 
 * This function pointer is what we can use to catch and handle errors. To do so, one would write a function containing the above parameters, and then pass the name of the function (without parentheses) in as the third argument for `SSL_CTX_set_verify()`.
 
