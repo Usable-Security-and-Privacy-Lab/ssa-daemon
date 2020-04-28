@@ -97,14 +97,15 @@ struct nl_sock* netlink_connect(tls_daemon_ctx_t* ctx) {
 	int group;
 	int family;
 	struct nl_sock* netlink_sock = nl_socket_alloc();
-	nl_socket_set_local_port(netlink_sock, ctx->port);
-	nl_socket_disable_seq_check(netlink_sock);
-	ctx->netlink_sock = netlink_sock;
-	nl_socket_modify_cb(netlink_sock, NL_CB_VALID, NL_CB_CUSTOM, handle_netlink_msg, (void*)ctx);
 	if (netlink_sock == NULL) {
 		log_printf(LOG_ERROR, "Failed to allocate socket\n");
 		return NULL;
 	}
+
+	nl_socket_set_local_port(netlink_sock, ctx->port);
+	nl_socket_disable_seq_check(netlink_sock);
+	ctx->netlink_sock = netlink_sock;
+	nl_socket_modify_cb(netlink_sock, NL_CB_VALID, NL_CB_CUSTOM, handle_netlink_msg, (void*)ctx);
 
 	if (genl_connect(netlink_sock) != 0) {
 		log_printf(LOG_ERROR, "Failed to connect to Generic Netlink control\n");
@@ -133,7 +134,10 @@ struct nl_sock* netlink_connect(tls_daemon_ctx_t* ctx) {
 void netlink_recv(evutil_socket_t fd, short events, void *arg) {
 	//log_printf(LOG_INFO, "Got a message from the kernel!\n");
 	struct nl_sock* netlink_sock = (struct nl_sock*)arg;
+
+	/* Receives messages and triggers the set callback (handle_netlink_msg) */
 	nl_recvmsgs_default(netlink_sock);
+
 	return;
 }
 
