@@ -279,6 +279,7 @@ void netlink_notify_kernel(daemon_context* ctx, unsigned long id, int response) 
 		return;
 	}
 	msg_head = genlmsg_put(msg, NL_AUTO_PID, NL_AUTO_SEQ, ctx->netlink_family, 0, 0, SSA_NL_C_RETURN, 1);
+	/* BUG: should be NL_AUTO_PORT rather than NL_AUTO_PID...? */
 	if (msg_head == NULL) {
 		log_printf(LOG_ERROR, "Failed in genlmsg_put\n");
 		return;

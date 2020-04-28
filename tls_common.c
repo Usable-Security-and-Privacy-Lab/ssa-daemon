@@ -5,9 +5,36 @@
 
 #include <string.h>
 
+#include <openssl/err.h>
+
 int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist);
 int get_ciphers_strlen(STACK_OF(SSL_CIPHER)* ciphers);
 int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len);
+
+
+
+/**
+ * Meant to be called after a general OpenSSL function fails; takes the set
+ * OpenSSL error code in the error queue and associates it with the current
+ * socket
+ */
+void set_sock_tls_error(sock_context* sock_ctx) {
+	unsigned long ssl_err = ERR_get_error();
+
+	if (ssl_err == 0) {
+		log_printf(LOG_ERROR, "Error occurred but not captured by OpenSSL\n");
+		sock_ctx->error_code = 0;
+	}
+}
+
+
+
+void set_tls_connection_error(sock_context* sock_ctx) {
+
+}
+
+
+
 
 /*
  *******************************************************************************

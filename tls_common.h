@@ -28,8 +28,14 @@
 #define SERVER_CONN 0
 #define CLIENT_CONN 1
 
-/* setsockopt/getsockopt */
 
+
+void set_tls_error(sock_context* sock_ctx);
+void set_tls_connection_error(sock_context* sock_ctx);
+
+
+
+/* setsockopt/getsockopt */
 int get_peer_certificate(connection* conn, char** data, unsigned int* len);
 int get_peer_identity(connection* conn_ctx, char** data, unsigned int* len);
 int get_hostname(connection* conn_ctx, char** data, unsigned int* len);

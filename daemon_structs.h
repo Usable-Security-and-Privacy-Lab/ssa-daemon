@@ -53,6 +53,7 @@ typedef struct connection_st {
 typedef struct sock_context_st {
 	unsigned long id;
 	evutil_socket_t fd;
+	connection* conn;
 
 	struct sockaddr int_addr; /** Internal address--the program using SSA */
 	int int_addrlen;
@@ -67,7 +68,8 @@ typedef struct sock_context_st {
 
 	struct evconnlistener* listener;
 	char rem_hostname[MAX_HOSTNAME];
-	connection* conn;
+
+	int error_code;
 	daemon_context* daemon;
 } sock_context;
 
