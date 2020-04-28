@@ -1,4 +1,5 @@
 # Understanding OpenSSL
+*Written by Nathaniel Bennett*
 
 ## Table of Contents
 [Client Documentation](#tls-client-documentation)
