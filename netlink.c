@@ -145,17 +145,18 @@ struct nl_sock* netlink_connect(daemon_context* ctx) {
  * @see netlink_connect
  */
 void netlink_recv(evutil_socket_t fd, short events, void *arg) {
-	//log_printf(LOG_INFO, "Got a message from the kernel!\n");
+	log_printf(LOG_INFO, "Got a message from the kernel!\n");
 	struct nl_sock* netlink_sock = (struct nl_sock*)arg;
 	nl_recvmsgs_default(netlink_sock);
 	return;
 }
 
 int handle_netlink_msg(struct nl_msg* msg, void* arg) {
+
 	daemon_context* ctx = (daemon_context*)arg;
-        struct nlmsghdr* nlh;
-        struct genlmsghdr* gnlh;
-        struct nlattr* attrs[SSA_NL_A_MAX + 1];
+	struct nlmsghdr* nlh;
+	struct genlmsghdr* gnlh;
+	struct nlattr* attrs[SSA_NL_A_MAX + 1];
 
 	unsigned long id;
 	char comm[PATH_MAX];
@@ -305,7 +306,14 @@ void netlink_notify_kernel(daemon_context* ctx, unsigned long id, int resp) {
 		log_printf(LOG_ERROR, "Failed to send netlink msg\n");
 		return;
 	}
-	//log_printf(LOG_INFO, "Sent msg to kernel\n");
+	log_printf(LOG_DEBUG, "Sending msg to kernel:\n");
+	log_printf(LOG_DEBUG, "Daemon's local port: %zu\n",
+			nl_socket_get_local_port(ctx->netlink_sock));
+	log_printf(LOG_DEBUG, "Kernel's port: %zu\n",
+			nl_socket_get_peer_port(ctx->netlink_sock));
+
+	log_printf(LOG_DEBUG, "msg_size: %i, id: %lu, resp: %i\n", msg_size, id, resp);
+	log_printf(LOG_INFO, "Sent msg to kernel\n");
 	nlmsg_free(msg);
 	return;
 }
@@ -344,15 +352,23 @@ void netlink_send_and_notify_kernel(daemon_context* ctx,
 		return;
 	}
 	nlmsg_free(msg);
+
+	log_printf(LOG_DEBUG, "Sending msg to kernel:\n");
+	log_printf(LOG_DEBUG, "Daemon's local port: %zu\n",
+			nl_socket_get_local_port(ctx->netlink_sock));
+	log_printf(LOG_DEBUG, "Kernel's port: %zu\n",
+			nl_socket_get_peer_port(ctx->netlink_sock));
+	log_printf(LOG_DEBUG, "msg_size: %i, id: %lu\n", msg_size, id);
+	log_printf(LOG_DEBUG, "data: %s\n", data);
 	return;
 }
 
-void netlink_handshake_notify_kernel(daemon_context* ctx, unsigned long id, int response) {
+void netlink_handshake_notify_kernel(daemon_context* ctx, unsigned long id, int resp) {
 	int ret;
 	struct nl_msg* msg;
 	void* msg_head;
 	int msg_size = NLMSG_HDRLEN + GENL_HDRLEN +
-		nla_total_size(sizeof(id)) + nla_total_size(sizeof(response));
+		nla_total_size(sizeof(id)) + nla_total_size(sizeof(resp));
 	msg = nlmsg_alloc_size(msg_size);
 	if (msg == NULL) {
 		log_printf(LOG_ERROR, "Failed to allocate message buffer\n");
@@ -368,7 +384,7 @@ void netlink_handshake_notify_kernel(daemon_context* ctx, unsigned long id, int 
 		log_printf(LOG_ERROR, "Failed to insert ID in netlink msg\n");
 		return;
 	}
-	ret = nla_put_u32(msg, SSA_NL_A_RETURN, response);
+	ret = nla_put_u32(msg, SSA_NL_A_RETURN, resp);
 	if (ret != 0) {
 		log_printf(LOG_ERROR, "Failed to insert response in netlink msg\n");
 		return;
@@ -378,7 +394,13 @@ void netlink_handshake_notify_kernel(daemon_context* ctx, unsigned long id, int 
 		log_printf(LOG_ERROR, "Failed to send netlink msg\n");
 		return;
 	}
-	//log_printf(LOG_INFO, "Sent data msg to kernel\n");
 	nlmsg_free(msg);
+
+	log_printf(LOG_DEBUG, "Sending msg to kernel:\n");
+	log_printf(LOG_DEBUG, "Daemon's local port: %zu\n",
+			nl_socket_get_local_port(ctx->netlink_sock));
+	log_printf(LOG_DEBUG, "Kernel's port: %zu\n",
+			nl_socket_get_peer_port(ctx->netlink_sock));
+	log_printf(LOG_DEBUG, "msg_size: %i, id: %lu, resp: %i\n", msg_size, id, resp);
 	return;
 }
