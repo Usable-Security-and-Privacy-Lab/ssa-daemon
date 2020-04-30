@@ -14,10 +14,10 @@ int main() {
 	strcpy((char*)addr.sin_addr.name, "www.google.com");
 	addr.sin_port = htons(443);
 
-	int sock_fd; 
-	if ((sock_fd = socket(PF_INET, SOCK_STREAM, IPPROTO_TLS)) == -1)
+	int sock_fd = socket(PF_INET, SOCK_STREAM, IPPROTO_TLS); 
+	if (sock_fd == -1)
 	{
-        fprintf(stderr, "Error creating socket: %s\n", strerror(errno));
+	fprintf(stderr, "Error creating socket: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
 	if (connect(sock_fd, (struct sockaddr*)&addr, sizeof(addr)) == -1)
@@ -26,7 +26,8 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-	char http_request[] = "GET / HTTP/1.1\r\nHost: expired.badssl.com\r\n\r\n";
+	//char http_request[] = "GET / HTTP/1.1\r\nHost: expired.badssl.com\r\n\r\n";
+	char http_request[] = "GET / HTTP/1.1\r\nHost: www.google.com\r\n\r\n";
 	char http_response[2048];
 	memset(http_response, 0, 2048);
 	printf("sending\n");
