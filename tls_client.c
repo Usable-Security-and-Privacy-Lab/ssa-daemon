@@ -6,7 +6,9 @@
 #include <event2/bufferevent_ssl.h>
 #include <event2/event.h>
 
-#include "config.h"
+#include <openssl/ssl.h>
+#include <openssl/x509.h>
+
 #include "log.h"
 #include "tls_client.h"
 #include "tls_common.h"
@@ -37,30 +39,30 @@ SSL_CTX* client_settings_init(char* path) {
 							   "TLS_CHACHA20_POLY1305_SHA256:"
 							   "TLS_AES_128_CCM_SHA256:"
 							   "TLS_AES_128_CCM_8_SHA256";
-	
+
 	SSL_CTX_set_verify(client_settings, SSL_VERIFY_PEER, NULL);
 	SSL_CTX_set_options(client_settings, SSL_OP_NO_COMPRESSION | SSL_OP_NO_TICKET);
 
-	if (SSL_CTX_set_min_proto_version(client_settings, TLS1_2_VERSION) != 1) 
+	if (SSL_CTX_set_min_proto_version(client_settings, TLS1_2_VERSION) != 1)
 		goto err;
-	if (SSL_CTX_set_max_proto_version(client_settings, TLS_MAX_VERSION) != 1) 
-		goto err;
-
-	if (SSL_CTX_set_ciphersuites(client_settings, ciphersuites) != 1) 
+	if (SSL_CTX_set_max_proto_version(client_settings, TLS_MAX_VERSION) != 1)
 		goto err;
 
-	if (SSL_CTX_set_cipher_list(client_settings, cipher_list) != 1) 
+	if (SSL_CTX_set_ciphersuites(client_settings, ciphersuites) != 1)
+		goto err;
+
+	if (SSL_CTX_set_cipher_list(client_settings, cipher_list) != 1)
 		goto err;
 
 	if (SSL_CTX_load_verify_locations(client_settings, test_CA_file, CA_folder) != 1)
 		goto err;
 
 	/* TODO: Eventually enable OCSP Stapling, CRL checking and OCSP checking
-	if (SSL_CTX_set_tlsext_status_type(client_settings, TLSEXT_STATUSTYPE_ocsp) == -1) 
+	if (SSL_CTX_set_tlsext_status_type(client_settings, TLSEXT_STATUSTYPE_ocsp) == -1)
 		goto err;
 	if (SSL_CTX_set_tlsext_status_cb(client_settings, <put_callback_function_here>) != 1)
 		goto err;
-	if (SSL_CTX_set_tlsext_status_arg(client_settings, <put_Arg_here>) != 1) 
+	if (SSL_CTX_set_tlsext_status_arg(client_settings, <put_Arg_here>) != 1)
 		goto err;
 	*/
 
@@ -84,7 +86,7 @@ int client_SSL_new(connection* conn, daemon_context* daemon) {
 	SSL* new_ssl = SSL_new(daemon->client_settings);
 	if (new_ssl == NULL)
 		return -ENOMEM; /* BUG: temporary fix. Replace with OpenSSL error. */
-	
+
 	if (conn->tls != NULL)
 		SSL_free(conn->tls);
 	conn->tls = new_ssl;
@@ -93,9 +95,9 @@ int client_SSL_new(connection* conn, daemon_context* daemon) {
 }
 
 /**
- * Prepares a client connection by creating/configuring bufferevents and 
+ * Prepares a client connection by creating/configuring bufferevents and
  * setting hostname validation.
- * 
+ *
  * @param sock_ctx The socket context of the connection to be set up.
  * @returns 0 on success; -errno on failure. In the event of a failure, it is
  * left to the calling function to clean up sock_ctx and set its error state.
@@ -116,18 +118,18 @@ int client_connection_setup(sock_context* sock_ctx) {
 			goto err;
 		}
 	}
-	
+
 	/* socket set to -1 because we set it later */
-	conn->plain.bev = bufferevent_socket_new(daemon->ev_base, 
+	conn->plain.bev = bufferevent_socket_new(daemon->ev_base,
 			NOT_CONN_BEV, BEV_OPT_CLOSE_ON_FREE);
 	if (conn->plain.bev == NULL) {
 		ret = -EVUTIL_SOCKET_ERROR();
 		goto err;
 	}
 
-	conn->secure.bev = bufferevent_openssl_socket_new(daemon->ev_base, 
+	conn->secure.bev = bufferevent_openssl_socket_new(daemon->ev_base,
 			sock_ctx->fd, conn->tls, BUFFEREVENT_SSL_CONNECTING, 0);
-	if (conn->secure.bev == NULL) { 
+	if (conn->secure.bev == NULL) {
 		ret = -EVUTIL_SOCKET_ERROR();
 		goto err;
 	}
@@ -138,9 +140,9 @@ int client_connection_setup(sock_context* sock_ctx) {
 	#endif /* LIBEVENT_VERSION_NUMBER >= 0x02010000 */
 
 	/* Register callbacks for reading and writing to both bevs */
-	bufferevent_setcb(conn->secure.bev, common_bev_read_cb, 
+	bufferevent_setcb(conn->secure.bev, common_bev_read_cb,
 			common_bev_write_cb, client_bev_event_cb, sock_ctx);
-	bufferevent_setcb(conn->plain.bev, common_bev_read_cb, 
+	bufferevent_setcb(conn->plain.bev, common_bev_read_cb,
 			common_bev_write_cb, client_bev_event_cb, sock_ctx);
 
 	ret = bufferevent_enable(conn->secure.bev, EV_READ | EV_WRITE);
