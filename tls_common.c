@@ -25,12 +25,14 @@ void set_sock_tls_error(sock_context* sock_ctx) {
 		log_printf(LOG_ERROR, "Error occurred but not captured by OpenSSL\n");
 		sock_ctx->error_code = 0;
 	}
+
+	/* TODO: finish */
 }
 
 
 
 void set_tls_connection_error(sock_context* sock_ctx) {
-
+	/* TODO: stub */
 }
 
 
@@ -38,7 +40,7 @@ void set_tls_connection_error(sock_context* sock_ctx) {
 
 /*
  *******************************************************************************
- *                            GETSOCKOPT FUNCTIONS 
+ *                            GETSOCKOPT FUNCTIONS
  *******************************************************************************
  */
 
@@ -71,13 +73,13 @@ int get_peer_certificate(connection* conn, char** data, unsigned int* len) {
 		ret = -ENOMEM;
 		goto end;
 	}
-		
+
 	if (PEM_write_bio_X509(bio, cert) == 0) {
 		/* TODO: get specific error from OpenSSL */
 		ret = -ENOTSUP;
 		goto end;
 	}
-		
+
 	cert_len = BIO_get_mem_data(bio, &bio_data);
 	pem_data = malloc(cert_len + 1); /* +1 for null terminator */
 	if (pem_data == NULL) {
@@ -140,7 +142,7 @@ int get_hostname(connection* conn_ctx, char** data, unsigned int* len) {
  */
 int get_enabled_ciphers(connection* conn, char** data, unsigned int* len) {
 	char* ciphers_str = "";
-	
+
 
 
 
@@ -176,9 +178,9 @@ int get_enabled_ciphers(connection* conn, char** data, unsigned int* len) {
  */
 
 int set_connection_type(connection* conn, daemon_context* daemon, int type) {
-	
+
 	int ret = 0;
-	
+
 	switch(conn->state) {
 	case CLIENT_NEW:
 	case SERVER_NEW:
@@ -186,7 +188,7 @@ int set_connection_type(connection* conn, daemon_context* daemon, int type) {
 			ret = client_SSL_new(conn, daemon);
 		else /* type == SERVER_CONN */
 			ret = server_SSL_new(conn, daemon);
-		
+
 		if (ret == 0)
 			conn->state = (type == CLIENT_CONN) ? CLIENT_NEW : SERVER_NEW;
 		break;
@@ -231,7 +233,7 @@ int disable_cipher(connection* conn, char* cipher) {
 	int ret = clear_from_cipherlist(cipher, cipherlist);
 	if (ret != 0)
 		return -EINVAL;
-	
+
 	return 0;
 }
 
@@ -255,12 +257,12 @@ int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len) {
 	for (int i = 0; i < sk_SSL_CIPHER_num(ciphers); i++) {
 		const SSL_CIPHER* curr = sk_SSL_CIPHER_value(ciphers, i);
 		const char* cipher = SSL_CIPHER_get_name(curr);
-		
+
 		if ((index + strlen(cipher) + 1) > buf_len) {
 			buf[index-1] = '\0';
 			return -1; /* buf not big enough */
 		}
-		
+
 		strcpy(&buf[index], cipher);
 		index += strlen(cipher);
 		buf[index] = ':';
@@ -273,7 +275,7 @@ int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len) {
 /**
  * Determines the combined string length of all the cipher strings.
  * @param ciphers The cipher list to measure string lengths from.
- * @returns The combined string length of the ciphers in the list (as if 
+ * @returns The combined string length of the ciphers in the list (as if
  * there were ':' characters between each cipher and a terminating
  * '\0' at the end). Never returns an error code.
  */
