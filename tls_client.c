@@ -1,6 +1,8 @@
 #include <errno.h>
 #include <string.h>
 
+#include <unistd.h>
+
 #include <openssl/ssl.h>
 #include <event2/bufferevent.h>
 #include <event2/bufferevent_ssl.h>
@@ -17,14 +19,33 @@
 
 
 SSL_CTX* client_settings_init(char* path) {
-
-    SSL_CTX *client_settings = SSL_CTX_new(TLS_client_method());
-	if (client_settings == NULL)
+	char* CA_file;
+	if(access("/etc/pki/tls/certs/ca-bundle.crt", F_OK) != -1) { //FEDORA
+		log_printf(LOG_INFO, "Found the fedora file.\n");
+		CA_file = (char*)malloc((strlen("/etc/pki/tls/certs/ca-bundle.crt") + 1) * sizeof(char));
+		strcpy(CA_file, "/etc/pki/tls/certs/ca-bundle.crt");
+		//CA_file = "/etc/pki/tls/certs/ca-bundle.crt";
+	}
+	else if (access("/etc/ssl/certs/ca-certificates.crt", F_OK) != -1) { //UBUNTU
+		log_printf(LOG_INFO, "Found the ubuntu file.\n");
+		CA_file = (char*)malloc((strlen("/etc/ssl/certs/ca-certificates.crt") + 1) * sizeof(char));
+		strcpy(CA_file, "/etc/ssl/certs/ca-certificates.crt");
+		//CA_file = "/etc/ssl/certs/ca-certificates.crt";
+	}
+	else { //UNSUPPORTED OS
+		log_printf(LOG_ERROR, "Unable to find valid cert location.\n");
+		printf("ERROR: Unable to find valid cert location.\n");
+	}
+  
+	SSL_CTX *client_settings = SSL_CTX_new(TLS_client_method());
+	if (client_settings == NULL) {
 		goto err_ctx;
+	}
 
 	/* TODO: eventually move these things to a config file */
 	const char* test_CA_file = "test_files/certs/rootCA.pem";
-	const char* CA_file = "/etc/pki/tls/certs/ca-bundle.crt";
+	//const char* CA_file = "/etc/pki/tls/certs/ca-bundle.crt"; //FEDORA
+	//const char* CA_file = "/etc/ssl/certs/ca-certificates.crt"; //UBUNTU
 	const char* CA_folder = "/etc/ssl/certs";
 
 	const char* cipher_list = "ECDHE-ECDSA-AES256-GCM-SHA384:"
@@ -43,19 +64,21 @@ SSL_CTX* client_settings_init(char* path) {
 	SSL_CTX_set_verify(client_settings, SSL_VERIFY_PEER, NULL);
 	SSL_CTX_set_options(client_settings, SSL_OP_NO_COMPRESSION | SSL_OP_NO_TICKET);
 
-	if (SSL_CTX_set_min_proto_version(client_settings, TLS1_2_VERSION) != 1)
+	if (SSL_CTX_set_min_proto_version(client_settings, TLS1_2_VERSION) != 1) {
 		goto err;
-	if (SSL_CTX_set_max_proto_version(client_settings, TLS_MAX_VERSION) != 1)
+	}
+	if (SSL_CTX_set_max_proto_version(client_settings, TLS_MAX_VERSION) != 1) {
 		goto err;
-
-	if (SSL_CTX_set_ciphersuites(client_settings, ciphersuites) != 1)
+	}
+	if (SSL_CTX_set_ciphersuites(client_settings, ciphersuites) != 1) {
 		goto err;
-
-	if (SSL_CTX_set_cipher_list(client_settings, cipher_list) != 1)
+	}
+	if (SSL_CTX_set_cipher_list(client_settings, cipher_list) != 1) {
 		goto err;
-
-	if (SSL_CTX_load_verify_locations(client_settings, test_CA_file, CA_folder) != 1)
+	}
+	if (SSL_CTX_load_verify_locations(client_settings, test_CA_file, CA_folder) != 1) {
 		goto err;
+	}
 
 	/* TODO: Eventually enable OCSP Stapling, CRL checking and OCSP checking
 	if (SSL_CTX_set_tlsext_status_type(client_settings, TLSEXT_STATUSTYPE_ocsp) == -1)
@@ -84,11 +107,13 @@ err_ctx:
 int client_SSL_new(connection* conn, daemon_context* daemon) {
 
 	SSL* new_ssl = SSL_new(daemon->client_settings);
-	if (new_ssl == NULL)
+	if (new_ssl == NULL) {
 		return -ENOMEM; /* BUG: temporary fix. Replace with OpenSSL error. */
+	}
 
-	if (conn->tls != NULL)
+	if (conn->tls != NULL) {
 		SSL_free(conn->tls);
+	}
 	conn->tls = new_ssl;
 
 	return 0;

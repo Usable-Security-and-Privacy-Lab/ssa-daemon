@@ -19,12 +19,19 @@ int main(int argc, char* argv[]) {
 	char http_response[RESPONSE_SIZE];
 
 	if (argc < 3) {
-		printf("USAGE: %s <host name> <port>\n", argv[0]);
-		return 0;
+	        //printf("USAGE: %s <host name> <port>\n", argv[0]);
+		//return 0;
+		char host[] = "www.google.com";
+		char port[] = "443";
+		
+		sock_fd = connect_to_host(host, port);
+		sprintf(http_request,"GET / HTTP/1.1\r\nhost: %s\r\n\r\n", host);
+	} else {
+	       sock_fd = connect_to_host(argv[1], argv[2]);
+	       sprintf(http_request,"GET / HTTP/1.1\r\nhost: %s\r\n\r\n", argv[1]);
 	}
 
-	sock_fd = connect_to_host(argv[1], argv[2]);
-	sprintf(http_request,"GET / HTTP/1.1\r\nhost: %s\r\n\r\n", argv[1]);
+	
 
 	memset(http_response, 0, 2048);
 	send(sock_fd, http_request, strlen(http_request), 0);
