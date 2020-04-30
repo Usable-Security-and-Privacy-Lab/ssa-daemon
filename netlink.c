@@ -145,7 +145,7 @@ struct nl_sock* netlink_connect(daemon_context* ctx) {
  * @see netlink_connect
  */
 void netlink_recv(evutil_socket_t fd, short events, void *arg) {
-	log_printf(LOG_INFO, "Got a message from the kernel!\n");
+
 	struct nl_sock* netlink_sock = (struct nl_sock*)arg;
 	nl_recvmsgs_default(netlink_sock);
 	return;
