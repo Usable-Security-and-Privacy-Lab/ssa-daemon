@@ -4,7 +4,7 @@ CXX_DEBUG_FLAGS=-g
 CXX_RELEASE_FLAGS=-O3 -DNO_LOG
 
 
-EXEC = tls_wrapper
+EXEC = ssa_daemon
 SOURCES = $(wildcard *.c)
 OBJECTS = $(SOURCES:.c=.o)
 STD_INCLUDES = `pkg-config --cflags libnl-3.0`
