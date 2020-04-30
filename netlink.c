@@ -36,7 +36,7 @@
 
 // Attributes
 enum {
-        SSA_NL_A_UNSPEC,
+	SSA_NL_A_UNSPEC,
 	SSA_NL_A_ID,
 	SSA_NL_A_BLOCKING,
 	SSA_NL_A_COMM,
@@ -47,48 +47,48 @@ enum {
 	SSA_NL_A_OPTNAME,
 	SSA_NL_A_OPTVAL,
 	SSA_NL_A_RETURN,
-        SSA_NL_A_PAD,
-        __SSA_NL_A_MAX,
+	SSA_NL_A_PAD,
+	__SSA_NL_A_MAX,
 };
 
 #define SSA_NL_A_MAX (__SSA_NL_A_MAX - 1)
 
 // Operations
 enum {
-        SSA_NL_C_UNSPEC,
-        SSA_NL_C_SOCKET_NOTIFY,
+	SSA_NL_C_UNSPEC,
+	SSA_NL_C_SOCKET_NOTIFY,
 	SSA_NL_C_SETSOCKOPT_NOTIFY,
 	SSA_NL_C_GETSOCKOPT_NOTIFY,
-        SSA_NL_C_BIND_NOTIFY,
-        SSA_NL_C_CONNECT_NOTIFY,
-        SSA_NL_C_LISTEN_NOTIFY,
+	SSA_NL_C_BIND_NOTIFY,
+	SSA_NL_C_CONNECT_NOTIFY,
+	SSA_NL_C_LISTEN_NOTIFY,
 	SSA_NL_C_ACCEPT_NOTIFY,
 	SSA_NL_C_CLOSE_NOTIFY,
 	SSA_NL_C_RETURN,
 	SSA_NL_C_DATA_RETURN,
 	SSA_NL_C_HANDSHAKE_RETURN,
-        __SSA_NL_C_MAX,
+	__SSA_NL_C_MAX,
 };
 
 #define SSA_NL_C_MAX (__SSA_NL_C_MAX - 1)
 
 // Multicast group
 enum ssa_nl_groups {
-        SSA_NL_NOTIFY,
+	SSA_NL_NOTIFY,
 };
 
 /* TODO: specify exact policies and lengths here */
 static struct nla_policy ssa_nl_policy[SSA_NL_A_MAX + 1] = {
-        [SSA_NL_A_UNSPEC] = { .type = NLA_UNSPEC },
+	[SSA_NL_A_UNSPEC] = { .type = NLA_UNSPEC },
 	[SSA_NL_A_ID] = { .type = NLA_UNSPEC },
 	[SSA_NL_A_BLOCKING] = { .type = NLA_UNSPEC },
 	[SSA_NL_A_COMM] = { .type = NLA_UNSPEC },
-        [SSA_NL_A_SOCKADDR_INTERNAL] = { .type = NLA_UNSPEC },
-        [SSA_NL_A_SOCKADDR_EXTERNAL] = { .type = NLA_UNSPEC },
+	[SSA_NL_A_SOCKADDR_INTERNAL] = { .type = NLA_UNSPEC },
+	[SSA_NL_A_SOCKADDR_EXTERNAL] = { .type = NLA_UNSPEC },
 	[SSA_NL_A_SOCKADDR_REMOTE] = { .type = NLA_UNSPEC },
-        [SSA_NL_A_OPTLEVEL] = { .type = NLA_UNSPEC },
-        [SSA_NL_A_OPTNAME] = { .type = NLA_UNSPEC },
-        [SSA_NL_A_OPTVAL] = { .type = NLA_UNSPEC },
+	[SSA_NL_A_OPTLEVEL] = { .type = NLA_UNSPEC },
+	[SSA_NL_A_OPTNAME] = { .type = NLA_UNSPEC },
+	[SSA_NL_A_OPTVAL] = { .type = NLA_UNSPEC },
 	[SSA_NL_A_RETURN] = { .type = NLA_UNSPEC },
 };
 
@@ -306,15 +306,8 @@ void netlink_notify_kernel(daemon_context* ctx, unsigned long id, int resp) {
 		log_printf(LOG_ERROR, "Failed to send netlink msg\n");
 		return;
 	}
-	log_printf(LOG_DEBUG, "Sending msg to kernel:\n");
-	log_printf(LOG_DEBUG, "Daemon's local port: %zu\n",
-			nl_socket_get_local_port(ctx->netlink_sock));
-	log_printf(LOG_DEBUG, "Kernel's port: %zu\n",
-			nl_socket_get_peer_port(ctx->netlink_sock));
-
-	log_printf(LOG_DEBUG, "msg_size: %i, id: %lu, resp: %i\n", msg_size, id, resp);
-	log_printf(LOG_INFO, "Sent msg to kernel\n");
 	nlmsg_free(msg);
+
 	return;
 }
 
@@ -353,13 +346,6 @@ void netlink_send_and_notify_kernel(daemon_context* ctx,
 	}
 	nlmsg_free(msg);
 
-	log_printf(LOG_DEBUG, "Sending msg to kernel:\n");
-	log_printf(LOG_DEBUG, "Daemon's local port: %zu\n",
-			nl_socket_get_local_port(ctx->netlink_sock));
-	log_printf(LOG_DEBUG, "Kernel's port: %zu\n",
-			nl_socket_get_peer_port(ctx->netlink_sock));
-	log_printf(LOG_DEBUG, "msg_size: %i, id: %lu\n", msg_size, id);
-	log_printf(LOG_DEBUG, "data: %s\n", data);
 	return;
 }
 
@@ -396,11 +382,5 @@ void netlink_handshake_notify_kernel(daemon_context* ctx, unsigned long id, int 
 	}
 	nlmsg_free(msg);
 
-	log_printf(LOG_DEBUG, "Sending msg to kernel:\n");
-	log_printf(LOG_DEBUG, "Daemon's local port: %zu\n",
-			nl_socket_get_local_port(ctx->netlink_sock));
-	log_printf(LOG_DEBUG, "Kernel's port: %zu\n",
-			nl_socket_get_peer_port(ctx->netlink_sock));
-	log_printf(LOG_DEBUG, "msg_size: %i, id: %lu, resp: %i\n", msg_size, id, resp);
 	return;
 }
