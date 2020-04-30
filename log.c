@@ -3,7 +3,7 @@
  * Copyright (C) 2017, Mark O'Neill <mark@markoneill.name>
  * All rights reserved.
  * https://owntrust.org
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -29,6 +29,7 @@
 #include <stdarg.h>
 #include <arpa/inet.h>
 #include <string.h>
+#include <time.h>
 #include "log.h"
 
 #ifndef NO_LOG
@@ -141,4 +142,3 @@ int timeval_subtract(struct timeval* result, struct timeval* x, struct timeval* 
 	return x->tv_sec < y_cpy.tv_sec;
 }
 #endif
-
