@@ -35,7 +35,7 @@ SSL_CTX* server_settings_init(char* path) {
 	if (SSL_CTX_set_cipher_list(server_settings, cipher_list) != 1) 
 		goto err;
 
-	/* DEBUG: Temporary */
+	/* DEBUG: Temporary */ /*
 	if (SSL_CTX_load_verify_locations(server_settings, 
 			"test_files/certs/rootCA.pem", NULL) != 1) {
 		log_printf(LOG_DEBUG, "Failed to load verify location.\n");
@@ -64,6 +64,8 @@ SSL_CTX* server_settings_init(char* path) {
 		log_printf(LOG_ERROR, "Certificate chain failed to build.\n");
 		goto err;
 	}
+
+    */
 
 	return server_settings;
  err:
@@ -147,13 +149,13 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 
 	if (accept_conn->plain.bev == NULL) {
 		ret = -EVUTIL_SOCKET_ERROR();
-		log_printf(LOG_ERROR, "Server bufferevent setup failed [listener]\n");
+		log_printf(LOG_ERROR, "Server bev setup failed [listener]\n");
 		goto err;
 	}
 
 	accept_conn->addr = internal_addr;
 	accept_conn->addrlen = internal_addrlen;
-	
+
 	bufferevent_setcb(accept_conn->plain.bev, common_bev_read_cb, 
 			common_bev_write_cb, server_bev_event_cb, new_sock);
 	bufferevent_setcb(accept_conn->secure.bev, common_bev_read_cb, 
@@ -163,7 +165,7 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 	ret = bufferevent_enable(accept_conn->secure.bev, EV_READ | EV_WRITE);
 	if (ret != 0) {
 		ret = -EVUTIL_SOCKET_ERROR();
-		log_printf(LOG_ERROR, "Secure bufferevent enable failed [listener]\n");
+		log_printf(LOG_ERROR, "Secure bev enable failed [listener]\n");
 		goto err;
 	}
 
@@ -176,9 +178,9 @@ err:
 
 
 /*
- **********************************
- * Function from setsockopt()
- **********************************
+ *******************************************************************************
+ *                      SETSOCKOPT FUNCTIONS
+ *******************************************************************************
  */
 int set_remote_hostname(connection* conn_ctx, char* hostname) {
 	if (conn_ctx == NULL) {
