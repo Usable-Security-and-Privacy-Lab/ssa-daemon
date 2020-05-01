@@ -1,9 +1,11 @@
 # Developer Documentation
 
 ## Purpose 
-This document is for developers who want to contribute to the SSA (if you are a developer hoping to utilize the SSA in your application, see docs/user-documentation.md). It is intended to help developers understand the SSA codebase and to explain how to make changes to the SSA and where those changes should happen. 
+The developer documentation is for developers who want to contribute to the SSA (if you are a developer hoping to utilize the SSA in your application, see docs/user-documentation.md). It is intended to help developers understand the SSA codebase and to explain how to make changes to the SSA and where those changes should happen. 
 
 It may be helpful for developers to familiarize themselves with the documentation found in `install-documentaion.md`, `user-documentation.md` and `admin-documentation.md` (all found in the `docs` directory).
+
+This document contains information relevant to the SSA as a whole. For information specific to the daemon or the kernel module, see `daemon.md` and `module.md` in this same directory.
 
 ## Prerequisites
 This documentation assumes you understand the POSIX socket API, meaning you can create simple network clients and servers using calls to `socket`, `bind`, `connect`, etc. It also assumes you are familiar with event-based concurrency. It does _not_ assume that you have any experience in kernel development. Because many contributors to the project are university students, this documentation aims to be accessible to college-level programmers.

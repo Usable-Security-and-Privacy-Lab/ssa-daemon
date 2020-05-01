@@ -99,6 +99,10 @@ int server_create(int port) {
 	struct event_base* ev_base = event_base_new();
     const char* ev_version = event_get_version();
 
+#ifndef NO_LOG
+    const char* ev_version = event_get_version();
+#endif
+
 	if (ev_base == NULL) {
 		perror("event_base_new");
 		return 1;

@@ -3,7 +3,7 @@
  * Copyright (C) 2017-2018, Mark O'Neill <mark@markoneill.name>
  * All rights reserved.
  * https://owntrust.org
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -35,7 +35,7 @@
 #define PORT 8443
 
 /* NOTE: This is not the main function that spins up multiple daemons and all
- * the other features that Mark O'Neil implemented. That is found in 
+ * the other features that Mark O'Neil implemented. That is found in
  * main_original.c. This function is merely to allow easy use of gdb and other
  * debugging tools. */
 int main(int argc, char* argv[]) {
