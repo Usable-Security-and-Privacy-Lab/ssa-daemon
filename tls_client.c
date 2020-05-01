@@ -43,10 +43,10 @@ SSL_CTX* client_settings_init(char* path) {
 	}
 
 	/* TODO: eventually move these things to a config file */
-	//const char* test_CA_file = "test_files/certs/rootCA.pem";
+	const char* test_CA_file = "test_files/certs/rootCA.pem";
 	//const char* CA_file = "/etc/pki/tls/certs/ca-bundle.crt"; //FEDORA
 	//const char* CA_file = "/etc/ssl/certs/ca-certificates.crt"; //UBUNTU
-	//const char* CA_folder = "/etc/ssl/certs";
+
 
 	const char* cipher_list = "ECDHE-ECDSA-AES256-GCM-SHA384:"
 	                          "ECDHE-RSA-AES256-GCM-SHA384:"
@@ -76,7 +76,7 @@ SSL_CTX* client_settings_init(char* path) {
 	if (SSL_CTX_set_cipher_list(client_settings, cipher_list) != 1) {
 		goto err;
 	}
-	if (SSL_CTX_load_verify_locations(client_settings, CA_file, NULL) != 1) {
+	if (SSL_CTX_load_verify_locations(client_settings, test_CA_file, NULL) != 1) {
 		goto err;
 	}
 	free(CA_file);

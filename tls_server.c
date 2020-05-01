@@ -35,7 +35,7 @@ SSL_CTX* server_settings_init(char* path) {
 	if (SSL_CTX_set_cipher_list(server_settings, cipher_list) != 1) 
 		goto err;
 
-	/* DEBUG: Temporary */ /*
+	/* DEBUG: Temporary */
 	if (SSL_CTX_load_verify_locations(server_settings, 
 			"test_files/certs/rootCA.pem", NULL) != 1) {
 		log_printf(LOG_DEBUG, "Failed to load verify location.\n");
@@ -64,8 +64,6 @@ SSL_CTX* server_settings_init(char* path) {
 		log_printf(LOG_ERROR, "Certificate chain failed to build.\n");
 		goto err;
 	}
-
-    */
 
 	return server_settings;
  err:
