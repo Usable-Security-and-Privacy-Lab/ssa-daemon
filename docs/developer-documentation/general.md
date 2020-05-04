@@ -67,7 +67,7 @@ The daemon process is built around an event-loop managed by the [Libevent](https
 	
 	_At this point, a socket has been allocated in the kernel for the client, but the client does not have a file descriptor for it, as its call to `socket` has not yet returned._
 
-2. When the daemon receives the notification, it calls `socket_cb`, which creates a regular socket, begins configuring OpenSSL (`tls_opts_create`), and notifies the kernel (`netlink_notify_kernel`).
+2. When the daemon receives the notification, it calls `socket_cb`, which creates a regular socket, configures OpenSSL to secure default settings (`client_SSL_new`), and notifies the kernel (`netlink_notify_kernel`).
 
 	<img src="diagrams/step2.png" width="300">
 
@@ -88,11 +88,11 @@ The daemon process is built around an event-loop managed by the [Libevent](https
 
 7. The client call to `connect` is intercepted by the kernel module, which calls `tls_inet_connect`. This function saves the destination address, binds the source port, notifies the daemon (`send_connect_notification`), and waits for a response from the daemon.
 	
-8. When the daemon receives the notification, it calls `connect_cb`, which does more OpenSSL configuration (`tls_opts_client_setup`), and then creates 2 bufferevents (`tls_clinet_wrapper_setup`). The first bufferevent (`plain.bev`, created with `bufferevent_socket_new`) is for monitoring the client-facing socket (which as of yet does not exist; the daemon waits to create it until the client's socket connects to it). The second bufferevent (`secure.bev`, created with `bufferevent_openssl_socket_new`) is for monitoring the internet-facing socket. This is an Openssl bufferevent, which means Libevent will perform the TLS handshake and encryption according to the TLS configurations passed to it. The socket created by the daemon in `socket_cb` is registered with `secure.bev`. 
+8. When the daemon receives the notification, it calls `connect_cb`, which configures OpenSSL to use the hostname passed in for validation and creates 2 bufferevents (`client_connection_setup`). The first bufferevent (`plain.bev`, created with `bufferevent_socket_new`) is for monitoring the client-facing socket (which as of yet does not exist; the daemon waits to create it until the client's socket connects to it). The second bufferevent (`secure.bev`, created with `bufferevent_openssl_socket_new`) is for monitoring the internet-facing socket. This is an Openssl bufferevent, which means Libevent will perform the TLS handshake and encryption according to the TLS configurations passed to it. The socket created by the daemon in `socket_cb` is registered with `secure.bev`. 
 
 	<img src="diagrams/step8.png" width="300">
 	
-9. Finally, the `connect_cb` function calls `bufferevent_socket_connect` to asynchronously connect the internet-facing socket with the destination address and perform the TLS handshake. `connect_cb` then returns. Once the daemon's internet-facing socket successfully connects to the destination server, an event is detected on its bufferevent (`secure.bev`), causing `tls_bev_event_cb` to be called. This function notifies the kernel that the connection is established (`netlink_handshake_notify_kernel`).
+9. Finally, the `connect_cb` function calls `bufferevent_socket_connect` to asynchronously connect the internet-facing socket with the destination address and perform the TLS handshake. `connect_cb` then returns. Once the daemon's internet-facing socket successfully connects to the destination server, an event is detected on its bufferevent (`secure.bev`), causing `client_bev_event_cb` to be called. This function notifies the kernel that the connection is established (`netlink_handshake_notify_kernel`).
 
 	<img src="diagrams/step9.png" width="400">
 
@@ -116,7 +116,7 @@ The daemon process is built around an event-loop managed by the [Libevent](https
 
 13. The client call to `send` causes data to be sent from the client's socket to the daemon's client-facing socket, triggering a read event on `plain.bev`. This causes a call to `tls_bev_read_cb`, which transfers the data to the out-buffer of the internet-facing socket. That data is then encrypted and sent by Libevent. 
 
-14. When a response is received from the destination server, Libevent decrypts it and places it in `secure.bev`'s input buffer, triggering a read event. This causes a call to `tls_bev_read_cb`, which transfers the data to the out-buffer of the client-facing socket. That data is then sent to the client by Libevent, where it is retrieved by the client's call to `recv`.
+14. When a response is received from the destination server, Libevent decrypts it and places it in `secure.bev`'s input buffer, triggering a read event. This causes a call to `common_bev_read_cb`, which transfers the data to the out-buffer of the client-facing socket. That data is then sent to the client by Libevent, where it is retrieved by the client's call to `recv`.
 
 #### Part E: Closing the socket
 
@@ -137,7 +137,10 @@ associate_fd					| ssa-daemon/tls_common.c
 bufferevent_openssl_socket_new  | (defined by Libevent)
 bufferevent_socket_connect		| (defined by Libevent)
 bufferevent_socket_new			| (defined by Libevent)
+client_connection_setup			| ssa-daemon/tls_client.c
+client_SSL_new					| ssa-daemon/tls_client.c
 close_cb						| ssa-daemon/daemon.c
+common_bev_read_cb				| ssa-daemon/bev_callbacks.c
 connect_cb						| ssa-daemon/daemon.c
 event_base_dispatch				| (defined by Libevent)
 netlink_handshake_notify_kernel	| ssa-daemon/netlink.c
@@ -155,13 +158,9 @@ server_create					| ssa-daemon/daemon.c
 set_tls_prot_inet_stream		| ssa/tls_inet.c
 setsockopt_cb					| ssa-daemon/daemon.c
 socket_cb						| ssa-daemon/daemon.c
-tls_bev_event_cb				| ssa-daemon/tls_wrapper.c
-tls_bev_read_cb					| ssa-daemon/tls_wrapper.c
-tls_clinet_wrapper_setup		| ssa-daemon/tls_wrapper.c
+tls_bev_event_cb				| ssa-daemon/bev_callbacks.c
 tls_common_setsockopt			| ssa/tls_common.c
 tls_inet_connect				| ssa/tls_inet.c
 tls_inet_init_sock				| ssa/tls_inet.c
 tls_inet_release				| ssa/tls_inet.c
 tls_inet_setsockopt				| ssa/tls_inet.c
-tls_opts_client_setup			| ssa-daemon/tls_wrapper.c
-tls_opts_create					| ssa-daemon/tls_wrapper.c
