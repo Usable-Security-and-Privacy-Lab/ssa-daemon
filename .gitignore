@@ -66,3 +66,8 @@ test_files/simple_test/https_client
 *.swo
 .vscode/settings.json
 ssa_daemon
+
+#CLion files
+.idea/*
+cmake-build-debug/*
+CMakeLists.txt
