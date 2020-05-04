@@ -133,7 +133,7 @@ int client_connection_setup(sock_context* sock_ctx) {
 	daemon_context* daemon = sock_ctx->daemon;
 	connection* conn = sock_ctx->conn;
 	char* hostname = sock_ctx->rem_hostname;
-	int ret = 0;
+	int ret;
 
 	if (hostname != NULL) {
 		log_printf(LOG_INFO, "Hostname passed in is: %s\n", hostname);
@@ -179,8 +179,7 @@ int client_connection_setup(sock_context* sock_ctx) {
 
 	return 0;
  err:
-	log_printf(LOG_ERROR, "Failed to set up client/server facing bufferevent [direct mode]\n");
-
-	/* left for the calling function to clean up errors */
+	log_printf(LOG_ERROR, "Failed to set up client/server bev [direct mode]\n");
+	/* NOTE: intentionally left for the calling function to clean up errors */
 	return ret;
 }
