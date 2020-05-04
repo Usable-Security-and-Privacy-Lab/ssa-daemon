@@ -36,7 +36,7 @@ For more details, look for the paper (when it's published) or Mark O'Neil's Diss
     collect2: error: ld returned 1 exit status
     make: *** [Makefile:14: client] Error 1
     ```
-7. session_test - uses Open_SSL (not the SSA); tests resuming a session after connecting once
+7. session_test - uses OpenSSL (not the SSA); tests resuming a session after connecting once
 8. simple_test - has two servers, https_client.c and epoll_client.c
     - https_client.c - uses SSA to connect to host; host is given as a cmd line argument
     - epoll_client.c - uses SSA; expects 1 cmd line argument which is the number of connections you want to make; default connects to www.phonixteam.net; uses epoll; to use this, modifications need to be made to line 242 and the make file needs to be changed
