@@ -1,5 +1,7 @@
 # Daemon Documentation
 
+*Note: this is for branch* `old-code`. *Documentation will be updated in due time.*
+
 ## Purpose 
 The developer documentation is for developers who want to contribute to the SSA (if you are a developer hoping to utilize the SSA in your application, see docs/user-documentation.md). It is intended to help developers understand the SSA codebase and to explain how to make changes to the SSA and where those changes should happen. 
 

@@ -1,6 +1,8 @@
 # Understanding Netlink and Generic-Netlink
 *Written by Nathaniel Bennett*
 
+*In Progress: this documentation is not finished.*
+
 ### Introduction
 
 Netlink is a standard means of inter-process and kernel communication for regular programs, created by the developers of the Linux kernel. It utilizes the same BSD Sockets interface that most network connections do, and its libraries are generally included by default in the kernel. 
