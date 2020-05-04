@@ -58,7 +58,7 @@ int get_peer_certificate(connection* conn, char** data, unsigned int* len) {
 	char* bio_data = NULL;
 	char* pem_data = NULL;
 	unsigned int cert_len;
-	int ret = 0;
+	int ret;
 
 	cert = SSL_get_peer_certificate(conn->tls);
 	if (cert == NULL) {
@@ -179,23 +179,25 @@ int get_enabled_ciphers(connection* conn, char** data, unsigned int* len) {
 
 int set_connection_type(connection* conn, daemon_context* daemon, int type) {
 
-	int ret = 0;
+	int ret;
 
 	switch(conn->state) {
 	case CLIENT_NEW:
 	case SERVER_NEW:
-		if (type == CLIENT_CONN)
-			ret = client_SSL_new(conn, daemon);
-		else /* type == SERVER_CONN */
-			ret = server_SSL_new(conn, daemon);
-
-		if (ret == 0)
-			conn->state = (type == CLIENT_CONN) ? CLIENT_NEW : SERVER_NEW;
-		break;
+		break; /* Socket in good state */
 	default:
-		ret = -ENOPROTOOPT;
-		break;
+		return -ENOPROTOOPT;
 	}
+
+	if (type == CLIENT_CONN)
+		ret = client_SSL_new(conn, daemon);
+	else /* type == SERVER_CONN */
+		ret = server_SSL_new(conn, daemon);
+
+	if (ret != 0)
+		conn->state = CONN_ERROR;
+	else
+		conn->state = (type == CLIENT_CONN) ? CLIENT_NEW : SERVER_NEW;
 
 	return ret;
 }
