@@ -126,7 +126,7 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 	connection* accept_conn = new_sock->conn;
 	struct sockaddr* internal_addr = &old_sock->int_addr;
 	int internal_addrlen = old_sock->int_addrlen;
-	int ret = 0;
+	int ret;
 
 	accept_conn->secure.bev = bufferevent_openssl_socket_new(daemon->ev_base, 
 			new_sock->fd, new_sock->conn->tls, BUFFEREVENT_SSL_ACCEPTING, 0);
@@ -134,7 +134,7 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 	if (accept_conn->secure.bev == NULL) {
 		ret = -EVUTIL_SOCKET_ERROR();
 		/* free the SSL here (BEV_OPT_CLOSE_ON_FREE does everywhere else) */
-		log_printf(LOG_ERROR, "Client bufferevent setup failed [listener]\n");
+		log_printf(LOG_ERROR, "Client bev setup failed [listener]\n");
 		goto err;
 	}
 
