@@ -1011,7 +1011,6 @@ void listen_cb(daemon_context* daemon, unsigned long id,
 	case SERVER_NEW:
 		break; /* good state */
 	case CLIENT_NEW:
-		/* TODO: remove this once tests are updated */
 		response = server_SSL_new(sock_ctx->conn, daemon);
 		if (response != 0)
 			goto err;
