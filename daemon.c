@@ -438,6 +438,7 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	}
 
 	log_printf_addr(&sock_ctx->rem_addr);
+
 	int ret = associate_fd(sock_ctx->conn, fd);
 	if (ret < 0)
 		goto err;
