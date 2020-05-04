@@ -250,7 +250,7 @@ evutil_socket_t create_upgrade_socket(int port) {
 	evutil_socket_t sock;
 	int ret;
 	struct sockaddr_un addr;
-	int addrlen;
+	unsigned long addrlen;
 	char name[MAX_UPGRADE_SOCKET];
 	int namelen = snprintf(name, MAX_UPGRADE_SOCKET, "%ctls_upgrade%d", '\0', port);
 	addr.sun_family = AF_UNIX;
@@ -752,14 +752,6 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 		response = set_connection_type(sock_ctx->conn, ctx, SERVER_CONN);
 		break;
 	case TLS_HOSTNAME:
-		response = -ENOPROTOOPT; /* get only */
-		break;
-	case TLS_PEER_IDENTITY:
-		response = -ENOPROTOOPT; /* get only */
-		break;
-	case TLS_PEER_CERTIFICATE_CHAIN:
-		response = -ENOPROTOOPT; /* get only */
-		break;
 	case TLS_TRUSTED_CIPHERS:
 	case TLS_ID:
 		response = -ENOPROTOOPT; /* all get only */
@@ -993,8 +985,10 @@ void connect_cb(daemon_context* daemon, unsigned long id,
 	}
 	return;
  err:
-	connection_shutdown(sock_ctx);
-	conn->state = CONN_ERROR;
+	if (sock_ctx != NULL) {
+		connection_shutdown(sock_ctx);
+		conn->state = CONN_ERROR;
+	}
 
 	netlink_notify_kernel(daemon, id, response);
 	return;
