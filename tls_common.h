@@ -35,13 +35,16 @@ void set_tls_connection_error(sock_context* sock_ctx);
 
 
 
-/* setsockopt/getsockopt */
+/* setsockopt */
 int get_peer_certificate(connection* conn, char** data, unsigned int* len);
 int get_peer_identity(connection* conn_ctx, char** data, unsigned int* len);
 int get_hostname(connection* conn_ctx, char** data, unsigned int* len);
+int get_enabled_ciphers(connection* conn, char** data, unsigned int* len);
 
+/* setsockopt */
 int set_connection_type(connection* conn, daemon_context* daemon, int type);
 int set_trusted_peer_certificates(connection* conn, char* value);
 int disable_cipher(connection* conn, char* cipher);
-int get_enabled_ciphers(connection* conn, char** data, unsigned int* len);
+int set_certificate_chain(connection* conn, daemon_context* ctx, char* value);
+
 

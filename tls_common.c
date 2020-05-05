@@ -3,7 +3,11 @@
 #include "tls_common.h"
 #include "tls_server.h"
 
+#include <fcntl.h> /* for S_IFDIR/S_IFREG constants */
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include <openssl/err.h>
 
@@ -199,6 +203,47 @@ int set_connection_type(connection* conn, daemon_context* daemon, int type) {
 	else
 		conn->state = (type == CLIENT_CONN) ? CLIENT_NEW : SERVER_NEW;
 
+	return ret;
+}
+
+int set_certificate_chain(connection* conn, daemon_context* ctx, char* path) {
+
+	struct stat file_stats;
+	int ret = 0;
+
+	ret = stat(path, &file_stats);
+	if (ret != 0) {
+		ret = -errno;
+		goto err;
+	}
+
+	if (S_ISREG(file_stats.st_mode)) {
+		/* is a file */
+		ret = SSL_use_certificate_chain_file(conn->tls, path);
+		if (ret != 1) {
+			log_printf(LOG_ERROR, "Failed to load cert chain\n");
+			/* TODO: set errno to SSL error */
+			ret = -EBADF;
+			goto err;
+		}
+
+	} else if (S_ISDIR(file_stats.st_mode)) {
+		/* is a directory */
+		/* TODO: add functionality for reading from folder.
+		 * See man fts for functions needed to do this */
+
+		/* stub */
+		ret = -EBADF;
+		goto err;
+	} else {
+		/* could be a link, a socket, etc */
+		ret = -EBADF;
+		goto err;
+	}
+
+	return 0;
+ err:
+	log_printf(LOG_ERROR, "Failed to set cert chain: %i\n", ret);
 	return ret;
 }
 
