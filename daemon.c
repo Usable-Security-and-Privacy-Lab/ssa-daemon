@@ -986,6 +986,7 @@ void connect_cb(daemon_context* daemon, unsigned long id,
 	}
 	return;
  err:
+	
 	if (sock_ctx != NULL) {
 		connection_shutdown(sock_ctx);
 		conn->state = CONN_ERROR;
@@ -1070,7 +1071,7 @@ void associate_cb(daemon_context* daemon, unsigned long id,
 				  struct sockaddr* int_addr, int int_addrlen) {
 
 	sock_context* sock_ctx;
-	int port;
+	int port, ret;
 
 	log_printf(LOG_DEBUG, "associate_cb called.\n");
 
@@ -1078,11 +1079,22 @@ void associate_cb(daemon_context* daemon, unsigned long id,
 	sock_ctx = hashmap_get(daemon->sock_map_port, port);
 	if (sock_ctx == NULL) {
 		log_printf(LOG_ERROR, "port provided in associate_cb not found\n");
-		netlink_notify_kernel(daemon, id, -EBADF);
-		return;
+		ret = -EBADF;
+		goto err;
 	}
 
 	hashmap_del(daemon->sock_map_port, port);
+
+	switch(sock_ctx->conn->state) {
+	case SERVER_CONNECTING:
+		break; /* safe state */
+	case CONN_ERROR:
+		ret = -EBADFD;
+		goto err;
+	default:
+		ret = -EINVAL;
+		goto err;
+	}
 
 	sock_ctx->id = id;
 	sock_ctx->conn->state = SERVER_CONNECTED;
@@ -1090,6 +1102,9 @@ void associate_cb(daemon_context* daemon, unsigned long id,
 
 	netlink_notify_kernel(daemon, id, 0);
 	log_printf(LOG_DEBUG, "associate_cb finished\n");
+	return;
+ err:
+	netlink_notify_kernel(daemon, id, ret);
 	return;
 }
 
