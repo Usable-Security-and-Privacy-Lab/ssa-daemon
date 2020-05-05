@@ -754,6 +754,10 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 		break;
 	case TLS_CERTIFICATE_CHAIN:
 		response = set_certificate_chain(sock_ctx->conn, ctx, (char*) value);
+		break;
+	case TLS_PRIVATE_KEY:
+		response = set_private_key(sock_ctx->conn, ctx, value);
+		break;
 	case TLS_HOSTNAME:
 	case TLS_TRUSTED_CIPHERS:
 	case TLS_ID:

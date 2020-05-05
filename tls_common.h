@@ -46,5 +46,6 @@ int set_connection_type(connection* conn, daemon_context* daemon, int type);
 int set_trusted_peer_certificates(connection* conn, char* value);
 int disable_cipher(connection* conn, char* cipher);
 int set_certificate_chain(connection* conn, daemon_context* ctx, char* value);
+int set_private_key(connection* conn, daemon_context* ctx, char* path);
 
 

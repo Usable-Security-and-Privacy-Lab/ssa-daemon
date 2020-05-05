@@ -209,7 +209,7 @@ int set_connection_type(connection* conn, daemon_context* daemon, int type) {
 int set_certificate_chain(connection* conn, daemon_context* ctx, char* path) {
 
 	struct stat file_stats;
-	int ret = 0;
+	int ret;
 
 	ret = stat(path, &file_stats);
 	if (ret != 0) {
@@ -244,6 +244,50 @@ int set_certificate_chain(connection* conn, daemon_context* ctx, char* path) {
 	return 0;
  err:
 	log_printf(LOG_ERROR, "Failed to set cert chain: %i\n", ret);
+	return ret;
+}
+
+int set_private_key(connection* conn, daemon_context* ctx, char* path) {
+
+	struct stat file_stats;
+	int ret;
+
+	ret = stat(path, &file_stats);
+	if (ret != 0) {
+		ret = -errno;
+		goto err;
+	}
+	if (!S_ISREG(file_stats.st_mode)) {
+		ret = -EBADF;
+		goto err;
+	}
+
+	ret = SSL_use_PrivateKey_file(conn->tls, path, SSL_FILETYPE_PEM);
+	if (ret == 1) /* pem key loaded */
+		return check_key_cert_pair(conn->tls); 
+	else
+		ERR_clear_error();
+
+	ret = SSL_use_PrivateKey_file(conn->tls, path, SSL_FILETYPE_ASN1);
+	if (ret == 1) /* ASN.1 key loaded */
+		return check_key_cert_pair(conn->tls);  
+	else
+		ERR_clear_error();
+
+	ret = SSL_use_PrivateKey_file(conn->tls, path, SSL_FILETYPE_PEM);
+	if (ret == 1) /* pem RSA key loaded */
+		return check_key_cert_pair(conn->tls); 
+	else
+		ERR_clear_error();
+
+	ret = SSL_use_RSAPrivateKey_file(conn->tls, path, SSL_FILETYPE_ASN1);
+	if (ret == 1) /* ASN.1 RSA key loaded */
+		return check_key_cert_pair(conn->tls); 
+	
+	/* TODO: set ret to OpenSSL error */
+	ret = -EBADF;
+ err:
+	log_printf(LOG_ERROR, "Failed to set private key: %i\n", ret);
 	return ret;
 }
 
@@ -363,4 +407,22 @@ int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist) {
 		return 0;
 	else
 		return -1;
+}
+
+
+
+int check_key_cert_pair(SSL* tls) {
+	if (SSL_check_private_key(tls) != 1) {
+		log_printf(LOG_ERROR, "Key and certificate don't match.\n");
+		goto err;
+	}
+
+	if (SSL_build_cert_chain(tls, SSL_BUILD_CHAIN_FLAG_CHECK) != 1) {
+		log_printf(LOG_ERROR, "Certificate chain failed to build.\n");
+		goto err;
+	}
+
+	return 0;
+ err:
+	return -EPROTO; /* Protocol err--key didn't match or chain didn't build */
 }
