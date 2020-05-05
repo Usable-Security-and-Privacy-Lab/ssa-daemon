@@ -21,13 +21,13 @@
 SSL_CTX* client_settings_init(char* path) {
 	char* CA_file;
 	if(access("/etc/pki/tls/certs/ca-bundle.crt", F_OK) != -1) { //FEDORA
-		log_printf(LOG_INFO, "Found the fedora file.\n");
-		CA_file = (char*)malloc((strlen("/etc/pki/tls/certs/ca-bundle.crt") + 1) * sizeof(char));
+		log_printf(LOG_INFO, "Found the fedora CA file.\n");
+		CA_file = "/etc/pki/tls/certs/ca-bundle.crt") + 1) * sizeof(char));
 		strcpy(CA_file, "/etc/pki/tls/certs/ca-bundle.crt");
 		//CA_file = "/etc/pki/tls/certs/ca-bundle.crt";
 	}
 	else if (access("/etc/ssl/certs/ca-certificates.crt", F_OK) != -1) { //UBUNTU
-		log_printf(LOG_INFO, "Found the ubuntu file.\n");
+		log_printf(LOG_INFO, "Found the ubuntu CA file.\n");
 		CA_file = (char*)malloc((strlen("/etc/ssl/certs/ca-certificates.crt") + 1) * sizeof(char));
 		strcpy(CA_file, "/etc/ssl/certs/ca-certificates.crt");
 		//CA_file = "/etc/ssl/certs/ca-certificates.crt";
