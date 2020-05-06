@@ -25,44 +25,42 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/un.h>
+#include <assert.h>
+#include <errno.h>
+#include <netdb.h>
+#include <signal.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
 #include <unistd.h>
-#include <errno.h>
-#include <signal.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <sys/un.h>
-#include <netdb.h>
-#include <assert.h>
 
 #include <event2/bufferevent.h>
 #include <event2/event.h>
 #include <event2/listener.h>
 #include <event2/util.h>
-
+#include <netlink/genl/ctrl.h>
+#include <netlink/genl/genl.h>
 #include <openssl/bio.h>
-#include <openssl/ssl.h>
+#include <openssl/conf.h>
+#include <openssl/engine.h>
 #include <openssl/err.h>
 #include <openssl/rand.h>
-#include <openssl/engine.h>
-#include <openssl/conf.h>
+#include <openssl/ssl.h>
 
-#include <netlink/genl/genl.h>
-#include <netlink/genl/ctrl.h>
-
-#include "in_tls.h"
 #include "daemon.h"
+#include "daemon_structs.h"
 #include "hashmap.h"
-#include "netlink.h"
+#include "in_tls.h"
 #include "log.h"
-
+#include "netlink.h"
 #include "tls_client.h"
 #include "tls_common.h"
 #include "tls_server.h"
-#include "daemon_structs.h"
+
 
 #define MAX_UPGRADE_SOCKET  18
 #define HASHMAP_NUM_BUCKETS	100
@@ -445,13 +443,18 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 
 	hashmap_del(daemon->sock_map_port, port);
 	sock_ctx->conn->state = CLIENT_CONNECTED;
+
+	/* TODO: send netlink_notify_kernel here...? */
+
 	return;
  err:
 
 	hashmap_del(daemon->sock_map_port, port); /* TODO: is this safe? */
 	connection_shutdown(sock_ctx);
 	EVUTIL_CLOSESOCKET(fd);
+
 	sock_ctx->conn->state = CONN_ERROR;
+	
 	return;
 }
 
