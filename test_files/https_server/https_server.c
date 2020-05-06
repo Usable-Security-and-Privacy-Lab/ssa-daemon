@@ -31,18 +31,7 @@ int main() {
 
 	int fd = socket(PF_INET, SOCK_STREAM, IPPROTO_TLS);
 	bind(fd, (struct sockaddr*)&addr, sizeof(addr));
-	if (setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, CERT_FILE_A, sizeof(CERT_FILE_A)) == -1) {
-		perror("cert a");
-	}
-	if (setsockopt(fd, IPPROTO_TLS, TLS_PRIVATE_KEY, KEY_FILE_A, sizeof(KEY_FILE_A)) == -1) {
-		perror("key a");
-	}
-	if (setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, CERT_FILE_B, sizeof(CERT_FILE_B)) == -1) {
-		perror("cert b");
-	}
-	if (setsockopt(fd, IPPROTO_TLS, TLS_PRIVATE_KEY, KEY_FILE_B, sizeof(KEY_FILE_B)) == -1) {
-		perror("key b");
-	}
+	
 	listen(fd, SOMAXCONN);
 
 	while (1) {	
