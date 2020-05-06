@@ -14,7 +14,7 @@
 int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist);
 int get_ciphers_strlen(STACK_OF(SSL_CIPHER)* ciphers);
 int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len);
-
+int check_key_cert_pair(SSL* tls);
 
 
 /**
