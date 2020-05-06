@@ -22,7 +22,7 @@ SSL_CTX* client_settings_init(char* path) {
 	char* CA_file;
 	if(access("/etc/pki/tls/certs/ca-bundle.crt", F_OK) != -1) { //FEDORA
 		log_printf(LOG_INFO, "Found the fedora CA file.\n");
-		CA_file = "/etc/pki/tls/certs/ca-bundle.crt") + 1) * sizeof(char));
+		CA_file = (char*)malloc((strlen("/etc/pki/tls/certs/ca-bundle.crt") + 1) * sizeof(char));
 		strcpy(CA_file, "/etc/pki/tls/certs/ca-bundle.crt");
 		//CA_file = "/etc/pki/tls/certs/ca-bundle.crt";
 	}
@@ -173,7 +173,7 @@ int client_connection_setup(sock_context* sock_ctx) {
 
 	ret = bufferevent_enable(conn->secure.bev, EV_READ | EV_WRITE);
 	if (ret < 0) {
-		ret = -ENOMEM; /* BUG: Not the best errno output */
+		ret = -ECONNABORTED;
 		goto err;
 	}
 
