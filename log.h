@@ -27,7 +27,7 @@
 #ifndef LOG_H
 #define LOG_H
 
-#include <time.h>
+#include <sys/time.h>
 #include <sys/socket.h>
 
 typedef enum log_level {
