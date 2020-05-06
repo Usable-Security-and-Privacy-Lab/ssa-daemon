@@ -39,11 +39,11 @@ then 0 will be returned. If an error occured during connection or validation,
   ---------------|---------------
   `EBADFD`       | The socket that `sockfd` refers to is in a bad state (such as if it already failed a previous call to `connect`).
   `ECONNABORTED` | The user-to-daemon or daemon-to-address connection process failed.
-  `EPROTO`       | The TLS Handshake failed to pass verification.
+  `EPROTO`       | The peer was unable to pass TLS validation or did not provide secure enough connection parameters.
   `ECONNREFUSED` | The instantiated the TLS handshake shutdown (TODO: they invalidate?)
   `EBADF`        | No socket exists in the daemon that is associated with `sockfd`.
   `EOPNOTSUPP`   | The socket was not in the right state to connect (such as if `listen()` had already been called on `sockfd`)
-  `ENOMEM`       | Insuffient memory available for alloctions within the SSA daemon.
+  `ENOMEM`       | Insuffient memory available for necessary connection establishment within the daemon.
   
 ## NOTES
 
