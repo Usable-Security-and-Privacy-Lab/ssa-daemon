@@ -112,13 +112,12 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 	connection* conn = sock_ctx->conn;
 	unsigned long id = sock_ctx->id;
 	int bev_error = EVUTIL_SOCKET_ERROR();
+	long ssl_err;
 
 	channel* endpoint = (bev == conn->secure.bev) 
 			? &conn->plain : &conn->secure;
 	channel* startpoint = (bev == conn->secure.bev) 
 			? &conn->secure : &conn->plain;
-
-
 
 	if (events & BEV_EVENT_CONNECTED) {
 		if (conn->state == CLIENT_CONNECTING)
@@ -133,26 +132,24 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 		handle_event_eof(conn, startpoint, endpoint);
 	}
 
-
-
+	/* Connection closed--usually due to error or EOF */
 	if (endpoint->closed == 1 && startpoint->closed == 1) {
-		connection_shutdown(sock_ctx);
-		long ssl_error;
-
 		switch (conn->state) {
 		case CLIENT_CONNECTING:
-			/*
-			ssl_error = SSL_get_verify_result(conn->tls);
-			if (ssl_error != X509_V_OK) {
-				   This error should only be returned on validation failure 
+			ssl_err = SSL_get_verify_result(conn->tls);
+
+			if (ssl_err != X509_V_OK) {
+				/* This error should only be returned on validation failure */
+				const char* err_string = X509_verify_cert_error_string(ssl_err);
+				log_printf(LOG_ERROR, "Error in validation: %i - %s\n", 
+						ssl_err, err_string);
 				netlink_handshake_notify_kernel(daemon, id, -EPROTO);
-				   TODO: set SSL error in socket_context here 
+				/* TODO: set SSL error in socket_context here */
 			} else {
-				   Errors to do with something other than the validation 
+				/* Errors to do with something other than the validation */
 				netlink_handshake_notify_kernel(daemon, id, -ECONNABORTED);
-			} */
-			
-			netlink_handshake_notify_kernel(daemon, id, -ECONNABORTED);
+			}
+
 			conn->state = CONN_ERROR;
 			break;
 		case CLIENT_CONNECTED:
@@ -164,7 +161,9 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 		default:
 			conn->state = CONN_ERROR;
 		}
+		connection_shutdown(sock_ctx);
 	}
+
 	return;
  err:
 	connection_shutdown(sock_ctx);
@@ -296,9 +295,6 @@ void handle_event_error(connection* conn,
 			startpoint->bev == conn->secure.bev 
 			? "encrypted" : "plaintext");
 
-	if (error == 0) {
-		return;
-	}
 	
 	if (error == ECONNRESET || error == EPIPE) {
 		log_printf(LOG_INFO, "Connection closed\n");
@@ -315,15 +311,6 @@ void handle_event_error(connection* conn,
 		/* close other buffer if we're closing and it has no data left */
 		if (evbuffer_get_length(out_buf) == 0)
 			endpoint->closed = 1;
-	}
-
-	/* If we're on the secure connection then print out OpenSSL errors */
-	if (startpoint->bev == conn->secure.bev) {
-		while ((ssl_err = bufferevent_get_openssl_error(startpoint->bev))) {
-			log_printf(LOG_ERROR, "SSL error from bufferevent: %s [%s]\n",
-					ERR_func_error_string(ssl_err),
-					ERR_reason_error_string(ssl_err));
-		}
 	}
 
 	return;
