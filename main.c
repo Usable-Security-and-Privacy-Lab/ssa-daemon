@@ -50,5 +50,7 @@ int main(int argc, char* argv[]) {
 	}
 
     server_create(PORT);
+
+	log_close();
     return EXIT_SUCCESS;
 }

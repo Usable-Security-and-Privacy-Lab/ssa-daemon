@@ -113,11 +113,6 @@ int server_create(int port) {
 
     log_printf(LOG_INFO, "Using libevent version %s with %s behind the scenes\n", ev_version, event_base_get_method(ev_base));
 
-	SSL_library_init();
-	ERR_load_crypto_strings();
-	SSL_load_error_strings();
-	OpenSSL_add_all_algorithms();
-
 	/* Signal handler registration */
 	sev_pipe = evsignal_new(ev_base, SIGPIPE, signal_cb, NULL);
 	if (sev_pipe == NULL) {
@@ -206,27 +201,29 @@ int server_create(int port) {
 
 	/* Main event loop */
 	event_base_dispatch(ev_base);
-
 	log_printf(LOG_INFO, "Main event loop terminated\n");
-	netlink_disconnect(netlink_sock);
 
+	netlink_disconnect(netlink_sock);
+	
 	/* Cleanup */
 	evconnlistener_free(listener); /* This also closes the socket due to our listener creation flags */
 	hashmap_free(context.sock_map_port);
 	hashmap_deep_free(context.sock_map, (void (*)(void*))sock_context_free);
 	event_free(nl_ev);
+	SSL_CTX_free(context.client_settings);
+	SSL_CTX_free(context.server_settings);
 
 	event_free(upgrade_ev);
 	event_free(sev_pipe);
 	event_free(sev_int);
-        event_base_free(ev_base);
-        /* This function hushes the wails of memory leak
-         * testing utilities, but was not introduced until
-         * libevent 2.1
-         */
-        #if LIBEVENT_VERSION_NUMBER >= 0x02010000
-        libevent_global_shutdown();
-        #endif
+	event_base_free(ev_base);
+	/* This function hushes the wails of memory leak
+		* testing utilities, but was not introduced until
+		* libevent 2.1
+		*/
+	#if LIBEVENT_VERSION_NUMBER >= 0x02010000
+	libevent_global_shutdown();
+	#endif
 
 	/* Standard OpenSSL cleanup functions */
 	#if OPENSSL_VERSION_NUMBER >= 0x10100000L
