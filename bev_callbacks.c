@@ -137,9 +137,21 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 
 	if (endpoint->closed == 1 && startpoint->closed == 1) {
 		connection_shutdown(sock_ctx);
+		long ssl_error;
 
 		switch (conn->state) {
 		case CLIENT_CONNECTING:
+			/*
+			ssl_error = SSL_get_verify_result(conn->tls);
+			if (ssl_error != X509_V_OK) {
+				   This error should only be returned on validation failure 
+				netlink_handshake_notify_kernel(daemon, id, -EPROTO);
+				   TODO: set SSL error in socket_context here 
+			} else {
+				   Errors to do with something other than the validation 
+				netlink_handshake_notify_kernel(daemon, id, -ECONNABORTED);
+			} */
+			
 			netlink_handshake_notify_kernel(daemon, id, -ECONNABORTED);
 			conn->state = CONN_ERROR;
 			break;
@@ -283,6 +295,10 @@ void handle_event_error(connection* conn,
 	log_printf(LOG_DEBUG, "%s endpoint encountered an error\n", 
 			startpoint->bev == conn->secure.bev 
 			? "encrypted" : "plaintext");
+
+	if (error == 0) {
+		return;
+	}
 	
 	if (error == ECONNRESET || error == EPIPE) {
 		log_printf(LOG_INFO, "Connection closed\n");
