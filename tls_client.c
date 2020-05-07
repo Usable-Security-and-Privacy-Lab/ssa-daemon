@@ -76,7 +76,7 @@ SSL_CTX* client_settings_init(char* path) {
 	if (SSL_CTX_set_cipher_list(client_settings, cipher_list) != 1) {
 		goto err;
 	}
-	if (SSL_CTX_load_verify_locations(client_settings, test_CA_file, NULL) != 1) {
+	if (SSL_CTX_load_verify_locations(client_settings, CA_file, NULL) != 1) {
 		goto err;
 	}
 	free(CA_file);
