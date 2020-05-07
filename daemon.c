@@ -626,7 +626,7 @@ void listener_accept_error_cb(struct evconnlistener *listener, void *arg) {
 		sock_ctx->fd = -1;
 		sock_ctx->conn->state = CONN_ERROR;
 
-		/* TODO: determine appropriate way to send error report to program */
+		/* TODO: setsockopt error here */
 		break;
 	}
 	return;
@@ -761,6 +761,7 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 	case TLS_PRIVATE_KEY:
 		response = set_private_key(sock_ctx->conn, ctx, value);
 		break;
+	case TLS_ERROR:
 	case TLS_HOSTNAME:
 	case TLS_TRUSTED_CIPHERS:
 	case TLS_ID:
@@ -780,6 +781,7 @@ void getsockopt_cb(daemon_context* daemon_ctx,
 		unsigned long id, int level, int option) {
 
 	sock_context* sock_ctx;
+	connection* conn;
 	/* long value; */
 	int response = 0;
 	char* data = NULL;
@@ -791,34 +793,39 @@ void getsockopt_cb(daemon_context* daemon_ctx,
 		netlink_notify_kernel(daemon_ctx, id, -EBADF);
 		return;
 	}
+	conn = sock_ctx->conn;
+
 	switch (option) {
+	case TLS_ERROR:
+		if (strlen(conn->err_string) > 0) {
+			data = sock_ctx->conn->err_string;
+			len = strlen(conn->err_string) + 1;
+		}
+		break;
 	case TLS_REMOTE_HOSTNAME:
-		if (sock_ctx->rem_hostname != NULL) {
-			netlink_send_and_notify_kernel(daemon_ctx, id,
-					sock_ctx->rem_hostname, strlen(sock_ctx->rem_hostname)+1);
-			return;
+		if (strlen(sock_ctx->rem_hostname) > 0) {
+			data = sock_ctx->rem_hostname;
+			len = strlen(sock_ctx->rem_hostname) + 1;
 		}
 		break;
 	case TLS_HOSTNAME:
-		if(get_hostname(sock_ctx->conn, &data, &len) == 0) {
+		if(get_hostname(conn, &data, &len) == 0) {
 			response = -EINVAL;
 		}
 		break;
 	case TLS_PEER_IDENTITY:
-		if (get_peer_identity(sock_ctx->conn, &data, &len) == 0) {
+		if (get_peer_identity(conn, &data, &len) == 0)
 			response = -ENOTCONN;
-		} else {
+		else
 			need_free = 1;
-		}
 		break;
 	case TLS_PEER_CERTIFICATE_CHAIN:
-		response = get_peer_certificate(sock_ctx->conn, &data, &len);
+		response = get_peer_certificate(conn, &data, &len);
 		if (response == 0)
 			need_free = 1;
 		break;
 	case TLS_TRUSTED_CIPHERS:
-		log_printf(LOG_DEBUG, "Getting trusted ciphers...\n");
-		response = get_enabled_ciphers(sock_ctx->conn, &data, &len);
+		response = get_enabled_ciphers(conn, &data, &len);
 		if (response == 0)
 			need_free = 1;
 		break;
@@ -1098,7 +1105,7 @@ void associate_cb(daemon_context* daemon, unsigned long id,
 	case SERVER_CONNECTING:
 		break; /* safe state */
 	case CONN_ERROR:
-		ret = -EBADFD;
+		ret = -EBADFD; /* Happens when listener_accept_error_cb() is called */
 		goto err;
 	default:
 		ret = -EINVAL;
