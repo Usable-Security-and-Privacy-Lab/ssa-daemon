@@ -1,10 +1,11 @@
+#include <string.h>
+#include <unistd.h>
+
+#include <event2/bufferevent.h>
+#include <event2/listener.h>
+
 #include "daemon_structs.h"
 #include "log.h"
-
-#include "event2/bufferevent.h"
-#include "event2/listener.h"
-#include "unistd.h"
-
 
 
 int sock_context_new(sock_context** sock_ctx, 
@@ -44,7 +45,36 @@ int connection_new(connection** conn) {
 	if (*conn == NULL)
 		return -errno;
 
+	(*conn)->err_string = calloc(1, MAX_ERR_STRING+1); /* +1 for '\0' */
+	if ((*conn)->err_string == NULL)
+		return -errno;
+	
 	return 0;
+}
+
+void set_verification_err_string(connection* conn, long ssl_err) {
+	const char* err_description = X509_verify_cert_error_string(ssl_err);
+
+	clear_err_string(conn);
+	snprintf(conn->err_string, MAX_ERR_STRING,
+			"OpenSSL verification error %li: %s\n", ssl_err, err_description);
+}
+
+
+
+
+void set_err_string(connection* conn, char* string, ssize_t strlen) {
+	clear_err_string(conn);
+
+	if (strlen > MAX_ERR_STRING) /* truncate */
+		strlen = MAX_ERR_STRING;
+
+	memcpy(conn->err_string, string, strlen);
+	conn->err_string[strlen] = '\0'; /* redundant precaution */
+}
+
+void clear_err_string(connection* conn) {
+	memset(conn->err_string, 0, MAX_ERR_STRING);
 }
 
 /**
@@ -99,11 +129,12 @@ void connection_free(connection* conn) {
 
 	if (conn->tls != NULL)
 	    SSL_free(conn->tls);
-	
 	if (conn->secure.bev != NULL)
 		bufferevent_free(conn->secure.bev);
 	if (conn->plain.bev != NULL)
 		bufferevent_free(conn->plain.bev);
+
+	free(conn->err_string);
 	free(conn);
 	return;
 }

@@ -8,6 +8,7 @@
 #include "hashmap.h"
 
 #define ID_NOT_SET 0 /* for connection and sock_context id */
+#define MAX_ERR_STRING 128
 #define MAX_HOSTNAME 255
 #define NOT_CONN_BEV -1 /** Designation for bufferevent with no set fd */
 
@@ -48,6 +49,7 @@ typedef struct connection_st {
 	struct sockaddr* addr; /* TODO: Used only for server-side connections?? */
 	int addrlen;
 	enum connection_state state;
+	char* err_string;
 } connection;
 
 typedef struct sock_context_st {
@@ -67,7 +69,7 @@ typedef struct sock_context_st {
 	};
 
 	struct evconnlistener* listener;
-	char rem_hostname[MAX_HOSTNAME];
+	char rem_hostname[MAX_HOSTNAME]; /* TODO: dynamically allocate */
 
 	int error_code;
 	daemon_context* daemon;
@@ -81,6 +83,10 @@ void sock_context_free(sock_context* sock_ctx);
 int connection_new(connection** conn);
 void connection_shutdown(sock_context* sock_ctx);
 void connection_free(connection* conn);
+
+void set_err_string(connection* conn, char* string, ssize_t strlen);
+void set_verification_err_string(connection* conn, long ssl_err);
+void clear_err_string(connection* conn);
 
 int associate_fd(connection* conn, evutil_socket_t ifd);
 
