@@ -139,12 +139,8 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 			ssl_err = SSL_get_verify_result(conn->tls);
 
 			if (ssl_err != X509_V_OK) {
-				/* This error should only be returned on validation failure */
-				const char* err_string = X509_verify_cert_error_string(ssl_err);
-				log_printf(LOG_ERROR, "Error in validation: %i - %s\n", 
-						ssl_err, err_string);
+				set_verification_err_string(conn, ssl_err);
 				netlink_handshake_notify_kernel(daemon, id, -EPROTO);
-				/* TODO: set SSL error in socket_context here */
 			} else {
 				/* Errors to do with something other than the validation */
 				netlink_handshake_notify_kernel(daemon, id, -ECONNABORTED);
@@ -184,7 +180,6 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 			? &conn->secure : &conn->plain;
 
 
-
 	if (events & BEV_EVENT_CONNECTED) {
 		if (conn->state == SERVER_CONNECTING) {
 			ret = handle_server_event_connected(conn, startpoint);
@@ -200,7 +195,6 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 	if (events & BEV_EVENT_EOF) {
 		handle_event_eof(conn, startpoint, endpoint);
 	}
-
 
 
 	if (endpoint->closed == 1 && startpoint->closed == 1) {
