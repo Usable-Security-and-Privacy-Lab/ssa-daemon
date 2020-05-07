@@ -121,5 +121,5 @@ int associate_fd(connection* conn, evutil_socket_t ifd) {
 	return 0;
  err:
 	log_printf(LOG_ERROR, "associate_fd failed.\n");
-	return -ENOMEM; /* TODO: choose better errno code? */
+	return -ECONNABORTED; /* Only happens while client is connecting */
 }

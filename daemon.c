@@ -402,39 +402,40 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 		struct sockaddr *address, int addrlen, void *arg) {
 	daemon_context* daemon = (daemon_context*)arg;
 	sock_context* sock_ctx;
-	int port;
-
-	log_printf(LOG_DEBUG, "Accept_cb called.\n");
-
-	log_printf(LOG_INFO, "Received connection!\n");
+	int port, ret;
+	
+	log_printf(LOG_INFO, "Received internal part of client connection\n");
 
 	port = get_port(address);
-
 	sock_ctx = (sock_context*)hashmap_get(daemon->sock_map_port, port);
 	if (sock_ctx == NULL) {
-		log_printf(LOG_ERROR,
-				"Got an unauthorized connection on port %d\n", port);
-		EVUTIL_CLOSESOCKET(fd);
-		return;
+		log_printf(LOG_ERROR, "Unauthorized connection on port %d\n", port);
+		ret = -EBADF;
+		goto err;
 	}
 
 	switch(sock_ctx->conn->state) {
 	case CLIENT_CONNECTING:
 		break; /* safe state */
+	case CONN_ERROR:
+		ret = -ECONNABORTED;
+		goto err;
 	default:
 		log_printf(LOG_ERROR, "Bad connection accepted; shouldn't happen\n");
+		ret = -EBADF; /* TODO: ???? */
 		goto err;
 	}
 
 	if (evutil_make_socket_nonblocking(fd) == -1) {
 		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
 			 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+		ret = -ECONNABORTED; /* could be EVUTIL_SOCKET_ERROR() maybe */
 		goto err;
 	}
 
 	log_printf_addr(&sock_ctx->rem_addr);
 
-	int ret = associate_fd(sock_ctx->conn, fd);
+	ret = associate_fd(sock_ctx->conn, fd);
 	if (ret < 0)
 		goto err;
 
@@ -442,16 +443,18 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	sock_ctx->conn->state = CLIENT_CONNECTED;
 
 	/* TODO: send netlink_notify_kernel here...? */
+	netlink_notify_kernel(daemon, sock_ctx->id, 0);
 
 	return;
  err:
+	if (sock_ctx != NULL) {
+		hashmap_del(daemon->sock_map_port, port); /* TODO: is this safe? */
+		connection_shutdown(sock_ctx);
+		sock_ctx->conn->state = CONN_ERROR;
+	}
 
-	hashmap_del(daemon->sock_map_port, port); /* TODO: is this safe? */
-	connection_shutdown(sock_ctx);
 	EVUTIL_CLOSESOCKET(fd);
-
-	sock_ctx->conn->state = CONN_ERROR;
-	
+	netlink_notify_kernel(daemon, sock_ctx->id, ret);
 	return;
 }
 
