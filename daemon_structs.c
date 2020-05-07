@@ -96,10 +96,10 @@ void connection_free(connection* conn) {
 		log_printf(LOG_WARNING, "Tried to free a NULL connection.\n");
 		return;
 	}
-	/* This breaks it for some reason...
-	 * if (conn->tls != NULL)
-	 *     SSL_free(conn->tls);
-	*/
+
+	if (conn->tls != NULL)
+	    SSL_free(conn->tls);
+	
 	if (conn->secure.bev != NULL)
 		bufferevent_free(conn->secure.bev);
 	if (conn->plain.bev != NULL)
