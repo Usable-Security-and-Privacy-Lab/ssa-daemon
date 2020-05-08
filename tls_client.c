@@ -171,6 +171,17 @@ int client_connection_setup(sock_context* sock_ctx) {
 	bufferevent_setcb(conn->plain.bev, common_bev_read_cb,
 			common_bev_write_cb, client_bev_event_cb, sock_ctx);
 
+	struct timeval read_timeout = {
+			.tv_sec = EXT_CONN_TIMEOUT,
+			.tv_usec = 0,
+	};
+
+	ret = bufferevent_set_timeouts(conn->secure.bev, &read_timeout, NULL);
+	if (ret < 0) {
+		ret = -ECONNABORTED;
+		goto err;
+	}
+
 	ret = bufferevent_enable(conn->secure.bev, EV_READ | EV_WRITE);
 	if (ret < 0) {
 		ret = -ECONNABORTED;
@@ -180,6 +191,6 @@ int client_connection_setup(sock_context* sock_ctx) {
 	return 0;
  err:
 	log_printf(LOG_ERROR, "Failed to set up client/server bev [direct mode]\n");
-	/* NOTE: intentionally left for the calling function to clean up errors */
+	/* NOTE: intentionally left to the calling function to clean up errors */
 	return ret;
 }

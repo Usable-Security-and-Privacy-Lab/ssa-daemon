@@ -18,6 +18,9 @@ void handle_event_error(connection* conn,
 		int error, channel* startpoint, channel* endpoint);
 void handle_event_eof(connection* conn, channel* startpoint, channel* endpoint);
 
+
+
+
 /*
  *******************************************************************************
  *                       BUFFEREVENT CALLBACK FUNCTIONS
@@ -131,6 +134,16 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 	if (events & BEV_EVENT_EOF) {
 		handle_event_eof(conn, startpoint, endpoint);
 	}
+	if (events & BEV_EVENT_TIMEOUT) {
+		/* case where connection to external timed out */
+		log_printf(LOG_ERROR, "Connecting bufferevent timed out.\n");
+
+		endpoint->closed = 1;
+		startpoint->closed = 1;
+		conn->state = CONN_ERROR;
+		bufferevent_set_timeouts(conn->secure.bev, NULL, NULL);
+		netlink_handshake_notify_kernel(daemon, id, -ENETUNREACH);
+	}
 
 	/* Connection closed--usually due to error or EOF */
 	if (endpoint->closed == 1 && startpoint->closed == 1) {
@@ -172,7 +185,7 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 	sock_context* sock_ctx = (sock_context*) arg;
 	connection* conn = sock_ctx->conn;
 	int bev_error = EVUTIL_SOCKET_ERROR();
-	int ret = 0;
+	int ret;
 
 	channel* endpoint = (bev == conn->secure.bev) 
 			? &conn->plain : &conn->secure;
@@ -198,8 +211,6 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 
 
 	if (endpoint->closed == 1 && startpoint->closed == 1) {
-		connection_shutdown(sock_ctx);
-
 		switch (conn->state) {
 		case SERVER_CONNECTING:
 			/* SSL error led to this */
@@ -214,6 +225,8 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 		default:
 			conn->state = CONN_ERROR;
 		}
+
+		connection_shutdown(sock_ctx);
 	}
 	return;
  err:
@@ -246,6 +259,9 @@ void handle_client_event_connected(connection* conn,
 		log_printf(LOG_WARNING, "Unexpected connect event happened.\n");
 		return;
 	}
+
+	/* BUG: return value of this function never checked */
+	bufferevent_set_timeouts(conn->secure.bev, NULL, NULL);
 
 	log_printf(LOG_INFO, "Encrypted endpoint connection negotiated with %s\n", 
 			SSL_get_version(conn->tls));
@@ -284,15 +300,14 @@ int handle_server_event_connected(connection* conn, channel* startpoint) {
 void handle_event_error(connection* conn, 
 		int error, channel* startpoint, channel* endpoint) {
 
-	int ssl_err;		
 	log_printf(LOG_DEBUG, "%s endpoint encountered an error\n", 
 			startpoint->bev == conn->secure.bev 
 			? "encrypted" : "plaintext");
 
 	
 	if (error == ECONNRESET || error == EPIPE) {
-		log_printf(LOG_INFO, "Connection closed\n");
-	} else {
+		log_printf(LOG_INFO, "Connection closed by local user\n");
+	} else if (error != 0){
 		log_printf(LOG_WARNING, "Unhandled error %i has occurred: %s\n", 
 				error, evutil_socket_error_to_string(error));
 	}
@@ -306,7 +321,6 @@ void handle_event_error(connection* conn,
 		if (evbuffer_get_length(out_buf) == 0)
 			endpoint->closed = 1;
 	}
-
 	return;
 }
 

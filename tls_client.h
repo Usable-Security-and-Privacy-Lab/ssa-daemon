@@ -25,6 +25,9 @@
 
 #include "daemon_structs.h"
 
+
+#define EXT_CONN_TIMEOUT 15 /* seconds */
+
 SSL_CTX* client_settings_init(char* path);
 
 int client_SSL_new(connection* conn, daemon_context* daemon);
