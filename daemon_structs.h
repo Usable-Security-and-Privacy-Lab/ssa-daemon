@@ -84,6 +84,7 @@ int connection_new(connection** conn);
 void connection_shutdown(sock_context* sock_ctx);
 void connection_free(connection* conn);
 
+int has_err_string(connection* conn);
 void set_err_string(connection* conn, char* string, ssize_t strlen);
 void set_verification_err_string(connection* conn, long ssl_err);
 void clear_err_string(connection* conn);

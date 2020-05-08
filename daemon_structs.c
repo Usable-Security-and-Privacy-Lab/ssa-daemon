@@ -52,16 +52,24 @@ int connection_new(connection** conn) {
 	return 0;
 }
 
+
+
+int has_err_string(connection* conn) {
+	if (strlen(conn->err_string) > 0)
+		return 1;
+	else
+		return 0;
+}
+
 void set_verification_err_string(connection* conn, long ssl_err) {
 	const char* err_description = X509_verify_cert_error_string(ssl_err);
 
 	clear_err_string(conn);
 	snprintf(conn->err_string, MAX_ERR_STRING,
 			"OpenSSL verification error %li: %s\n", ssl_err, err_description);
+	log_printf(LOG_ERROR,
+			"OpenSSL verification error %li: %s\n", ssl_err, err_description);
 }
-
-
-
 
 void set_err_string(connection* conn, char* string, ssize_t strlen) {
 	clear_err_string(conn);
