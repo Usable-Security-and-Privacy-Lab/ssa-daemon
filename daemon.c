@@ -29,7 +29,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
-#include <assert.h>
 #include <errno.h>
 #include <netdb.h>
 #include <signal.h>
@@ -42,12 +41,9 @@
 #include <event2/event.h>
 #include <event2/listener.h>
 #include <event2/util.h>
-#include <netlink/genl/ctrl.h>
 #include <netlink/genl/genl.h>
 #include <openssl/bio.h>
-#include <openssl/conf.h>
 #include <openssl/engine.h>
-#include <openssl/err.h>
 #include <openssl/rand.h>
 #include <openssl/ssl.h>
 
@@ -242,12 +238,14 @@ int server_create(int port) {
 }
 
 evutil_socket_t create_upgrade_socket(int port) {
+
 	evutil_socket_t sock;
 	int ret;
 	struct sockaddr_un addr;
 	unsigned long addrlen;
 	char name[MAX_UPGRADE_SOCKET];
 	int namelen = snprintf(name, MAX_UPGRADE_SOCKET, "%ctls_upgrade%d", '\0', port);
+
 	addr.sun_family = AF_UNIX;
 	memcpy(addr.sun_path, name, namelen);
 	addrlen = namelen + sizeof(sa_family_t);
@@ -395,7 +393,7 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
 }
 
 /**
- * WARNING: This isn't actually the callback for a listening socket to recieve
+ * WARNING: This isn't actually the callback for a listening socket to receive
  * a new connection. The function for that is listener_accept_cb.
  */
 void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
@@ -410,8 +408,7 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	sock_ctx = (sock_context*)hashmap_get(daemon->sock_map_port, port);
 	if (sock_ctx == NULL) {
 		log_printf(LOG_ERROR, "Unauthorized connection on port %d\n", port);
-		ret = -EBADF;
-		goto err;
+		return; /* Can't notify the kernel/no need to */
 	}
 
 	switch(sock_ctx->conn->state) {
@@ -670,7 +667,7 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 	if (sock_ctx != NULL) {
 		log_printf(LOG_ERROR,
 				"We have created a socket with this ID already: %lu\n", id);
-		response = -EBADF; /* BUG: wrong error code? */
+		response = -EBADF;
 		sock_ctx = NULL; /* err would try to free sock_ctx otherwise */
 		goto err;
 	}
@@ -681,7 +678,7 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 		goto err;
 	}
 
-	/* whether server or client, we need nonblocking sockets for bufferevent */
+	/* whether server or client, we need non blocking sockets for bufferevent */
 	if (evutil_make_socket_nonblocking(fd) != 0) {
 		response = -EVUTIL_SOCKET_ERROR();
 		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
@@ -797,7 +794,7 @@ void getsockopt_cb(daemon_context* daemon_ctx,
 
 	switch (option) {
 	case TLS_ERROR:
-		if (strlen(conn->err_string) > 0) {
+		if (has_err_string(conn)) {
 			data = sock_ctx->conn->err_string;
 			len = strlen(conn->err_string) + 1;
 		}
@@ -876,20 +873,19 @@ void bind_cb(daemon_context* daemon, unsigned long id,
 	case SERVER_NEW:
 		break; /* safe state */
 	case CONN_ERROR:
-		response = -EBADFD;
-		goto err;
+		netlink_notify_kernel(daemon, id, -EBADFD);
+		return;
 	default:
-		response = -EOPNOTSUPP;
-		goto err;
+		netlink_notify_kernel(daemon, id, -EOPNOTSUPP);
+		return;
 	}
 
-	if (evutil_make_listen_socket_reuseable(sock_ctx->fd) == -1) {
+	if (evutil_make_listen_socket_reuseable(sock_ctx->fd) != 0) {
 		log_printf(LOG_ERROR,
-				"Failed in evutil_make_listen_socket_reuseable: %s\n",
+				"Failed in evutil_make_listen_socket_reusable: %s\n",
 				evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-		EVUTIL_CLOSESOCKET(sock_ctx->fd);
-		/* BUG: Should have netlink_notify_kernel()??? */
-		return;
+		response = -EVUTIL_SOCKET_ERROR();
+		goto err;
 	}
 
 	if (bind(sock_ctx->fd, ext_addr, ext_addrlen) != 0) {
@@ -903,18 +899,19 @@ void bind_cb(daemon_context* daemon, unsigned long id,
 	sock_ctx->ext_addr = *ext_addr;
 	sock_ctx->ext_addrlen = ext_addrlen;
 
-	/* New stuff added by Nathaniel */
-	/* BUG: this is only temporary until test cases are changed */
-	response = server_SSL_new(sock_ctx->conn, daemon);
-	if (response != 0)
-		goto err;
-	sock_ctx->conn->state = SERVER_NEW;
-	/* end BUG */
-
-	netlink_notify_kernel(daemon, id, response);
+	netlink_notify_kernel(daemon, id, 0);
 	return;
  err:
-	/* TODO: Free resources as needed? */
+
+	if (sock_ctx != NULL) {
+		EVUTIL_CLOSESOCKET(sock_ctx->fd);
+		sock_ctx->fd = -1;
+		SSL_free(sock_ctx->conn->tls);
+		sock_ctx->conn->tls = NULL;
+
+		sock_ctx->conn->state = CONN_ERROR;
+	}
+
 	netlink_notify_kernel(daemon, id, response);
 	return;
 }
@@ -933,7 +930,7 @@ void bind_cb(daemon_context* daemon, unsigned long id,
  * @param int_addr The address of the internal peer calling these functions.
  * @param int_addrlen The length of int_addr.
  * @param ext_addr The address of the server we're attempting to connect to.
- * @param ext_addlen The length of ext_addr
+ * @param ext_addrlen The length of ext_addr.
  * @param blocking Set as 1 if the user's socket is blocking, or 0
  * if it is set as non-blocking. If it is non-blocking, then this function
  * will notify the kernel with the EINPROGRESS errno code before returning.
@@ -953,7 +950,6 @@ void connect_cb(daemon_context* daemon, unsigned long id,
 		response = -EBADF;
 		goto err;
 	}
-
 	conn = sock_ctx->conn;
 
 	/* Make sure the socket is in the right state to be connecting */
@@ -962,17 +958,17 @@ void connect_cb(daemon_context* daemon, unsigned long id,
 		/* safe state to initiate a connection in */
 		break;
 	case CLIENT_CONNECTING:
-		response = -EALREADY;
-		goto err;
+		netlink_notify_kernel(daemon, id, -EALREADY);
+		return;
 	case CLIENT_CONNECTED:
-		response = -EISCONN;
-		goto err;
+		netlink_notify_kernel(daemon, id, -EISCONN);
+		return;
 	case CONN_ERROR:
-		response = -EBADFD;
-		goto err;
+		netlink_notify_kernel(daemon, id, -EBADFD);
+		return;
 	default:
-		response = -EOPNOTSUPP;
-		goto err;
+		netlink_notify_kernel(daemon, id, -EOPNOTSUPP);
+		return;
 	}
 
 	sock_ctx->int_addr = *int_addr;
@@ -1035,10 +1031,11 @@ void listen_cb(daemon_context* daemon, unsigned long id,
 		sock_ctx->conn->state = SERVER_NEW;
 		break;
 	case CONN_ERROR:
-		response = -EBADFD;
+		netlink_notify_kernel(daemon, id, -EBADFD);
+		return;
 	default:
-		response = -EOPNOTSUPP;
-		goto err;
+		netlink_notify_kernel(daemon, id, -EOPNOTSUPP);
+		return;
 	}
 
 	/* set external-facing socket to listen */
@@ -1081,13 +1078,12 @@ void listen_cb(daemon_context* daemon, unsigned long id,
  * is to associate an id with the sock_ctx of the already accepted connection
  * so that the internal user can begin to communicate via the daemon to the
  * client.
- *
  */
 void associate_cb(daemon_context* daemon, unsigned long id,
-				  struct sockaddr* int_addr, int int_addrlen) {
+		struct sockaddr* int_addr, int int_addrlen) {
 
 	sock_context* sock_ctx;
-	int port, ret;
+	int port;
 
 	log_printf(LOG_DEBUG, "associate_cb called.\n");
 
@@ -1095,8 +1091,8 @@ void associate_cb(daemon_context* daemon, unsigned long id,
 	sock_ctx = hashmap_get(daemon->sock_map_port, port);
 	if (sock_ctx == NULL) {
 		log_printf(LOG_ERROR, "port provided in associate_cb not found\n");
-		ret = -EBADF;
-		goto err;
+		netlink_notify_kernel(daemon, id, -EBADF);
+		return;
 	}
 
 	hashmap_del(daemon->sock_map_port, port);
@@ -1105,11 +1101,12 @@ void associate_cb(daemon_context* daemon, unsigned long id,
 	case SERVER_CONNECTING:
 		break; /* safe state */
 	case CONN_ERROR:
-		ret = -EBADFD; /* Happens when listener_accept_error_cb() is called */
-		goto err;
+		/* Happens when listener_accept_error_cb() is called */
+		netlink_notify_kernel(daemon, id, -EBADFD);
+		return;
 	default:
-		ret = -EINVAL;
-		goto err;
+		netlink_notify_kernel(daemon, id, -EINVAL);
+		return;
 	}
 
 	sock_ctx->id = id;
@@ -1117,10 +1114,6 @@ void associate_cb(daemon_context* daemon, unsigned long id,
 	hashmap_add(daemon->sock_map, id, (void*)sock_ctx);
 
 	netlink_notify_kernel(daemon, id, 0);
-	log_printf(LOG_DEBUG, "associate_cb finished\n");
-	return;
- err:
-	netlink_notify_kernel(daemon, id, ret);
 	return;
 }
 
