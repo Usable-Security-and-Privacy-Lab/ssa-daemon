@@ -70,8 +70,6 @@ typedef struct sock_context_st {
 
 	struct evconnlistener* listener;
 	char rem_hostname[MAX_HOSTNAME]; /* TODO: dynamically allocate */
-
-	int error_code;
 	daemon_context* daemon;
 } sock_context;
 
@@ -85,7 +83,7 @@ void connection_shutdown(sock_context* sock_ctx);
 void connection_free(connection* conn);
 
 int has_err_string(connection* conn);
-void set_err_string(connection* conn, char* string, ssize_t strlen);
+void set_err_string(connection* conn, char* string, ...);
 void set_verification_err_string(connection* conn, long ssl_err);
 void clear_err_string(connection* conn);
 

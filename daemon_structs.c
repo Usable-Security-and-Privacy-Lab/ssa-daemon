@@ -71,14 +71,14 @@ void set_verification_err_string(connection* conn, long ssl_err) {
 			"OpenSSL verification error %li: %s\n", ssl_err, err_description);
 }
 
-void set_err_string(connection* conn, char* string, ssize_t strlen) {
+void set_err_string(connection* conn, char* string, ...) {
+
+	va_list args;
 	clear_err_string(conn);
 
-	if (strlen > MAX_ERR_STRING) /* truncate */
-		strlen = MAX_ERR_STRING;
-
-	memcpy(conn->err_string, string, strlen);
-	conn->err_string[strlen] = '\0'; /* redundant precaution */
+	va_start(args, string);
+	vsnprintf(conn->err_string, MAX_ERR_STRING, string, args);
+	va_end(args);
 }
 
 void clear_err_string(connection* conn) {
@@ -151,8 +151,11 @@ void connection_free(connection* conn) {
 
 int associate_fd(connection* conn, evutil_socket_t ifd) {
 
+	/* Possibility of failure is acutally none in current libevent code */
 	if (bufferevent_setfd(conn->plain.bev, ifd) != 0)
 		goto err;
+
+	/* This function *unlikely* to fail, but if we want to be really robust...*/
 	if (bufferevent_enable(conn->plain.bev, EV_READ | EV_WRITE) != 0)
 		goto err;
 

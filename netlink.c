@@ -65,6 +65,7 @@ enum {
 	SSA_NL_C_ACCEPT_NOTIFY,
 	SSA_NL_C_CLOSE_NOTIFY,
 	SSA_NL_C_RETURN,
+	SSA_NL_C_LISTEN_ERR,
 	SSA_NL_C_DATA_RETURN,
 	SSA_NL_C_HANDSHAKE_RETURN,
 	__SSA_NL_C_MAX,
@@ -303,6 +304,37 @@ void netlink_notify_kernel(daemon_context* ctx, unsigned long id, int resp) {
 	ret = nla_put_u32(msg, SSA_NL_A_RETURN, resp);
 	if (ret != 0) {
 		log_printf(LOG_ERROR, "Failed to insert response in netlink msg\n");
+		return;
+	}
+	ret = nl_send_auto(ctx->netlink_sock, msg);
+	if (ret < 0) {
+		log_printf(LOG_ERROR, "Failed to send netlink msg\n");
+		return;
+	}
+	nlmsg_free(msg);
+
+	return;
+}
+
+void netlink_error_notify_kernel(daemon_context* ctx, unsigned long id) {
+	int ret;
+	struct nl_msg* msg;
+	void* msg_head;
+	int msg_size = NLMSG_HDRLEN + GENL_HDRLEN + nla_total_size(sizeof(id));
+	msg = nlmsg_alloc_size(msg_size);
+	if (msg == NULL) {
+		log_printf(LOG_ERROR, "Failed to allocate message buffer\n");
+		return;
+	}
+	msg_head = genlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ,
+			ctx->netlink_family, 0, 0, SSA_NL_C_LISTEN_ERR, 1);
+	if (msg_head == NULL) {
+		log_printf(LOG_ERROR, "Failed in genlmsg_put\n");
+		return;
+	}
+	ret = nla_put_u64(msg, SSA_NL_A_ID, id);
+	if (ret != 0) {
+		log_printf(LOG_ERROR, "Failed to insert ID in netlink msg\n");
 		return;
 	}
 	ret = nl_send_auto(ctx->netlink_sock, msg);

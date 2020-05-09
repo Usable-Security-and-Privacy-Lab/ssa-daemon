@@ -27,7 +27,6 @@ void set_sock_tls_error(sock_context* sock_ctx) {
 
 	if (ssl_err == 0) {
 		log_printf(LOG_ERROR, "Error occurred but not captured by OpenSSL\n");
-		sock_ctx->error_code = 0;
 	}
 
 	/* TODO: finish */
@@ -35,9 +34,7 @@ void set_sock_tls_error(sock_context* sock_ctx) {
 
 
 
-void set_tls_connection_error(sock_context* sock_ctx) {
-	/* TODO: stub */
-}
+
 
 
 

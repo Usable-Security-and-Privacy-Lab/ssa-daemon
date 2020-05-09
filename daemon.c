@@ -68,17 +68,19 @@ static void accept_error_cb(struct evconnlistener *listener, void *ctx);
 static void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	struct sockaddr *address, int socklen, void *ctx);
 static void signal_cb(evutil_socket_t fd, short event, void* arg);
-static evutil_socket_t create_server_socket(ev_uint16_t port, int family, int protocol);
+static evutil_socket_t create_server_socket(ev_uint16_t port,
+		int family, int protocol);
 
 /* SSA listener functions */
 static void listener_accept_error_cb(struct evconnlistener *listener, void *ctx);
-static void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
-	struct sockaddr *address, int socklen, void *arg);
+static void listener_accept_cb(struct evconnlistener *listener,
+		evutil_socket_t fd, struct sockaddr *address, int socklen, void *arg);
 
 /* special */
 static evutil_socket_t create_upgrade_socket(int port);
 static void upgrade_recv(evutil_socket_t fd, short events, void *arg);
-ssize_t recv_fd_from(int fd, void *ptr, size_t nbytes, int *recvfd, struct sockaddr_un* addr, int addr_len);
+ssize_t recv_fd_from(int fd, void *ptr, size_t nbytes,
+		int *recvfd, struct sockaddr_un* addr, int addr_len);
 
 int server_create(int port) {
 	int ret;
@@ -408,7 +410,7 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	sock_ctx = (sock_context*)hashmap_get(daemon->sock_map_port, port);
 	if (sock_ctx == NULL) {
 		log_printf(LOG_ERROR, "Unauthorized connection on port %d\n", port);
-		return; /* Can't notify the kernel/no need to */
+		return; /* Should not notify the kernel */
 	}
 
 	switch(sock_ctx->conn->state) {
@@ -419,10 +421,11 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 		goto err;
 	default:
 		log_printf(LOG_ERROR, "Bad connection accepted; shouldn't happen\n");
-		ret = -EBADF; /* TODO: ???? */
+		ret = -EBADF;
 		goto err;
 	}
 
+	/* the odds of this are *pretty much nil* */
 	if (evutil_make_socket_nonblocking(fd) == -1) {
 		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
 			 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
@@ -439,13 +442,11 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	hashmap_del(daemon->sock_map_port, port);
 	sock_ctx->conn->state = CLIENT_CONNECTED;
 
-	/* TODO: send netlink_notify_kernel here...? */
 	netlink_notify_kernel(daemon, sock_ctx->id, 0);
-
 	return;
  err:
 	if (sock_ctx != NULL) {
-		hashmap_del(daemon->sock_map_port, port); /* TODO: is this safe? */
+		hashmap_del(daemon->sock_map_port, port);
 		connection_shutdown(sock_ctx);
 		sock_ctx->conn->state = CONN_ERROR;
 	}
@@ -538,6 +539,10 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 		goto err;
 
 	accepting_sock_ctx->fd = efd;
+	/* NOTE: the id is TEMPORARY, to notify the kernel correctly upon a
+	 * successful connection. MAKE SURE not to free the sock_ctx associated 
+	 * with this id from the hashmap!! It's the id of the listener!! */
+	accepting_sock_ctx->id = listening_sock_ctx->id;
 
 	ret = connection_new(&(accepting_sock_ctx->conn));
 	if (ret != 0)
@@ -591,12 +596,15 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 
 	if (ifd != -1)
 		EVUTIL_CLOSESOCKET(ifd); /* BUG: Closes twice if bufferevent assigned */
+
+	/* TODO: try calling netlink_notify_kernel here?? */
 	return;
 }
 
 void listener_accept_error_cb(struct evconnlistener *listener, void *arg) {
 
 	sock_context* sock_ctx = (sock_context*) arg;
+	connection* conn = sock_ctx->conn;
 	int err = EVUTIL_SOCKET_ERROR();
 
 	switch (err) {
@@ -618,14 +626,18 @@ void listener_accept_error_cb(struct evconnlistener *listener, void *arg) {
 		log_printf(LOG_ERROR, "Fatal error %d (%s) on a server listener\n",
 				err, evutil_socket_error_to_string(err));
 
-		SSL_free(sock_ctx->conn->tls);
+		SSL_free(conn->tls);
 		evconnlistener_free(listener);
 		sock_ctx->fd = -1;
-		sock_ctx->conn->state = CONN_ERROR;
+		conn->state = CONN_ERROR;
 
-		/* TODO: setsockopt error here */
+		set_err_string(conn, "External listener failed with error %i: %s",
+				err, strerror(err));
+		netlink_error_notify_kernel(sock_ctx->daemon, sock_ctx->id);
 		break;
 	}
+
+	/* TODO: put netlink_notify_kernel out here? */
 	return;
 }
 
@@ -1090,30 +1102,22 @@ void associate_cb(daemon_context* daemon, unsigned long id,
 	port = get_port(int_addr);
 	sock_ctx = hashmap_get(daemon->sock_map_port, port);
 	if (sock_ctx == NULL) {
-		log_printf(LOG_ERROR, "port provided in associate_cb not found\n");
-		netlink_notify_kernel(daemon, id, -EBADF);
+		/* This *really* should never happen */
+		log_printf(LOG_ERROR, "Port provided in associate_cb not found\n");
 		return;
 	}
 
 	hashmap_del(daemon->sock_map_port, port);
 
-	switch(sock_ctx->conn->state) {
-	case SERVER_CONNECTING:
-		break; /* safe state */
-	case CONN_ERROR:
-		/* Happens when listener_accept_error_cb() is called */
-		netlink_notify_kernel(daemon, id, -EBADFD);
-		return;
-	default:
-		netlink_notify_kernel(daemon, id, -EINVAL);
-		return;
-	}
+	/* don't check state here--the only time it wouldn't be SERVER_CONNECTING
+	 * is if the peer prematurely disconnected (DISCONNECTED), which will
+	 * reflect in any subsequent calls to read() or write() */
 
 	sock_ctx->id = id;
 	sock_ctx->conn->state = SERVER_CONNECTED;
+
 	hashmap_add(daemon->sock_map, id, (void*)sock_ctx);
 
-	netlink_notify_kernel(daemon, id, 0);
 	return;
 }
 
