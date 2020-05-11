@@ -135,7 +135,7 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 	}
 	if (events & BEV_EVENT_TIMEOUT) {
 		/* case where connection to external timed out */
-		log_printf(LOG_ERROR, "Connecting bufferevent timed out.\n");
+		log_printf(LOG_ERROR, "Connecting bufferevent timed out\n");
 
 		endpoint->closed = 1;
 		startpoint->closed = 1;
@@ -158,19 +158,22 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 				/* Errors to do with something other than the validation */
 				netlink_handshake_notify_kernel(daemon, id, -ECONNABORTED);
 			}
-
+			connection_shutdown(sock_ctx);
 			conn->state = CONN_ERROR;
 			break;
 		case CLIENT_CONNECTED:
+			connection_shutdown(sock_ctx);
 			if (events & BEV_EVENT_ERROR)
 				conn->state = CONN_ERROR;
 			else
 				conn->state = DISCONNECTED;
 			break;
 		default:
+			connection_shutdown(sock_ctx);
 			conn->state = CONN_ERROR;
+			break;
 		}
-		connection_shutdown(sock_ctx);
+
 	}
 
 	return;
