@@ -1,6 +1,6 @@
 CC = gcc
 CXXFLAGS=-Wall -Wno-deprecated-declarations
-CXX_DEBUG_FLAGS=-g
+CXX_DEBUG_FLAGS=-g -ggdb3
 CXX_RELEASE_FLAGS=-O3 -DNO_LOG
 
 
