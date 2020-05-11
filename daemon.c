@@ -1095,29 +1095,32 @@ void associate_cb(daemon_context* daemon, unsigned long id,
 		struct sockaddr* int_addr, int int_addrlen) {
 
 	sock_context* sock_ctx;
-	int port;
+	int port = get_port(int_addr);
 
-	log_printf(LOG_DEBUG, "associate_cb called.\n");
-
-	port = get_port(int_addr);
 	sock_ctx = hashmap_get(daemon->sock_map_port, port);
 	if (sock_ctx == NULL) {
-		/* This *really* should never happen */
 		log_printf(LOG_ERROR, "Port provided in associate_cb not found\n");
+		netlink_notify_kernel(daemon, id, -EBADF);
+		return;
+	}
+
+	switch(sock_ctx->conn->state) {
+	case SERVER_CONNECTING:
+		break; /* correct state */
+	case CONN_ERROR:
+		netlink_notify_kernel(daemon, id, -ECONNABORTED);
+		return;
+	default:
+		netlink_notify_kernel(daemon, id, -EOPNOTSUPP);
 		return;
 	}
 
 	hashmap_del(daemon->sock_map_port, port);
 
-	/* don't check state here--the only time it wouldn't be SERVER_CONNECTING
-	 * is if the peer prematurely disconnected (DISCONNECTED), which will
-	 * reflect in any subsequent calls to read() or write() */
-
 	sock_ctx->id = id;
 	sock_ctx->conn->state = SERVER_CONNECTED;
 
 	hashmap_add(daemon->sock_map, id, (void*)sock_ctx);
-
 	return;
 }
 
