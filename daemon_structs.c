@@ -27,6 +27,12 @@ int sock_context_new(sock_context** sock_ctx,
  * so that it can correctly free all held data 
  * TODO: this function needs to be updated and debugged */
 void sock_context_free(sock_context* sock_ctx) {
+
+	if (sock_ctx == NULL) {
+		log_printf(LOG_WARNING, "Tried to free a null sock_ctx reference\n");
+		return;
+	}
+
 	if (sock_ctx->listener != NULL) {
 		evconnlistener_free(sock_ctx->listener);
 	} else if (sock_ctx->fd != -1) { 
