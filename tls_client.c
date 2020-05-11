@@ -34,7 +34,7 @@ SSL_CTX* client_settings_init(char* path) {
 	}
 	else { //UNSUPPORTED OS
 		log_printf(LOG_ERROR, "Unable to find valid cert location.\n");
-		printf("ERROR: Unable to find valid cert location.\n");
+		goto err_ctx;
 	}
   
 	SSL_CTX *client_settings = SSL_CTX_new(TLS_client_method());

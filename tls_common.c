@@ -33,12 +33,6 @@ void set_sock_tls_error(sock_context* sock_ctx) {
 }
 
 
-
-
-
-
-
-
 /*
  *******************************************************************************
  *                            GETSOCKOPT FUNCTIONS

@@ -88,6 +88,9 @@ void set_verification_err_string(connection* conn, long ssl_err);
 void clear_err_string(connection* conn);
 
 int associate_fd(connection* conn, evutil_socket_t ifd);
+int get_port(struct sockaddr* addr);
+
+
 
 
 

@@ -34,7 +34,6 @@ void set_tls_error(sock_context* sock_ctx);
 void set_tls_connection_error(sock_context* sock_ctx);
 
 
-
 /* setsockopt */
 int get_peer_certificate(connection* conn, char** data, unsigned int* len);
 int get_peer_identity(connection* conn_ctx, char** data, unsigned int* len);

@@ -128,36 +128,23 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 	int internal_addrlen = old_sock->int_addrlen;
 	int ret;
 
+	accept_conn->addr = internal_addr;
+	accept_conn->addrlen = internal_addrlen;
+
 	accept_conn->secure.bev = bufferevent_openssl_socket_new(daemon->ev_base, 
 			new_sock->fd, new_sock->conn->tls, BUFFEREVENT_SSL_ACCEPTING, 0);
-
 	if (accept_conn->secure.bev == NULL) {
 		ret = -EVUTIL_SOCKET_ERROR();
-		/* free the SSL here (BEV_OPT_CLOSE_ON_FREE does everywhere else) */
 		log_printf(LOG_ERROR, "Client bev setup failed [listener]\n");
 		goto err;
 	}
+	
+	bufferevent_setcb(accept_conn->secure.bev, common_bev_read_cb, 
+			common_bev_write_cb, server_bev_event_cb, new_sock);
 
 	#if LIBEVENT_VERSION_NUMBER >= 0x02010000
 	bufferevent_openssl_set_allow_dirty_shutdown(accept_conn->secure.bev, 1);
 	#endif
-	
-	accept_conn->plain.bev = bufferevent_socket_new(daemon->ev_base, 
-			ifd, BEV_OPT_CLOSE_ON_FREE);
-
-	if (accept_conn->plain.bev == NULL) {
-		ret = -EVUTIL_SOCKET_ERROR();
-		log_printf(LOG_ERROR, "Server bev setup failed [listener]\n");
-		goto err;
-	}
-
-	accept_conn->addr = internal_addr;
-	accept_conn->addrlen = internal_addrlen;
-
-	bufferevent_setcb(accept_conn->plain.bev, common_bev_read_cb, 
-			common_bev_write_cb, server_bev_event_cb, new_sock);
-	bufferevent_setcb(accept_conn->secure.bev, common_bev_read_cb, 
-			common_bev_write_cb, server_bev_event_cb, new_sock);
 	
 	/* This will still result in a CONNECTED event--TLS also has to connect */
 	ret = bufferevent_enable(accept_conn->secure.bev, EV_READ | EV_WRITE);
@@ -166,6 +153,19 @@ int accept_connection_setup(sock_context* new_sock, sock_context* old_sock,
 		log_printf(LOG_ERROR, "Secure bev enable failed [listener]\n");
 		goto err;
 	}
+
+	/* Should be the last error-prone function to be called, so that on errror
+	 * ifd doesn't get closed twice by the calling function */
+	accept_conn->plain.bev = bufferevent_socket_new(daemon->ev_base, 
+			ifd, BEV_OPT_CLOSE_ON_FREE);
+	if (accept_conn->plain.bev == NULL) {
+		ret = -EVUTIL_SOCKET_ERROR();
+		log_printf(LOG_ERROR, "Server bev setup failed [listener]\n");
+		goto err;
+	}
+
+	bufferevent_setcb(accept_conn->plain.bev, common_bev_read_cb, 
+			common_bev_write_cb, server_bev_event_cb, new_sock);
 
     return 0;
 err:

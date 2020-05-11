@@ -115,7 +115,6 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 	connection* conn = sock_ctx->conn;
 	unsigned long id = sock_ctx->id;
 	int bev_error = EVUTIL_SOCKET_ERROR();
-	long ssl_err;
 
 	channel* endpoint = (bev == conn->secure.bev) 
 			? &conn->plain : &conn->secure;
@@ -147,6 +146,7 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 
 	/* Connection closed--usually due to error or EOF */
 	if (endpoint->closed == 1 && startpoint->closed == 1) {
+		long ssl_err;
 		switch (conn->state) {
 		case CLIENT_CONNECTING:
 			ssl_err = SSL_get_verify_result(conn->tls);
@@ -186,10 +186,11 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 	connection* conn = sock_ctx->conn;
 	int bev_error = EVUTIL_SOCKET_ERROR();
 	int ret;
+	int is_secure_channel = (bev == conn->secure.bev) ? 1 : 0;
 
-	channel* endpoint = (bev == conn->secure.bev) 
+	channel* endpoint = (is_secure_channel) 
 			? &conn->plain : &conn->secure;
-	channel* startpoint = (bev == conn->secure.bev) 
+	channel* startpoint = (is_secure_channel) 
 			? &conn->secure : &conn->plain;
 
 
@@ -199,7 +200,7 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 			if (ret != 0)
 				goto err;
 		} else {
-			goto err; /* why would there be a connected event otherwise?? */
+			log_printf(LOG_ERROR, "Unexpected CONNECT event on bev %p\n", bev);
 		}
 	}
 	if (events & BEV_EVENT_ERROR) {
@@ -211,27 +212,34 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 
 
 	if (endpoint->closed == 1 && startpoint->closed == 1) {
-		switch (conn->state) {
-		case SERVER_CONNECTING:
-			/* SSL error led to this */
-			conn->state = CONN_ERROR;
-			break;
-		case SERVER_CONNECTED:
-			if (events & BEV_EVENT_ERROR)
-				conn->state = CONN_ERROR;
-			else
-				conn->state = DISCONNECTED;
-			break;
-		default:
-			conn->state = CONN_ERROR;
+		log_printf(LOG_DEBUG, "Closed both endpoints\n");
+
+		if (conn->state == SERVER_CONNECTING) {
+			log_printf(LOG_DEBUG, "Made it here\n");
+			long ssl_err = SSL_get_verify_result(conn->tls);
+			if (ssl_err != X509_V_OK)
+				log_printf(LOG_ERROR, 
+						"TLS handshake error %li on incoming connection: %s",
+						ssl_err, X509_verify_cert_error_string(ssl_err));
+
+			goto err; /* No need to save the connection--the user doesn't 
+			           * know it happened and doesn't have ref to it */
 		}
 
+		/* don't free connection--user has fd reference to it still. */
 		connection_shutdown(sock_ctx);
+		if (events & BEV_EVENT_ERROR)
+			conn->state = CONN_ERROR;
+		else 
+			conn->state = DISCONNECTED;
 	}
 	return;
  err:
+	log_printf(LOG_DEBUG, "Freeing connection completely\n");
+	/* completely frees the connection */
+	hashmap_del(sock_ctx->daemon->sock_map_port, get_port(&sock_ctx->int_addr));
 	connection_shutdown(sock_ctx);
-	conn->state = CONN_ERROR;
+	sock_context_free(sock_ctx); /* TODO: test this by using client with bad ciphers */
 	return;
 }
 
@@ -259,6 +267,7 @@ void handle_client_event_connected(connection* conn,
 		log_printf(LOG_WARNING, "Unexpected connect event happened.\n");
 		return;
 	}
+	/* TODO: test SSL_get_peer_certificate() == NULL */
 
 	/* BUG: return value of this function never checked */
 	bufferevent_set_timeouts(conn->secure.bev, NULL, NULL);

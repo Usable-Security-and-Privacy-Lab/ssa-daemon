@@ -61,7 +61,6 @@
 #define MAX_UPGRADE_SOCKET  18
 #define HASHMAP_NUM_BUCKETS	100
 
-int get_port(struct sockaddr* addr);
 
 /* SSA direct functions */
 static void accept_error_cb(struct evconnlistener *listener, void *ctx);
@@ -587,17 +586,12 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	log_printf(LOG_ERROR, "Failed to receive remote client connection: "
 			"closing connection.\n");
 
-	if (accepting_sock_ctx != NULL) {
-		if (accepting_sock_ctx->conn != NULL)
-			connection_shutdown(accepting_sock_ctx);
-
+	if (accepting_sock_ctx != NULL)
 		sock_context_free(accepting_sock_ctx);
-	}
 
 	if (ifd != -1)
-		EVUTIL_CLOSESOCKET(ifd); /* BUG: Closes twice if bufferevent assigned */
+		EVUTIL_CLOSESOCKET(ifd);
 
-	/* TODO: try calling netlink_notify_kernel here?? */
 	return;
 }
 
@@ -950,8 +944,8 @@ void bind_cb(daemon_context* daemon, unsigned long id,
  * to be returned.
  */
 void connect_cb(daemon_context* daemon, unsigned long id,
-				struct sockaddr* int_addr, int int_addrlen,
-				struct sockaddr* rem_addr, int rem_addrlen, int blocking) {
+		struct sockaddr* int_addr, int int_addrlen,
+		struct sockaddr* rem_addr, int rem_addrlen, int blocking) {
 
 	sock_context* sock_ctx;
 	connection* conn;
@@ -1111,7 +1105,8 @@ void associate_cb(daemon_context* daemon, unsigned long id,
 		netlink_notify_kernel(daemon, id, -ECONNABORTED);
 		return;
 	default:
-		netlink_notify_kernel(daemon, id, -EOPNOTSUPP);
+		netlink_notify_kernel(daemon, id, -ECONNABORTED);
+		/* TODO: what error do we return here? */
 		return;
 	}
 
@@ -1144,13 +1139,11 @@ void close_cb(daemon_context* daemon_ctx, unsigned long id) {
 	switch (sock_ctx->conn->state) {
 	case CONN_ERROR:
 	case DISCONNECTED:
-		/* sockets in this state should have everything freed/closed */
-		free(sock_ctx->conn);
-		break;
 	case CLIENT_NEW:
 	case SERVER_NEW:
-		SSL_free(sock_ctx->conn->tls);
-		free(sock_ctx->conn);
+	case SERVER_LISTENING:
+		connection_free(sock_ctx->conn);
+		sock_ctx->conn = NULL;
 		break;
 	case CLIENT_CONNECTING:
 	case SERVER_CONNECTING:
@@ -1158,15 +1151,11 @@ void close_cb(daemon_context* daemon_ctx, unsigned long id) {
 	case SERVER_CONNECTED:
 		connection_shutdown(sock_ctx);
 		connection_free(sock_ctx->conn);
-		break;
-	case SERVER_LISTENING:
-		evconnlistener_free(sock_ctx->listener);
-		SSL_free(sock_ctx->conn->tls);
-		free(sock_ctx->conn);
+		sock_ctx->conn = NULL;
 		break;
 	}
 
-	free(sock_ctx);
+	sock_context_free(sock_ctx);
 	hashmap_del(daemon_ctx->sock_map, id);
 	return;
 }
@@ -1284,17 +1273,4 @@ ssize_t recv_fd_from(int fd, void *ptr, size_t nbytes, int *recvfd, struct socka
 		*recvfd = -1; /* descriptor was not passed */
 	}
 	return n;
-}
-
-
-int get_port(struct sockaddr* addr) {
-	int port = 0;
-	if (addr->sa_family == AF_UNIX) {
-		port = strtol(((struct sockaddr_un*)addr)->sun_path+1, NULL, 16);
-		log_printf(LOG_INFO, "unix port is %05x", port);
-	}
-	else {
-		port = (int)ntohs(((struct sockaddr_in*)addr)->sin_port);
-	}
-	return port;
 }

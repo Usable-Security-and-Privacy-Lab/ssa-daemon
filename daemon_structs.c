@@ -1,3 +1,5 @@
+
+#include <sys/un.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -27,7 +29,7 @@ int sock_context_new(sock_context** sock_ctx,
 void sock_context_free(sock_context* sock_ctx) {
 	if (sock_ctx->listener != NULL) {
 		evconnlistener_free(sock_ctx->listener);
-	} else { 
+	} else if (sock_ctx->fd != -1) { 
 		EVUTIL_CLOSESOCKET(sock_ctx->fd);
 	}
 	
@@ -164,4 +166,16 @@ int associate_fd(connection* conn, evutil_socket_t ifd) {
  err:
 	log_printf(LOG_ERROR, "associate_fd failed.\n");
 	return -ECONNABORTED; /* Only happens while client is connecting */
+}
+
+int get_port(struct sockaddr* addr) {
+	int port = 0;
+	if (addr->sa_family == AF_UNIX) {
+		port = strtol(((struct sockaddr_un*)addr)->sun_path+1, NULL, 16);
+		log_printf(LOG_INFO, "unix port is %05x", port);
+	}
+	else {
+		port = (int)ntohs(((struct sockaddr_in*)addr)->sin_port);
+	}
+	return port;
 }
