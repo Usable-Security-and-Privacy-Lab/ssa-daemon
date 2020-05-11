@@ -1121,6 +1121,8 @@ void associate_cb(daemon_context* daemon, unsigned long id,
 	sock_ctx->conn->state = SERVER_CONNECTED;
 
 	hashmap_add(daemon->sock_map, id, (void*)sock_ctx);
+
+	netlink_notify_kernel(daemon, id, 0);
 	return;
 }
 
