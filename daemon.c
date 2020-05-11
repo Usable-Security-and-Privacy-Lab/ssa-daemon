@@ -1137,21 +1137,13 @@ void close_cb(daemon_context* daemon_ctx, unsigned long id) {
 	}
 
 	switch (sock_ctx->conn->state) {
-	case CONN_ERROR:
-	case DISCONNECTED:
-	case CLIENT_NEW:
-	case SERVER_NEW:
-	case SERVER_LISTENING:
-		connection_free(sock_ctx->conn);
-		sock_ctx->conn = NULL;
-		break;
 	case CLIENT_CONNECTING:
 	case SERVER_CONNECTING:
 	case CLIENT_CONNECTED:
 	case SERVER_CONNECTED:
 		connection_shutdown(sock_ctx);
-		connection_free(sock_ctx->conn);
-		sock_ctx->conn = NULL;
+		break;
+	default:
 		break;
 	}
 
