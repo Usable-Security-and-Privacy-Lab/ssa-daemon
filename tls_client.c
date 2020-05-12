@@ -47,7 +47,7 @@ SSL_CTX* client_settings_init(char* path) {
 	//const char* CA_file = "/etc/pki/tls/certs/ca-bundle.crt"; //FEDORA
 	//const char* CA_file = "/etc/ssl/certs/ca-certificates.crt"; //UBUNTU
 
-
+	
 	const char* cipher_list = "ECDHE-ECDSA-AES256-GCM-SHA384:"
 	                          "ECDHE-RSA-AES256-GCM-SHA384:"
 							  "ECDHE-ECDSA-CHACHA20-POLY1305:"
@@ -64,6 +64,7 @@ SSL_CTX* client_settings_init(char* path) {
 	SSL_CTX_set_verify(client_settings, SSL_VERIFY_PEER, NULL);
 	SSL_CTX_set_options(client_settings, SSL_OP_NO_COMPRESSION | SSL_OP_NO_TICKET);
 
+
 	if (SSL_CTX_set_min_proto_version(client_settings, TLS1_2_VERSION) != 1) {
 		goto err;
 	}
@@ -79,6 +80,7 @@ SSL_CTX* client_settings_init(char* path) {
 	if (SSL_CTX_load_verify_locations(client_settings, CA_file, NULL) != 1) {
 		goto err;
 	}
+
 	free(CA_file);
 
 	/* TODO: Eventually enable OCSP Stapling, CRL checking and OCSP checking
@@ -109,7 +111,7 @@ int client_SSL_new(connection* conn, daemon_context* daemon) {
 
 	SSL* new_ssl = SSL_new(daemon->client_settings);
 	if (new_ssl == NULL) {
-		return -ENOMEM; /* BUG: temporary fix. Replace with OpenSSL error. */
+		return -ssl_malloc_err(conn);
 	}
 
 	if (conn->tls != NULL) {

@@ -5,6 +5,7 @@
 
 #include <event2/bufferevent.h>
 #include <event2/listener.h>
+#include <openssl/err.h>
 
 #include "daemon_structs.h"
 #include "log.h"
@@ -42,6 +43,7 @@ void sock_context_free(sock_context* sock_ctx) {
 	if (sock_ctx->conn != NULL)
 		connection_free(sock_ctx->conn);
 	free(sock_ctx);
+
 	return;
 }
 
@@ -58,39 +60,6 @@ int connection_new(connection** conn) {
 		return -errno;
 	
 	return 0;
-}
-
-
-
-int has_err_string(connection* conn) {
-	if (strlen(conn->err_string) > 0)
-		return 1;
-	else
-		return 0;
-}
-
-void set_verification_err_string(connection* conn, long ssl_err) {
-	const char* err_description = X509_verify_cert_error_string(ssl_err);
-
-	clear_err_string(conn);
-	snprintf(conn->err_string, MAX_ERR_STRING,
-			"OpenSSL verification error %li: %s\n", ssl_err, err_description);
-	log_printf(LOG_ERROR,
-			"OpenSSL verification error %li: %s\n", ssl_err, err_description);
-}
-
-void set_err_string(connection* conn, char* string, ...) {
-
-	va_list args;
-	clear_err_string(conn);
-
-	va_start(args, string);
-	vsnprintf(conn->err_string, MAX_ERR_STRING, string, args);
-	va_end(args);
-}
-
-void clear_err_string(connection* conn) {
-	memset(conn->err_string, 0, MAX_ERR_STRING);
 }
 
 /**
@@ -112,9 +81,9 @@ void connection_shutdown(sock_context* sock_ctx) {
 		default:
 			break;
 		}
-		
 		SSL_free(conn->tls);
 	}
+	
 	conn->tls = NULL;
 
 	if (sock_ctx->listener != NULL) 
@@ -154,6 +123,87 @@ void connection_free(connection* conn) {
 	free(conn);
 	return;
 }
+
+/**
+ * Converts a given OpenSSL ERR error code into an appropriate errno code.
+ * @returns 0 if no ERR was in the queue; -1 if the error could not be converted
+ * into an error code; or a positive errno code.
+ */
+int ssl_err_to_errno() {
+
+	unsigned long ssl_err = ERR_peek_error();
+
+	/* TODO: stub */
+	log_printf(LOG_ERROR, "OpenSSL error occurred:\n");
+
+	switch (ERR_GET_REASON(ssl_err)) {
+	case ERR_R_MALLOC_FAILURE:
+		return ENOMEM;
+	case ERR_R_PASSED_NULL_PARAMETER:
+	case ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED:
+	case ERR_R_PASSED_INVALID_ARGUMENT:
+		return EINVAL;
+	default:
+		break;
+	}
+
+	return ENETDOWN;
+}
+
+/**
+ * 
+ * 
+ */
+int ssl_malloc_err(connection* conn) {
+	
+	unsigned long ssl_err = ERR_get_error();
+
+	if (ERR_GET_REASON(ssl_err) == ERR_R_MALLOC_FAILURE)
+		log_printf(LOG_ERROR, "OpenSSL malloc failure caught\n");
+	else
+		log_printf(LOG_ERROR, "Unknown OpenSSL error on malloc attempt: %s\n",
+				ERR_error_string(ssl_err, NULL));
+
+	ERR_clear_error();
+
+	/* TODO: error checking here is rather non-specific */
+
+	set_err_string(conn, "Insufficient memory within the SSA Daemon for malloc");
+	return ENOMEM;
+}
+
+
+int has_err_string(connection* conn) {
+	if (strlen(conn->err_string) > 0)
+		return 1;
+	else
+		return 0;
+}
+
+void set_verification_err_string(connection* conn, long ssl_err) {
+	const char* err_description = X509_verify_cert_error_string(ssl_err);
+
+	clear_err_string(conn);
+	snprintf(conn->err_string, MAX_ERR_STRING,
+			"OpenSSL verification error %li: %s\n", ssl_err, err_description);
+	log_printf(LOG_ERROR,
+			"OpenSSL verification error %li: %s\n", ssl_err, err_description);
+}
+
+void set_err_string(connection* conn, char* string, ...) {
+
+	va_list args;
+	clear_err_string(conn);
+
+	va_start(args, string);
+	vsnprintf(conn->err_string, MAX_ERR_STRING, string, args);
+	va_end(args);
+}
+
+void clear_err_string(connection* conn) {
+	memset(conn->err_string, 0, MAX_ERR_STRING);
+}
+
 
 
 
