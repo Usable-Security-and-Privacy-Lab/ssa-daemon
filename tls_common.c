@@ -94,22 +94,38 @@ int get_peer_certificate(connection* conn, char** data, unsigned int* len) {
 	return ret;
 }
 
-int get_peer_identity(connection* conn_ctx, char** data, unsigned int* len) {
-	X509* cert;
+/**
+ * Retrieves the identity of the peer currently connected to in conn. The
+ * identity is stored in the X509 certificate that the peer had sent to us
+ * in the TLS handshake.
+ * @param conn The connection to retrieve peer identity information for.
+ * @param identity An area to allocate the ASCII representation of the peer's
+ * identity to.
+ * @param len The length of identity.
+ * @returns 0 on success; or -errno if an error occurred.
+ */
+int get_peer_identity(connection* conn, char** identity, unsigned int* len) {
+	
 	X509_NAME* subject_name;
-	char* identity;
-	if (conn_ctx->tls == NULL)
-		return 0;
-	cert = SSL_get_peer_certificate(conn_ctx->tls);
-	if (cert == NULL) {
-		log_printf(LOG_INFO, "peer cert is NULL\n");
-		return 0;
+	X509* cert;
+
+	if (conn->tls == NULL)
+		return -ENOTCONN;
+
+	cert = SSL_get_peer_certificate(conn->tls);
+	if (cert == NULL)
+		return -ENOTCONN;
+
+	subject_name = X509_get_subject_name(cert); /* internal ptr; don't free */
+	*identity = X509_NAME_oneline(subject_name, NULL, 0);
+	if (*identity == NULL) {
+		X509_free(cert);
+		return -ssl_malloc_err(conn);
 	}
-	subject_name = X509_get_subject_name(cert);
-	identity = X509_NAME_oneline(subject_name, NULL, 0);
-	*data = identity;
-	*len = strlen(identity)+1;
-	return 1;
+	*len = strlen(*identity) + 1; /* '\0' character */
+
+	X509_free(cert);
+	return 0;
 }
 
 int get_hostname(connection* conn_ctx, char** data, unsigned int* len) {

@@ -685,13 +685,14 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 	}
 
 	/* whether server or client, we need non blocking sockets for bufferevent */
+	
 	if (evutil_make_socket_nonblocking(fd) != 0) {
 		response = -EVUTIL_SOCKET_ERROR();
 		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
 			 evutil_socket_error_to_string(-response));
 		goto err;
 	}
-
+	
 	response = sock_context_new(&sock_ctx, daemon, id);
 	if (response != 0)
 		goto err;
@@ -817,9 +818,8 @@ void getsockopt_cb(daemon_context* daemon_ctx,
 		}
 		break;
 	case TLS_PEER_IDENTITY:
-		if (get_peer_identity(conn, &data, &len) == 0)
-			response = -ENOTCONN;
-		else
+		response = get_peer_identity(conn, &data, &len);
+		if (response == 0)
 			need_free = 1;
 		break;
 	case TLS_PEER_CERTIFICATE_CHAIN:
@@ -1131,7 +1131,6 @@ void close_cb(daemon_context* daemon_ctx, unsigned long id) {
 
 	sock_ctx = (sock_context*)hashmap_get(daemon_ctx->sock_map, id);
 	if (sock_ctx == NULL) {
-		/* TODO: return error here? */
 		log_printf(LOG_ERROR, "Close called on non-existent socket\n");
 		return;
 	}
