@@ -120,7 +120,7 @@ int get_peer_identity(connection* conn, char** identity, unsigned int* len) {
 	*identity = X509_NAME_oneline(subject_name, NULL, 0);
 	if (*identity == NULL) {
 		X509_free(cert);
-		return -ssl_malloc_err(conn);
+		return ssl_malloc_err(conn);
 	}
 	*len = strlen(*identity) + 1; /* '\0' character */
 

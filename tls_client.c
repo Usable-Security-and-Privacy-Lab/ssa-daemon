@@ -38,9 +38,8 @@ SSL_CTX* client_settings_init(char* path) {
 	}
   
 	SSL_CTX *client_settings = SSL_CTX_new(TLS_client_method());
-	if (client_settings == NULL) {
+	if (client_settings == NULL)
 		goto err_ctx;
-	}
 
 	/* TODO: eventually move these things to a config file */
 	const char* test_CA_file = "test_files/certs/rootCA.pem";
@@ -62,7 +61,8 @@ SSL_CTX* client_settings_init(char* path) {
 							   "TLS_AES_128_CCM_8_SHA256";
 
 	SSL_CTX_set_verify(client_settings, SSL_VERIFY_PEER, NULL);
-	SSL_CTX_set_options(client_settings, SSL_OP_NO_COMPRESSION | SSL_OP_NO_TICKET);
+	SSL_CTX_set_options(client_settings, SSL_OP_NO_COMPRESSION 
+			| SSL_OP_NO_TICKET);
 
 
 	if (SSL_CTX_set_min_proto_version(client_settings, TLS1_2_VERSION) != 1) {
@@ -96,7 +96,8 @@ SSL_CTX* client_settings_init(char* path) {
 err:
 	SSL_CTX_free(client_settings);
 err_ctx:
-	log_printf(LOG_ERROR, "Initiating tls client settings failed.\n");
+	log_printf(LOG_ERROR, "OpenSSL error initializing client SSL_CTX: %s\n",
+				ERR_error_string(ERR_get_error(), NULL));
 	return NULL;
 }
 
@@ -110,13 +111,11 @@ err_ctx:
 int client_SSL_new(connection* conn, daemon_context* daemon) {
 
 	SSL* new_ssl = SSL_new(daemon->client_settings);
-	if (new_ssl == NULL) {
-		return -ssl_malloc_err(conn);
-	}
+	if (new_ssl == NULL)
+		return ssl_malloc_err(conn);
 
-	if (conn->tls != NULL) {
+	if (conn->tls != NULL)
 		SSL_free(conn->tls);
-	}
 	conn->tls = new_ssl;
 
 	return 0;
