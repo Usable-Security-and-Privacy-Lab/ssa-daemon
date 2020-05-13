@@ -661,7 +661,8 @@ void signal_cb(evutil_socket_t fd, short event, void* arg) {
  * @param id A uniquely generated ID for the given socket; corresponds with
  * (though is not equal to) the internal program's file descriptor of that
  * socket.
- * @param comm TODO: I have no clue what this is for. Used to be hostname??
+ * @param comm The address path of the calling program.
+ * @returns (via netlink) a notification of 0 on success, or -errno on failure.
  */
 void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 
@@ -710,7 +711,7 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 	hashmap_add(daemon->sock_map, id, (void*)sock_ctx);
 
 	log_printf(LOG_INFO, "Socket created on behalf of application %s\n", comm);
-	netlink_notify_kernel(daemon, id, response);
+	netlink_notify_kernel(daemon, id, 0);
 	return;
  err:
 	if (fd != -1)
@@ -718,7 +719,7 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 	if (sock_ctx != NULL)
 		sock_context_free(sock_ctx);
 
-	log_printf(LOG_DEBUG, "socket_cb failed with response: %i\n", response);
+	log_printf(LOG_ERROR, "Socket failed to be created: %i\n", response);
 
 	netlink_notify_kernel(daemon, id, response);
 	return;
@@ -726,13 +727,13 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 
 void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 		int option, void* value, socklen_t len) {
+
 	sock_context* sock_ctx;
 	int response = 0; /* Default is success */
 
 	sock_ctx = (sock_context*)hashmap_get(ctx->sock_map, id);
 	if (sock_ctx == NULL) {
-		response = -EBADF;
-		netlink_notify_kernel(ctx, id, response);
+		netlink_notify_kernel(ctx, id, -EBADF);
 		return;
 	}
 
@@ -742,9 +743,9 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 		memcpy(sock_ctx->rem_hostname, value, len);
 		log_printf(LOG_INFO,
 				"Assigning %s to socket %lu\n", sock_ctx->rem_hostname, id);
-		if (set_remote_hostname(sock_ctx->conn, value) == 0) {
+
+		if (set_remote_hostname(sock_ctx->conn, value) == 0)
 			response = -EINVAL;
-		}
 		break;
 	case TLS_DISABLE_CIPHER:
 		response = disable_cipher(sock_ctx->conn, (char*) value);
@@ -781,7 +782,7 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 	return;
 }
 
-void getsockopt_cb(daemon_context* daemon_ctx,
+void getsockopt_cb(daemon_context* daemon, 
 		unsigned long id, int level, int option) {
 
 	sock_context* sock_ctx;
@@ -792,9 +793,9 @@ void getsockopt_cb(daemon_context* daemon_ctx,
 	unsigned int len = 0;
 	int need_free = 0;
 
-	sock_ctx = (sock_context*)hashmap_get(daemon_ctx->sock_map, id);
+	sock_ctx = (sock_context*)hashmap_get(daemon->sock_map, id);
 	if (sock_ctx == NULL) {
-		netlink_notify_kernel(daemon_ctx, id, -EBADF);
+		netlink_notify_kernel(daemon, id, -EBADF);
 		return;
 	}
 	conn = sock_ctx->conn;
@@ -851,10 +852,10 @@ void getsockopt_cb(daemon_context* daemon_ctx,
 		break;
 	}
 	if (response != 0) {
-		netlink_notify_kernel(daemon_ctx, id, response);
+		netlink_notify_kernel(daemon, id, response);
 		return;
 	}
-	netlink_send_and_notify_kernel(daemon_ctx, id, data, len);
+	netlink_send_and_notify_kernel(daemon, id, data, len);
 	if (need_free == 1) {
 		free(data);
 	}
