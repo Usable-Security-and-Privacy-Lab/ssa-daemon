@@ -151,25 +151,29 @@ int ssl_err_to_errno() {
 }
 
 /**
- * 
- * 
+ * Verifies that a given OpenSSL operation failed because of memory issues. If 
+ * memory issues were not the cause of the problem, then the cause of the 
+ * problem is most likely a bug internal to the daemon (such as passing in a 
+ * NULL reference), and it will print out the error information to the logs.
+ * @param conn The connection for which to associate the error string with.
+ * @returns -ENOMEM when insufficient memory is available, or -ENOTRECOVERABLE 
+ * when an unknown failure occurred.
  */
 int ssl_malloc_err(connection* conn) {
 	
 	unsigned long ssl_err = ERR_get_error();
-
-	if (ERR_GET_REASON(ssl_err) == ERR_R_MALLOC_FAILURE)
-		log_printf(LOG_ERROR, "OpenSSL malloc failure caught\n");
-	else
-		log_printf(LOG_ERROR, "Unknown OpenSSL error on malloc attempt: %s\n",
-				ERR_error_string(ssl_err, NULL));
-
 	ERR_clear_error();
 
-	/* TODO: error checking here is rather non-specific */
-
-	set_err_string(conn, "Insufficient memory within the SSA Daemon for malloc");
-	return ENOMEM;
+	if (ERR_GET_REASON(ssl_err) == ERR_R_MALLOC_FAILURE) {
+		log_printf(LOG_ERROR, "OpenSSL malloc failure caught\n");
+		set_err_string(conn, "Insufficient alloc memory for the SSA daemon");
+		return -ENOMEM;
+	} else { 
+		log_printf(LOG_ERROR, "Internal OpenSSL error on malloc attempt: %s\n",
+				ERR_error_string(ssl_err, NULL));
+		set_err_string(conn, "Internal failure; please reset daemon & report");
+		return -ENOTRECOVERABLE;
+	}
 }
 
 
@@ -191,6 +195,9 @@ void set_verification_err_string(connection* conn, long ssl_err) {
 }
 
 void set_err_string(connection* conn, char* string, ...) {
+
+	if (conn == NULL)
+		return;
 
 	va_list args;
 	clear_err_string(conn);
