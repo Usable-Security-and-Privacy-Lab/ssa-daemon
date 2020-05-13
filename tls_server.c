@@ -67,11 +67,8 @@ SSL_CTX* server_settings_init(char* path) {
 
 	return server_settings;
  err:
-	/* TODO: check and return OpenSSL error here? */
-	ssl_err = ERR_get_error();
-	char err_string[200] = {0};
-	ERR_error_string_n(ssl_err, err_string, 200);
-	log_printf(LOG_ERROR, "Server SSL_CTX failed with: %s\n", err_string);
+	log_printf(LOG_ERROR, "OpenSSL error initializing server SSL_CTX: %s\n", 
+			ERR_error_string(ERR_get_error(), NULL));
 	
 	if (server_settings != NULL)
 		SSL_CTX_free(server_settings);
@@ -85,14 +82,11 @@ SSL_CTX* server_settings_init(char* path) {
 int server_SSL_new(connection* conn, daemon_context* daemon) {
 	
 	SSL* temp = SSL_new(daemon->server_settings);
-	if (temp == NULL) {
-		/* TODO: determine if the error was actually an out-of-memory issue */
-		return -ENOMEM;
-	}
+	if (temp == NULL)
+		return ssl_malloc_err(conn);
 	
 	if (conn->tls != NULL)
 		SSL_free(conn->tls);
-
 	conn->tls = temp;
 
 	return 0;
@@ -103,12 +97,10 @@ int accept_SSL_new(connection* conn, connection* old) {
 		SSL_free(conn->tls);
 
 	conn->tls = SSL_dup(old->tls);
-	if (conn->tls == NULL) {
-		/* TODO: get openssl error and return here */
-		return -ENOMEM;
-	} else {
+	if (conn->tls == NULL)
+		return ssl_malloc_err(old);
+	else
 		return 0;
-	}
 }
 
 /**
