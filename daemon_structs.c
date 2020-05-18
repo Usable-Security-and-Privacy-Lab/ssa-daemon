@@ -208,9 +208,8 @@ void set_err_string(connection* conn, char* string, ...) {
 }
 
 void clear_err_string(connection* conn) {
-	memset(conn->err_string, 0, MAX_ERR_STRING);
+	conn->err_string[0] = '\0';
 }
-
 
 
 
