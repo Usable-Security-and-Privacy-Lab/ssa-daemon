@@ -312,6 +312,8 @@ int handle_server_event_connected(connection* conn, channel* startpoint) {
 void handle_event_error(connection* conn, 
 		int error, channel* startpoint, channel* endpoint) {
 
+    unsigned long ssl_err = bufferevent_get_openssl_error(startpoint->bev);
+
 	log_printf(LOG_DEBUG, "%s endpoint encountered an error\n", 
 			startpoint->bev == conn->secure.bev 
 			? "encrypted" : "plaintext");
@@ -322,9 +324,11 @@ void handle_event_error(connection* conn,
 	} else if (error != 0){
 		log_printf(LOG_WARNING, "Unhandled error %i has occurred: %s\n", 
 				error, evutil_socket_error_to_string(error));
-	} else if (ERR_peek_error()) {
-		log_printf(LOG_WARNING, "OpenSSL error %s on endpoint\n", 
-				ERR_error_string(ERR_get_error(), NULL));
+	}
+	
+	if (ssl_err != 0) {
+		log_printf(LOG_WARNING, "OpenSSL error on endpoint: %s\n", 
+				ERR_error_string(ssl_err, NULL));
 	}
 
 	startpoint->closed = 1;
