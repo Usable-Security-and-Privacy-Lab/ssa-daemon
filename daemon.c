@@ -761,25 +761,31 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 		if (set_remote_hostname(sock_ctx->conn, value) == 0)
 			response = -EINVAL;
 		break;
+
 	case TLS_DISABLE_CIPHER:
 		response = disable_cipher(sock_ctx->conn, (char*) value);
 		break;
+
 	case TLS_TRUSTED_PEER_CERTIFICATES:
-		if (set_trusted_peer_certificates(sock_ctx->conn, (char*) value) != 1)
-			response = -1;
+		response = set_trusted_CA_certificates(sock_ctx->conn, (char*) value);
 		break;
+
 	case TLS_CLIENT_CONNECTION:
 		response = set_connection_type(sock_ctx->conn, ctx, CLIENT_CONN);
 		break;
+
 	case TLS_SERVER_CONNECTION:
 		response = set_connection_type(sock_ctx->conn, ctx, SERVER_CONN);
 		break;
+
 	case TLS_CERTIFICATE_CHAIN:
 		response = set_certificate_chain(sock_ctx->conn, ctx, (char*) value);
 		break;
+
 	case TLS_PRIVATE_KEY:
-		response = set_private_key(sock_ctx->conn, ctx, value);
+		response = set_private_key(sock_ctx->conn, value);
 		break;
+
 	case TLS_ERROR:
 	case TLS_HOSTNAME:
 	case TLS_TRUSTED_CIPHERS:
@@ -821,38 +827,45 @@ void getsockopt_cb(daemon_context* daemon,
 			len = strlen(conn->err_string) + 1;
 		}
 		break;
+
 	case TLS_REMOTE_HOSTNAME:
 		if (strlen(sock_ctx->rem_hostname) > 0) {
 			data = sock_ctx->rem_hostname;
 			len = strlen(sock_ctx->rem_hostname) + 1;
 		}
 		break;
+
 	case TLS_HOSTNAME:
 		if(get_hostname(conn, &data, &len) == 0) {
 			response = -EINVAL;
 		}
 		break;
+
 	case TLS_PEER_IDENTITY:
 		response = get_peer_identity(conn, &data, &len);
 		if (response == 0)
 			need_free = 1;
 		break;
+
 	case TLS_PEER_CERTIFICATE_CHAIN:
 		response = get_peer_certificate(conn, &data, &len);
 		if (response == 0)
 			need_free = 1;
 		break;
+
 	case TLS_TRUSTED_CIPHERS:
 		response = get_enabled_ciphers(conn, &data, &len);
 		if (response == 0)
 			need_free = 1;
 		break;
+
 	case TLS_TRUSTED_PEER_CERTIFICATES:
 	case TLS_PRIVATE_KEY:
 	case TLS_DISABLE_CIPHER:
 	case TLS_REQUEST_PEER_AUTH:
 		response = -ENOPROTOOPT; /* all set only */
 		break;
+
 	case TLS_ID:
 		/* This case is handled directly by the kernel.
 		 * If we want to change that, uncomment the lines below */

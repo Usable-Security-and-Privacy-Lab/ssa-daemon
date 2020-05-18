@@ -230,8 +230,6 @@ int load_certificate_authority(SSL_CTX* ctx, char* CA_path) {
 }
 
 
-
-
 /*
  *******************************************************************************
  *                            GETSOCKOPT FUNCTIONS
@@ -327,19 +325,38 @@ int get_peer_identity(connection* conn, char** identity, unsigned int* len) {
 	return 0;
 }
 
-int get_hostname(connection* conn_ctx, char** data, unsigned int* len) {
+
+/**
+ * Retrieves the given connection's assigned hostname (as used in SNI
+ * indication). Note that this does not retrieve the hostname of a server a 
+ * client has connected to; rather, this retrieves the hostname that has
+ * been assigned to the given connection, assuming that the given connection
+ * is a server.
+ * @param conn The connection to retrieve a hostname from.
+ * @param data The string that hostname will be assigned to.
+ * @param len The length of hostname (including the null-terminating character).
+ * @returns 0 on success, or -errno if an error has occurred.
+ */
+int get_hostname(connection* conn, char** data, unsigned int* len) {
+
 	const char* hostname;
-	if (conn_ctx == NULL) {
-		return 0;
+	
+	switch (conn->tls) {
+	case SERVER_NEW:
+	case SERVER_CONNECTING:
+	case SERVER_CONNECTED:
+		break;
+	default:
+		return -EINVAL;
 	}
-	hostname = SSL_get_servername(conn_ctx->tls, TLSEXT_NAMETYPE_host_name);
+
+	hostname = SSL_get_servername(conn->tls, TLSEXT_NAMETYPE_host_name);
+	if (hostname == NULL)
+		return -EINVAL;
+
 	*data = (char*)hostname;
-	if (hostname == NULL) {
-		*len = 0;
-		return 1;
-	}
 	*len = strlen(hostname)+1;
-	return 1;
+	return 0;
 }
 
 /**
@@ -387,6 +404,15 @@ int get_enabled_ciphers(connection* conn, char** data, unsigned int* len) {
  *******************************************************************************
  */
 
+/**
+ * Sets the given connection to be either a client or server connection.
+ * @param conn The connection whose state should be modified.
+ * @param type The type of connection to change the connection to; should
+ * be 0 (SERVER_CONN) to set the connection to a SERVER_NEW state, or 1 
+ * (CLIENT_CONN) to set the connection to a CLIENT_NEW state.
+ * 
+ * @returns 0 on success, or -errno if an error occurred.
+ */
 int set_connection_type(connection* conn, daemon_context* daemon, int type) {
 
 	int ret;
@@ -412,7 +438,14 @@ int set_connection_type(connection* conn, daemon_context* daemon, int type) {
 	return ret;
 }
 
-int set_certificate_chain(connection* conn, daemon_context* ctx, char* path) {
+/**
+ * Sets the certificate chain to be used for a given connection conn using
+ * the file/directory pointed to by path. 
+ * @param conn The connection to load the certificate chain into.
+ * @param path The path to the certificate chain directory/file.
+ * @returns 0 on success, or -errno if an error occurred.
+ */
+int set_certificate_chain(connection* conn, char* path) {
 
 	struct stat file_stats;
 	int ret;
@@ -453,7 +486,18 @@ int set_certificate_chain(connection* conn, daemon_context* ctx, char* path) {
 	return ret;
 }
 
-int set_private_key(connection* conn, daemon_context* ctx, char* path) {
+/**
+ * Sets a private key for the given connection conn using the key located 
+ * by path, and verifies that the given key matches the last loaded 
+ * certificate chain. An SSL* can have multiple private key/cert chain pairs, 
+ * so care should be taken to make sure they are loaded in the right sequence
+ * or else this function will fail.
+ * 
+ * @param conn The connection to add the given private key to.
+ * @param path The location of the Private Key file.
+ * @returns 0 on success, or -errno if an error occurred.
+ */
+int set_private_key(connection* conn, char* path) {
 
 	struct stat file_stats;
 	int ret;
@@ -497,20 +541,31 @@ int set_private_key(connection* conn, daemon_context* ctx, char* path) {
 	return ret;
 }
 
-/* TODO: Test this */
-int set_trusted_peer_certificates(connection* conn, char* value) {
-	/* XXX update this to take in-memory PEM chains as well as file names */
-	/* ^ old comment, maybe still do? */
+/**
+ * Sets the trusted Certificate Authority certificates for the given
+ * connection conn to those found in the file specified by path.
+ * @param conn The connection to modify CA trusts on.
+ * @param path The path to a file containing .pem encoded CA's.
+ * @returns 0 on success, or -ernno if an error occurred. 
+ */
+int set_trusted_CA_certificates(connection* conn, char* path) {
 
-	if (conn == NULL)
-		return 0;
+	switch (conn->state) {
+	case CLIENT_NEW:
+	case SERVER_NEW:
+		break;
 
-	STACK_OF(X509_NAME)* cert_names = SSL_load_client_CA_file(value);
+	default:
+		return -EINVAL; /* TODO: correct return value? */
+	}
+	
+	STACK_OF(X509_NAME)* cert_names = SSL_load_client_CA_file(path);
 	if (cert_names == NULL)
-		return 0;
+		return -EBADF;
 
 	SSL_set_client_CA_list(conn->tls, cert_names);
-	return 1;
+
+	return 0;
 }
 
 /**
@@ -615,8 +670,14 @@ int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist) {
 		return -1;
 }
 
-
-
+/** 
+ * Verifies that the loaded private key and certificate match each other.
+ * @pre The Private Key and Certificate chain have already been loaded into
+ * tls.
+ * @param tls The SSL object containing the certificate chain and private key
+ * for which to check.
+ * @returns 0 if the checks succeeded; -EPROTO otherwise. 
+ */
 int check_key_cert_pair(SSL* tls) {
 	if (SSL_check_private_key(tls) != 1) {
 		log_printf(LOG_ERROR, "Key and certificate don't match.\n");
