@@ -29,7 +29,14 @@
 #define CLIENT_CONN 1
 
 
+/* SSL_CTX loading */
+long get_tls_version(enum tls_version_t version);
+int load_certificate_authority(SSL_CTX* ctx, char* CA_path);
+int load_cipher_list(SSL_CTX* ctx, char** list, int num);
+int load_ciphersuites(SSL_CTX* ctx, char** list, int num);
 
+
+/* random error functions? */
 void set_tls_error(sock_context* sock_ctx);
 void set_tls_connection_error(sock_context* sock_ctx);
 

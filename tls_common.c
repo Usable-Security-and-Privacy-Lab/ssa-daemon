@@ -1,3 +1,4 @@
+#include "config.h"
 #include "log.h"
 #include "tls_client.h"
 #include "tls_common.h"
@@ -11,11 +12,16 @@
 
 #include <openssl/err.h>
 
+#define UBUNTU_DEFAULT_CA "/etc/ssl/certs/ca-certificates.crt"
+#define FEDORA_DEFAULT_CA "/etc/pki/tls/certs/ca-bundle.crt"
+
+
+int concat_ciphers(char** list, int num, char** out);
+
 int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist);
 int get_ciphers_strlen(STACK_OF(SSL_CIPHER)* ciphers);
 int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len);
 int check_key_cert_pair(SSL* tls);
-
 
 /**
  * Meant to be called after a general OpenSSL function fails; takes the set
@@ -31,6 +37,217 @@ void set_sock_tls_error(sock_context* sock_ctx) {
 
 	/* TODO: finish */
 }
+
+
+
+
+
+/**
+ *******************************************************************************
+ *                           COMMON CONFIG LOADING FUNCTIONS
+ *******************************************************************************
+ */
+
+/**
+ * Converts the given tls_version_t enum into the OpenSSL-specific version.
+ * @param version The version given to us by the config file.
+ * @returns The OpenSSL representation of the TLS Version, or TLS1_2_VERSION
+ * if no version was set (a safe default).
+ */
+long get_tls_version(enum tls_version_t version) {
+
+	long tls_version = 0;
+
+	switch(version) {
+	case TLS_DEFAULT_ENUM:
+		log_printf(LOG_INFO, "No TLS version specified\n");
+		tls_version = TLS_MAX_VERSION; /* default */
+		break;
+	case TLS1_0_ENUM:
+		tls_version = TLS1_VERSION;
+		break;
+	case TLS1_1_ENUM:
+		tls_version = TLS1_1_VERSION;
+		break;
+	case TLS1_2_ENUM:
+		tls_version = TLS1_2_VERSION;
+		break;
+	case TLS1_3_ENUM:
+		tls_version = TLS1_3_VERSION;
+		break;
+	default:
+		log_printf(LOG_ERROR, "Unknown TLS version specified\n");
+	}
+
+	return tls_version;
+}
+
+/**
+ * Erases all previously-set ciphers in ciphers and sets them to the list of
+ * ciphers in list.
+ * @param ctx The context to load the given ciphers into.
+ * @param list The list of names of ciphers to load.
+ * @param num The size of list.
+ * @returns 1 on success, or 0 if some of the ciphers could not be added.
+ */
+int load_cipher_list(SSL_CTX* ctx, char** list, int num) {
+
+	char* ciphers;
+	int ret;
+
+	ret = concat_ciphers(list, num, &ciphers);
+	if (ret != 1)
+		goto end;
+
+	ret = SSL_CTX_set_cipher_list(ctx, ciphers);
+	if (ret != 1)
+		goto end;
+	
+	/* returns some false negatives... but it's the best we've got */
+	if (sk_SSL_CIPHER_num(SSL_CTX_get_ciphers(ctx)) < num) {
+		/* Fewer ciphers were added than were specified */
+		log_printf(LOG_ERROR, "Some cipher names were not recognized\n");
+		ret = 0;
+		goto end;
+	}
+
+ end:
+	free(ciphers);
+	return ret;
+}
+
+/**
+ * Erases all previously-set TLS 1.3 ciphers in ciphers and sets them to the
+ * list of ciphers in list.
+ * @param ctx The context to load the given ciphers into.
+ * @param list The list of names of ciphers to load.
+ * @param num The size of list.
+ * @returns 1 on success, or 0 if some of the ciphers could not be added.
+ */
+int load_ciphersuites(SSL_CTX* ctx, char** list, int num) {
+
+	char* ciphers;
+	int ret;
+
+	ret = concat_ciphers(list, num, &ciphers);
+	if (ret != 1)
+		goto end;
+
+	ret = SSL_CTX_set_ciphersuites(ctx, ciphers);
+	if (ret != 1)
+		goto end;
+
+	if (sk_SSL_CIPHER_num(SSL_CTX_get_ciphers(ctx)) < num) {
+		log_printf(LOG_ERROR, "Some cipher names were not recognized\n");
+		ret = 0;
+		goto end;
+	}
+
+ end:
+	free(ciphers);
+	return ret;
+}
+
+/**
+ * Helper function for load_cipher_list and load_ciphersuites; takes a given
+ * list of ciphers and converts them into the OpenSSL-defined format required
+ * to set the cipher list or ciphersuites.
+ * @param list The list of ciphers to be converted into OpenSSL cipherlist 
+ * format.
+ * @param num The number of ciphers in list.
+ * @param out The converted cipherlist string (NULL-terminated).
+ * @returns 1 on success, or 0 on error.
+ */
+int concat_ciphers(char** list, int num, char** out) {
+
+	char* ciphers;
+	int offset = 0;
+	int len = 0;
+
+	for (int i = 0; i < num; i++)
+		len += strlen(list[i]) + 1; /* +1 for colon (or '\0' at end) */
+
+    ciphers = malloc(len);
+	if (*out == NULL) {
+		log_printf(LOG_ERROR, "Malloc failed while loading cipher list: %s\n",
+				strerror(errno));
+		return -1;
+	}
+
+	for (int i = 0; i < num; i++) {
+		int cipher_len = strlen(list[i]);
+
+		memcpy(out[offset], list[i], cipher_len);
+		ciphers[offset + cipher_len] = ':';
+
+		offset += cipher_len + 1;
+	}
+
+	ciphers[len - 1] = '\0';
+
+	if (len != offset) {
+		log_printf(LOG_DEBUG, "load_cipher_list had unexpected results\n");
+		free(ciphers);
+		return -1;
+	}
+
+	*out = ciphers;
+	return 0;
+}
+
+/**
+ * Loads the given certificate authority .pem or .der-encoded certificates into
+ * ctx from the file or directory specified by path. This function will load in
+ * all certificates found in a directory, or all certificates found in an 
+ * individual file (if the file is capable of containing more than one 
+ * certificate). If CA_path is null, this function will attempt to find the 
+ * default location of CA certificates on your machine.
+ * @param ctx The SSL_CTX to load certificate authorities in to.
+ * @param CA_path A NULL-terminated string representing the path to the 
+ * directory/file; or NULL if the default locations are desired.
+ * @returns 1 on success, or 0 if an error occurred.
+ */
+int load_certificate_authority(SSL_CTX* ctx, char* CA_path) {
+
+	struct stat file_stats;
+
+	if (CA_path == NULL) { /* No CA file given--search for one based on system */
+		if (access(UBUNTU_DEFAULT_CA, F_OK) != -1) {
+			CA_path = UBUNTU_DEFAULT_CA;
+			log_printf(LOG_INFO, "Found the Ubuntu CA file.\n");
+		
+		} else if(access(FEDORA_DEFAULT_CA, F_OK) != -1) {
+			CA_path = FEDORA_DEFAULT_CA;
+			log_printf(LOG_INFO, "Found the Fedora CA file.\n");
+		
+		} else { /* UNSUPPORTED OS */
+			log_printf(LOG_ERROR, "Unable to find valid CA location.\n");
+			return 0;
+		}
+	}
+
+	
+	if (stat(CA_path, &file_stats) != 0) {
+		log_printf(LOG_ERROR, "Failed to access CA file %s: %s\n", 
+				CA_path, strerror(errno));
+		return 0;
+	}
+
+	if (S_ISREG(file_stats.st_mode)) {
+		/* is a file */
+		return SSL_CTX_load_verify_locations(ctx, CA_path, NULL);
+
+	} else if (S_ISDIR(file_stats.st_mode)) {
+		/* is a directory */
+		return SSL_CTX_load_verify_locations(ctx, NULL, CA_path);
+
+	} else {
+		log_printf(LOG_ERROR, "Loading CA certs--path not file or directory\n");
+		return 0;
+	}
+}
+
+
 
 
 /*
@@ -120,7 +337,7 @@ int get_peer_identity(connection* conn, char** identity, unsigned int* len) {
 	*identity = X509_NAME_oneline(subject_name, NULL, 0);
 	if (*identity == NULL) {
 		X509_free(cert);
-		return -ssl_malloc_err(conn);
+		return ssl_malloc_err(conn);
 	}
 	*len = strlen(*identity) + 1; /* '\0' character */
 

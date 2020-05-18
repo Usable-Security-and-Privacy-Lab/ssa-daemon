@@ -322,6 +322,9 @@ void handle_event_error(connection* conn,
 	} else if (error != 0){
 		log_printf(LOG_WARNING, "Unhandled error %i has occurred: %s\n", 
 				error, evutil_socket_error_to_string(error));
+	} else if (ERR_peek_error()) {
+		log_printf(LOG_WARNING, "OpenSSL error %s on endpoint\n", 
+				ERR_error_string(ERR_get_error(), NULL));
 	}
 
 	startpoint->closed = 1;
