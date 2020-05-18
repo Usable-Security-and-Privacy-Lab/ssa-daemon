@@ -36,11 +36,6 @@ int load_cipher_list(SSL_CTX* ctx, char** list, int num);
 int load_ciphersuites(SSL_CTX* ctx, char** list, int num);
 
 
-/* random error functions? */
-void set_tls_error(sock_context* sock_ctx);
-void set_tls_connection_error(sock_context* sock_ctx);
-
-
 /* setsockopt */
 int get_peer_certificate(connection* conn, char** data, unsigned int* len);
 int get_peer_identity(connection* conn_ctx, char** data, unsigned int* len);
