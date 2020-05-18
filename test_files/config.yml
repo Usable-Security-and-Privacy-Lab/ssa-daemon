@@ -1,20 +1,24 @@
+
+# The following are the loadable configurations for the SSA Daemon.
+# If a configuration is not set in this YAML file, the default will be use
+# (as listed to the right/bottom of each setting)
 client:
   # TLS Protocols include TLS-1.0, TLS-1.1, TLS-1.2 and TLS-1.3. Note that 
   # SSLv2 and SSLv3 cannot be enabled (due to considerable security flaws).
   # protocols lower than TLS-1.2 are considered deprecated and insecure by most browsers.
-  min-tls-version: 1.2       
-  max-tls-version: 1.3      
+  min-tls-version: 1.2 # Default: 1.3
+  max-tls-version: 1.3 # Default: 1.3
 
   # The CRIME attack targets TLS Compression; an attacker can gain information 
   # about authorization tokens, secret web cookies or other sensitive information 
   # passed in HTTP requests/responses since message lengths are not hidden by encryption.
   # It should be kept disabled unless other mitigations are put in place.
-  tls-compression: disabled  
+  tls-compression: disabled # Default: disabled
 
   # Session Tickets posess a vulnerability in them for TLS 1.2 and lower.
   # For more info, see here: https://blog.filippo.io/we-need-to-talk-about-session-tickets/
   # Realistically, they should be kept disabled unless TLS-1.3 is your minimum TLS version.
-  session-tickets: disabled  # Session Tickets are also vulnerable to an attack.
+  session-tickets: disabled  # Default: disabled
 
   # Default ciphers in this list (and added by the SSA Daemon in the event of no configuration
   # file found) all maintain Forward Secrecy (the second 'E' in ECDHE is for Ephemeral).
@@ -27,7 +31,14 @@ client:
     - ECDHE-RSA-CHACHA20-POLY1305
     - ECDHE-ECDSA-AES128-GCM-SHA256
     - ECDHE-RSA-AES128-GCM-SHA256
-  
+
+    # Defaults: - ECDHE-ECDSA-AES256-GCM-SHA384
+    #           - ECDHE-RSA-AES256-GCM-SHA384
+    #           - ECDHE-ECDSA-CHACHA20-POLY1305
+    #           - ECDHE-RSA-CHACHA20-POLY1305
+    #           - ECDHE-ECDSA-AES128-GCM-SHA256
+    #           - ECDHE-RSA-AES128-GCM-SHA256
+
   # These are the only ciphersuites accepted by TLS 1.3; they're all very safe.
   ciphersuites:
     - TLS_AES_256_GCM_SHA384
@@ -36,6 +47,11 @@ client:
     - TLS_AES_128_CCM_SHA256
     - TLS_AES_128_CCM_8_SHA256
 
+# Defaults: - TLS_AES_256_GCM_SHA384
+#           - TLS_AES_128_GCM_SHA256
+#           - TLS_CHACHA20_POLY1305_SHA256
+#           - TLS_AES_128_CCM_SHA256
+#           - TLS_AES_128_CCM_8_SHA256
 
 # The same settings that applied to clients should really be applied to servers as well.
 # While servers are generally not at risk of compromise based on these settings, the 
@@ -43,6 +59,8 @@ client:
 # that such clients will not be vulnerable to Man-in-the-Middle attacks while connected
 # to your site, even if their browser is generally succeptible to such.
 server:
+
+  # Note that these settings have the same defaults as that of client settings (for now)
   min-tls-version: 1.2       
   max-tls-version: 1.3       
   tls-compression: disabled  
