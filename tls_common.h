@@ -44,9 +44,9 @@ int get_enabled_ciphers(connection* conn, char** data, unsigned int* len);
 
 /* setsockopt */
 int set_connection_type(connection* conn, daemon_context* daemon, int type);
-int set_trusted_peer_certificates(connection* conn, char* value);
+int set_trusted_CA_certificates(connection* conn, char* path);
 int disable_cipher(connection* conn, char* cipher);
-int set_certificate_chain(connection* conn, daemon_context* ctx, char* value);
-int set_private_key(connection* conn, daemon_context* ctx, char* path);
+int set_certificate_chain(connection* conn, char* path);
+int set_private_key(connection* conn, char* path);
 
 
