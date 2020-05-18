@@ -47,6 +47,7 @@
 #include <openssl/rand.h>
 #include <openssl/ssl.h>
 
+#include "config.h"
 #include "daemon.h"
 #include "daemon_structs.h"
 #include "hashmap.h"
@@ -81,8 +82,11 @@ static void upgrade_recv(evutil_socket_t fd, short events, void *arg);
 ssize_t recv_fd_from(int fd, void *ptr, size_t nbytes,
 		int *recvfd, struct sockaddr_un* addr, int addr_len);
 
-int server_create(int port) {
-	int ret;
+int server_create(int port, char* config_path) {
+
+	global_settings* config_settings = NULL;
+	client_settings* client_config = NULL;
+	server_settings* server_config = NULL;
 	evutil_socket_t server_sock;
 	evutil_socket_t upgrade_sock;
 	struct evconnlistener* listener;
@@ -92,6 +96,7 @@ int server_create(int port) {
 	struct event* upgrade_ev;
 	struct nl_sock* netlink_sock;
 	struct event_base* ev_base = event_base_new();
+	int ret;
 
 #ifndef NO_LOG
     const char* ev_version = event_get_version();
@@ -114,17 +119,23 @@ int server_create(int port) {
 	sev_pipe = evsignal_new(ev_base, SIGPIPE, signal_cb, NULL);
 	if (sev_pipe == NULL) {
 		log_printf(LOG_ERROR, "Couldn't create SIGPIPE handler event\n");
-		return 1;
+		return EXIT_FAILURE;
 	}
 	sev_int = evsignal_new(ev_base, SIGINT, signal_cb, ev_base);
 	if (sev_int == NULL) {
 		log_printf(LOG_ERROR, "Couldn't create SIGINT handler event\n");
-		return 1;
+		return EXIT_FAILURE;
 	}
 	evsignal_add(sev_pipe, NULL);
 	evsignal_add(sev_int, NULL);
 
-	//signal(SIGPIPE, SIG_IGN);
+
+	config_settings = parse_config(config_path);
+	if (config_settings != NULL) {
+		log_printf(LOG_INFO, "Successfully parsed config settings\n");
+		client_config = config_settings->client;
+		server_config = config_settings->server;
+	}
 
 	daemon_context context = {
 		.ev_base = ev_base,
@@ -132,15 +143,18 @@ int server_create(int port) {
 		.port = port,
 		.sock_map = hashmap_create(HASHMAP_NUM_BUCKETS),
 		.sock_map_port = hashmap_create(HASHMAP_NUM_BUCKETS),
-		.client_settings = client_settings_init("ssa.cfg"),
-		.server_settings = server_settings_init("ssa.cfg"),
+		.client_ctx = client_ctx_init(client_config),
+		.server_ctx = server_ctx_init(server_config),
 	};
 
-	if (context.client_settings == NULL) {
+	if (config_settings != NULL)
+		global_settings_free(config_settings);
+
+	if (context.client_ctx == NULL) {
 		log_printf(LOG_ERROR, "Couldn't load client SSL_CTX settings.\n");
 		return 1;
 	}
-	if (context.server_settings == NULL) {
+	if (context.server_ctx == NULL) {
 		log_printf(LOG_ERROR, "Couldn't load server SSL_CTX settings.\n");
 		return 1;
 	}
@@ -207,8 +221,8 @@ int server_create(int port) {
 	hashmap_free(context.sock_map_port);
 	hashmap_deep_free(context.sock_map, (void (*)(void*))sock_context_free);
 	event_free(nl_ev);
-	SSL_CTX_free(context.client_settings);
-	SSL_CTX_free(context.server_settings);
+	SSL_CTX_free(context.client_ctx);
+	SSL_CTX_free(context.server_ctx);
 
 	event_free(upgrade_ev);
 	event_free(sev_pipe);
@@ -1193,7 +1207,7 @@ void upgrade_recv(evutil_socket_t fd, short events, void *arg) {
 
 	if (is_accepting == 1) {
 		/* TODO: Eventually clean up this whole section--ripped from tls_opts_server_setup()... */
-		SSL_CTX* server_settings = daemon_ctx->server_settings;
+		SSL_CTX* server_settings = daemon_ctx->server_ctx;
 		SSL_CTX_set_options(server_settings, SSL_OP_ALL);
 		/* There's a billion options we can/should set here by admin config XXX
 		* See SSL_CTX_set_options and SSL_CTX_set_cipher_list for details */

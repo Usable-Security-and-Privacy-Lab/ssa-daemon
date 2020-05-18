@@ -39,18 +39,24 @@
  * main_original.c. This function is merely to allow easy use of gdb and other
  * debugging tools. */
 int main(int argc, char* argv[]) {
-	if (geteuid() != 0) {
-		log_printf(LOG_ERROR, "Please run as root\n");
-		exit(EXIT_FAILURE);
-	}
+
+	char* config_path = NULL;
+
+	if (argc > 1)
+		config_path = argv[1];
 
     if (log_init(NULL, LOG_DEBUG)) {
 		fprintf(stderr, "Failed to initialize log\n");
 		exit(EXIT_FAILURE);
 	}
 
-    server_create(PORT);
+	if (geteuid() != 0) {
+		log_printf(LOG_ERROR, "Please run as root\n");
+		exit(EXIT_FAILURE);
+	}
 
-	log_close();
-    return EXIT_SUCCESS;
+    int ret = server_create(PORT, config_path);
+
+    log_close();
+    return ret;
 }

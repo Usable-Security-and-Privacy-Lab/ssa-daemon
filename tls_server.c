@@ -9,71 +9,191 @@
 #include <openssl/err.h>
 
 #include "bev_callbacks.h"
+#include "config.h"
 #include "daemon_structs.h"
 #include "log.h"
 #include "tls_server.h"
 
-SSL_CTX* server_settings_init(char* path) {
-	const char* cipher_list = "ECDHE-ECDSA-AES256-GCM-SHA384:"
-							  "ECDHE-RSA-AES256-GCM-SHA384:"
-							  "ECDHE-ECDSA-CHACHA20-POLY1305:"
-							  "ECDHE-RSA-CHACHA20-POLY1305:"
-							  "ECDHE-ECDSA-AES128-GCM-SHA256:"
-							  "ECDHE-RSA-AES128-GCM-SHA256";
-	SSL_CTX* server_settings = NULL;
-	unsigned long ssl_err;
 
-	server_settings = SSL_CTX_new(TLS_server_method());
-	if (server_settings == NULL)
+#define DEFAULT_CIPHER_LIST "ECDHE-ECDSA-AES256-GCM-SHA384:"  \
+							"ECDHE-RSA-AES256-GCM-SHA384:"    \
+							"ECDHE-ECDSA-CHACHA20-POLY1305:"  \
+							"ECDHE-RSA-CHACHA20-POLY1305:"    \
+							"ECDHE-ECDSA-AES128-GCM-SHA256:"  \
+							"ECDHE-RSA-AES128-GCM-SHA256"
+
+#define DEFAULT_CIPHERSUITES "TLS_AES_256_GCM_SHA384:"       \
+                             "TLS_AES_128_GCM_SHA256:"       \
+							 "TLS_CHACHA20_POLY1305_SHA256:" \
+							 "TLS_AES_128_CCM_SHA256:"       \
+							 "TLS_AES_128_CCM_8_SHA256"
+
+
+
+#define DEBUG_TEST_CA "test_files/certs/rootCA.pem"
+#define DEBUG_CERT_CHAIN "test_files/certs/server_chain.pem"
+#define DEBUG_PRIVATE_KEY "test_files/certs/server_key.pem"
+
+SSL_CTX* server_ctx_init_default();
+
+/**
+ * Initializes the server SSL_CTX to safe and rigorous defaults.
+ * @returns A pointer to an SSL_CTX, or NULL on failure.
+ */
+SSL_CTX* server_ctx_init_default() {
+
+	int ret = 0;
+
+	SSL_CTX* ctx = SSL_CTX_new(TLS_server_method());
+	if (ctx == NULL)
 		goto err;
 
-	SSL_CTX_set_verify(server_settings, SSL_VERIFY_NONE, NULL);
+	SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
 
-	if (SSL_CTX_set_min_proto_version(server_settings, TLS1_2_VERSION) != 1) 
+	ret = SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
+	if (ret != 1)
 		goto err;
 
-	if (SSL_CTX_set_cipher_list(server_settings, cipher_list) != 1) 
+	ret = SSL_CTX_set_max_proto_version(ctx, TLS1_3_VERSION);
+	if (ret != 1)
 		goto err;
 
-	/* DEBUG: Temporary */
-	if (SSL_CTX_load_verify_locations(server_settings, 
-			"test_files/certs/rootCA.pem", NULL) != 1) {
-		log_printf(LOG_DEBUG, "Failed to load verify location.\n");
+	ret = SSL_CTX_set_cipher_list(ctx, DEFAULT_CIPHER_LIST);
+	if (ret != 1)
+		goto err;
+
+	ret = SSL_CTX_set_ciphersuites(ctx, DEFAULT_CIPHERSUITES);
+	if (ret != 1)
+		goto err;
+
+	ret = SSL_CTX_load_verify_locations(ctx, DEBUG_TEST_CA, NULL);
+	if (ret != 1)
+		goto err;
+
+	/* TODO: WARNING: temporary--for debugging. Remove for prod */
+	
+	ret = SSL_CTX_use_certificate_chain_file(ctx, DEBUG_CERT_CHAIN);
+	if (ret != 1)
+		goto err;
+	
+	ret = SSL_CTX_use_PrivateKey_file(ctx, DEBUG_PRIVATE_KEY, SSL_FILETYPE_PEM);
+	if (ret != 1)
+		goto err;
+
+	ret = SSL_CTX_check_private_key(ctx);
+	if (ret != 1) {
+		log_printf(LOG_ERROR, "Loaded Private Key didn't match cert chain\n");
 		goto err;
 	}
 
-
-	if (SSL_CTX_use_certificate_chain_file(server_settings, 
-			"test_files/certs/server_chain.pem") != 1) {
-		log_printf(LOG_ERROR, "Failed to load cert chain\n");		
+	ret = SSL_CTX_build_cert_chain(ctx, SSL_BUILD_CHAIN_FLAG_CHECK);
+	if (ret != 1) {
+		log_printf(LOG_ERROR, "Incomplete server certificate chain\n");
 		goto err;
 	}
 
-	if (SSL_CTX_use_PrivateKey_file(server_settings, "test_files/certs/server_key.pem", 
-			SSL_FILETYPE_PEM) != 1) {
-		log_printf(LOG_ERROR, "Failed to load private key\n");
+	/* endof TODO/WARNING */
+
+	return ctx;
+ err:
+	if (ERR_peek_error())
+		log_printf(LOG_ERROR, "OpenSSL error initializing server SSL_CTX: %s\n",
+				ERR_error_string(ERR_get_error(), NULL));
+	
+	if (ctx != NULL)
+		SSL_CTX_free(ctx);
+
+    return NULL;
+}
+
+
+SSL_CTX* server_ctx_init(server_settings* config) {
+
+	SSL_CTX* ctx = NULL;
+	long tls_version;
+	int ret;
+
+	if (config == NULL)
+		return server_ctx_init_default();
+	
+	ctx = SSL_CTX_new(TLS_server_method());
+	if (ctx == NULL)
+		goto err;
+
+	SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
+	
+
+	if (!config->tls_compression)
+		SSL_CTX_set_options(ctx, SSL_OP_NO_COMPRESSION);
+
+	/* TODO: test to see that both options are set */
+	if (!config->session_tickets)
+		SSL_CTX_set_options(ctx, SSL_OP_NO_TICKET);
+
+
+	tls_version = get_tls_version(config->min_tls_version);
+	if (SSL_CTX_set_min_proto_version(ctx, tls_version) != 1)
+		goto err;
+
+	tls_version = get_tls_version(config->max_tls_version);
+	if (SSL_CTX_set_max_proto_version(ctx, tls_version) != 1)
+		goto err;
+
+
+	if (config->cipher_list_cnt != 0) {
+		ret = load_cipher_list(ctx,
+				config->cipher_list, config->cipher_list_cnt);
+	} else {
+		ret = SSL_CTX_set_cipher_list(ctx, DEFAULT_CIPHER_LIST);
+	}
+	if (ret != 1)
+		goto err;
+	
+
+	if (config->ciphersuite_cnt != 0) {
+		ret = load_ciphersuites(ctx, 
+				config->ciphersuites, config->ciphersuite_cnt);
+	} else {
+		ret = SSL_CTX_set_ciphersuites(ctx, DEFAULT_CIPHERSUITES);
+	}
+	if (ret != 1)
+		goto err;
+
+	/* TODO: WARNING: temporary--for debugging. Remove for prod */
+	
+	ret = SSL_CTX_use_certificate_chain_file(ctx, DEBUG_CERT_CHAIN);
+	if (ret != 1)
+		goto err;
+	
+	ret = SSL_CTX_use_PrivateKey_file(ctx, DEBUG_PRIVATE_KEY, SSL_FILETYPE_PEM);
+	if (ret != 1)
+		goto err;
+
+	ret = SSL_CTX_check_private_key(ctx);
+	if (ret != 1) {
+		log_printf(LOG_ERROR, "Loaded Private Key didn't match cert chain\n");
 		goto err;
 	}
 
-	if (SSL_CTX_check_private_key(server_settings) != 1) {
-		log_printf(LOG_ERROR, "Key and certificate don't match.\n");
+	ret = SSL_CTX_build_cert_chain(ctx, SSL_BUILD_CHAIN_FLAG_CHECK);
+	if (ret != 1) {
+		log_printf(LOG_ERROR, "Incomplete server certificate chain\n");
 		goto err;
 	}
 
-	if (SSL_CTX_build_cert_chain(server_settings, SSL_BUILD_CHAIN_FLAG_CHECK) != 1) {
-		log_printf(LOG_ERROR, "Certificate chain failed to build.\n");
-		goto err;
-	}
+	/* endof TODO/WARNING */
 
-	return server_settings;
+	return ctx;
  err:
 	log_printf(LOG_ERROR, "OpenSSL error initializing server SSL_CTX: %s\n", 
 			ERR_error_string(ERR_get_error(), NULL));
 	
-	if (server_settings != NULL)
-		SSL_CTX_free(server_settings);
+	if (ctx != NULL)
+		SSL_CTX_free(ctx);
     return NULL;
 }
+
+
 
 /**
  * Allocates a new SSL struct set with the daemon's set server settings.
@@ -81,7 +201,7 @@ SSL_CTX* server_settings_init(char* path) {
  */
 int server_SSL_new(connection* conn, daemon_context* daemon) {
 	
-	SSL* temp = SSL_new(daemon->server_settings);
+	SSL* temp = SSL_new(daemon->server_ctx);
 	if (temp == NULL)
 		return ssl_malloc_err(conn);
 	

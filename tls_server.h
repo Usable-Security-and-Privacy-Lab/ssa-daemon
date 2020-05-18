@@ -4,7 +4,7 @@
 #include "tls_common.h"
 #include "daemon_structs.h"
 
-SSL_CTX* server_settings_init(char* path);
+SSL_CTX* server_ctx_init(server_settings* config);
 
 int server_SSL_new(connection* conn, daemon_context* daemon);
 int accept_SSL_new(connection* conn, connection* old);

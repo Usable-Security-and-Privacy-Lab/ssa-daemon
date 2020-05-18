@@ -12,13 +12,13 @@ NEW_INCLUDES = \
 	`pkg-config --cflags libnl-3.0` \
 	-Iopenssl/include \
 	-Ilibevent/include
-LIBS = 	-lpthread \
+LIBS = 	-lpthread -lyaml \
 	`pkg-config --libs \
 		libconfig \
 		libevent_openssl \
 		libnl-genl-3.0 \
-	       	avahi-client \
-	       	openssl \
+	    avahi-client \
+	    openssl \
 		`
 LIBS_EX = \
 	-Llibevent/lib \
