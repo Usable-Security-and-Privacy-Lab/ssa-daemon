@@ -34,50 +34,19 @@
 							 "TLS_AES_128_CCM_8_SHA256"
 
 
-SSL_CTX* client_ctx_init_default() {
 
-	int ret;
-
-	SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
-	if (ctx == NULL)
-		goto err;
-
-	SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
-	SSL_CTX_set_options(ctx, SSL_OP_NO_COMPRESSION 
-			| SSL_OP_NO_TICKET);
-
-	ret = SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
-	if (ret != 1)
-		goto err;
-	
-	ret = SSL_CTX_set_max_proto_version(ctx, TLS_MAX_VERSION);
-	if (ret != 1)
-		goto err;
-	
-	ret = SSL_CTX_set_ciphersuites(ctx, DEFAULT_CIPHERSUITES);
-	if (ret != 1)
-		goto err;
-	
-	ret = SSL_CTX_set_cipher_list(ctx, DEFAULT_CIPHER_LIST);
-	if (ret != 1)
-		goto err;
-
-	ret = load_certificate_authority(ctx, NULL);
-	if (ret != 1)
-		goto err;
-
-	return ctx;
- err:
-	if (ctx != NULL)
-		SSL_CTX_free(ctx);
-
-	if (ERR_peek_error() != 0)
-		log_printf(LOG_ERROR, "OpenSSL error initializing client SSL_CTX: %s\n",
-				ERR_error_string(ERR_get_error(), NULL));
-	return NULL;
-}
+SSL_CTX* client_ctx_init_default();
 
 
+
+/**
+ * Allocates a new SSL_CTX struct and loads the settings found in config into
+ * it. If config is NULL, then secure default settings are loaded using
+ * client_ctx_init_default().
+ * @param config The configuration settings to have applied to the given
+ * client SSL_CTX.
+ * @returns A pointer to a newly allocated and set SSL_CTX, or NULL on error.
+ */
 SSL_CTX* client_ctx_init(client_settings* config) {
 
 	SSL_CTX* ctx = NULL;
@@ -147,6 +116,53 @@ SSL_CTX* client_ctx_init(client_settings* config) {
     return NULL;
 }
 
+/**
+ * Creates a new client SSL_CTX with secure default settings applied to it.
+ * @returns A pointer to a newly allocated SSL_CTX set with secure settings, or
+ * NULL on failure.
+ */
+SSL_CTX* client_ctx_init_default() {
+
+	int ret;
+
+	SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
+	if (ctx == NULL)
+		goto err;
+
+	SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
+	SSL_CTX_set_options(ctx, SSL_OP_NO_COMPRESSION 
+			| SSL_OP_NO_TICKET);
+
+	ret = SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
+	if (ret != 1)
+		goto err;
+	
+	ret = SSL_CTX_set_max_proto_version(ctx, TLS_MAX_VERSION);
+	if (ret != 1)
+		goto err;
+	
+	ret = SSL_CTX_set_ciphersuites(ctx, DEFAULT_CIPHERSUITES);
+	if (ret != 1)
+		goto err;
+	
+	ret = SSL_CTX_set_cipher_list(ctx, DEFAULT_CIPHER_LIST);
+	if (ret != 1)
+		goto err;
+
+	ret = load_certificate_authority(ctx, NULL);
+	if (ret != 1)
+		goto err;
+
+	return ctx;
+ err:
+	if (ctx != NULL)
+		SSL_CTX_free(ctx);
+
+	if (ERR_peek_error() != 0)
+		log_printf(LOG_ERROR, "OpenSSL error initializing client SSL_CTX: %s\n",
+				ERR_error_string(ERR_get_error(), NULL));
+	return NULL;
+}
 
 
 /**
