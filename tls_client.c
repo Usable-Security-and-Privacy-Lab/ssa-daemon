@@ -34,8 +34,6 @@
 							 "TLS_AES_128_CCM_8_SHA256"
 
 
-
-
 SSL_CTX* client_ctx_init_default() {
 
 	int ret;
@@ -140,8 +138,9 @@ SSL_CTX* client_ctx_init(client_settings* config) {
 
 	return ctx;
  err:
-	log_printf(LOG_ERROR, "OpenSSL error initializing client SSL_CTX: %s\n", 
-			ERR_error_string(ERR_get_error(), NULL));
+	if (ERR_peek_error())
+		log_printf(LOG_ERROR, "OpenSSL error initializing client SSL_CTX: %s\n",
+				ERR_error_string(ERR_get_error(), NULL));
 	
 	if (ctx != NULL)
 		SSL_CTX_free(ctx);
