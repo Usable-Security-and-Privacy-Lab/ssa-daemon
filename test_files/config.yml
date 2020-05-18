@@ -9,6 +9,10 @@ client:
   min-tls-version: 1.2 # Default: 1.3
   max-tls-version: 1.3 # Default: 1.3
 
+  # The following is commented out since the SSA Daemon does a decent job at finding
+  # the correct CA path based on what Linux distro is being run (particularly for Fedora & Ubuntu).
+# CA-path: /etc/ssl/certs
+
   # The CRIME attack targets TLS Compression; an attacker can gain information 
   # about authorization tokens, secret web cookies or other sensitive information 
   # passed in HTTP requests/responses since message lengths are not hidden by encryption.
