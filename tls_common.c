@@ -23,24 +23,6 @@ int get_ciphers_strlen(STACK_OF(SSL_CIPHER)* ciphers);
 int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len);
 int check_key_cert_pair(SSL* tls);
 
-/**
- * Meant to be called after a general OpenSSL function fails; takes the set
- * OpenSSL error code in the error queue and associates it with the current
- * socket
- */
-void set_sock_tls_error(sock_context* sock_ctx) {
-	unsigned long ssl_err = ERR_get_error();
-
-	if (ssl_err == 0) {
-		log_printf(LOG_ERROR, "Error occurred but not captured by OpenSSL\n");
-	}
-
-	/* TODO: finish */
-}
-
-
-
-
 
 /**
  *******************************************************************************
@@ -97,7 +79,7 @@ int load_cipher_list(SSL_CTX* ctx, char** list, int num) {
 
 	ret = concat_ciphers(list, num, &ciphers);
 	if (ret != 1)
-		goto end;
+		return 0;
 
 	ret = SSL_CTX_set_cipher_list(ctx, ciphers);
 	if (ret != 1)
@@ -131,7 +113,7 @@ int load_ciphersuites(SSL_CTX* ctx, char** list, int num) {
 
 	ret = concat_ciphers(list, num, &ciphers);
 	if (ret != 1)
-		goto end;
+		return 0;
 
 	ret = SSL_CTX_set_ciphersuites(ctx, ciphers);
 	if (ret != 1)
@@ -168,16 +150,16 @@ int concat_ciphers(char** list, int num, char** out) {
 		len += strlen(list[i]) + 1; /* +1 for colon (or '\0' at end) */
 
     ciphers = malloc(len);
-	if (*out == NULL) {
+	if (ciphers == NULL) {
 		log_printf(LOG_ERROR, "Malloc failed while loading cipher list: %s\n",
 				strerror(errno));
-		return -1;
+		return 0;
 	}
 
 	for (int i = 0; i < num; i++) {
 		int cipher_len = strlen(list[i]);
 
-		memcpy(out[offset], list[i], cipher_len);
+		memcpy(&ciphers[offset], list[i], cipher_len);
 		ciphers[offset + cipher_len] = ':';
 
 		offset += cipher_len + 1;
@@ -188,11 +170,11 @@ int concat_ciphers(char** list, int num, char** out) {
 	if (len != offset) {
 		log_printf(LOG_DEBUG, "load_cipher_list had unexpected results\n");
 		free(ciphers);
-		return -1;
+		return 0;
 	}
 
 	*out = ciphers;
-	return 0;
+	return 1;
 }
 
 /**
