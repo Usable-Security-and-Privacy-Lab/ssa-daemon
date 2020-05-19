@@ -205,9 +205,6 @@ int parse_next_client_setting(yaml_parser_t* parser, client_settings* client) {
     } else if (strcmp(label, TLS_COMPRESSION) == 0) {
         ret = parse_boolean(parser, &client->tls_compression);
 
-    } else if (strcmp(label, SESSION_TICKETS) == 0) {
-        ret = parse_boolean(parser, &client->session_tickets);
-
     } else if (strcmp(label, MIN_TLS_VERSION) == 0) {
         ret = parse_tls_version(parser, &client->min_tls_version);
 

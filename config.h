@@ -35,7 +35,6 @@ typedef struct client_settings_st {
     int ciphersuite_cnt;
  
     int tls_compression;
-    int session_tickets;
 
     enum tls_version_t min_tls_version;
     enum tls_version_t max_tls_version;
