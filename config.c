@@ -8,6 +8,8 @@
 #include <ctype.h>
 #include <errno.h>
 #include <yaml.h>
+#include <limits.h>
+#include <bsd/stdlib.h>
 
 #include "config.h"
 #include "log.h"
@@ -26,6 +28,8 @@
 #define MAX_TLS_VERSION "max-tls-version"
 #define CERT_PATH       "cert-path"
 #define KEY_PATH        "key-path"
+#define SESSION_TIMEOUT "session-timeout"
+#define CERT_V_DEPTH    "cert-verification-depth"
 
 
 /* different values that we accept in place of just 'true' or 'false' */
@@ -211,6 +215,12 @@ int parse_next_client_setting(yaml_parser_t* parser, client_settings* client) {
     } else if (strcmp(label, MAX_TLS_VERSION) == 0) {
         ret = parse_tls_version(parser, &client->max_tls_version);
 
+    } else if (strcmp(label, SESSION_TIMEOUT) == 0) {
+        ret = parse_integer(parser, &client->session_timeout);
+
+    } else if (strcmp(label, CERT_V_DEPTH) == 0) {
+        ret = parse_integer(parser, &client->cert_verification_depth);
+
     } else {
         log_printf(LOG_ERROR, "Config: Undefined label %s\n", label);
         ret = -1;
@@ -276,6 +286,9 @@ int parse_next_server_setting(yaml_parser_t* parser, server_settings* server) {
 
     } else if (strcmp(label, MAX_TLS_VERSION) == 0) {
         ret = parse_tls_version(parser, &server->max_tls_version);
+
+    } else if (strcmp(label, SESSION_TIMEOUT) == 0) {
+        ret = parse_integer(parser, &server->session_timeout);
     /*
     } else if (strcmp(label, CERT_PATH) == 0) {
         ret = parse_string(parser, &server->certificate_path[server->num_keys]);
@@ -437,6 +450,31 @@ int parse_boolean(yaml_parser_t* parser, int* enabled) {
         free(label);
         return -1;
     }
+
+    free(label);
+    return 0;
+}
+
+/**
+ * Parses an individual integer value. Updates the value of num to hold the integer value.
+ * @param parser The parser to parse the integer value from.
+ * @param value A reference to be updated with the integer value.
+ * @returns 0 on success, or -1 if an error occurred.
+ */
+int parse_integer(yaml_parser_t* parser, int* num) {
+    const char *errstr;
+    long long llnum;
+
+    char* label = parse_next_scalar(parser);
+    if (label == NULL)
+        return -1;
+
+    llnum = strtonum(label, 0, INT_MAX, &errstr);
+    if(errstr){
+        free(label);
+        return -1;
+    }
+    *num = (int) llnum;
 
     free(label);
     return 0;

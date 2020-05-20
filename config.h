@@ -45,6 +45,9 @@ typedef struct client_settings_st {
     char* privatekey_file[MAX_KEYS];
     int num_keys;
 
+    int session_timeout;
+    int cert_verification_depth;
+
 } client_settings;
 
 typedef struct server_settings_st {
@@ -68,6 +71,8 @@ typedef struct server_settings_st {
 
     char* privatekey_file[MAX_KEYS];
     int num_keys;
+
+    int session_timeout;
 
     /* TODO: future stuff for session caching and whatnot here */
 
