@@ -42,8 +42,7 @@ long get_tls_version(enum tls_version_t version) {
 
 	switch(version) {
 	case TLS_DEFAULT_ENUM:
-		log_printf(LOG_INFO, "No TLS version specified\n");
-		tls_version = TLS_MAX_VERSION; /* default */
+		tls_version = TLS_MAX_VERSION;
 		break;
 	case TLS1_0_ENUM:
 		tls_version = TLS1_VERSION;
@@ -58,6 +57,7 @@ long get_tls_version(enum tls_version_t version) {
 		tls_version = TLS1_3_VERSION;
 		break;
 	default:
+		/* shouldn't happen */
 		log_printf(LOG_ERROR, "Unknown TLS version specified\n");
 	}
 
