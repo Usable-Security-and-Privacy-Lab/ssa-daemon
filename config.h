@@ -6,8 +6,7 @@
 
 #define DEFAULT_CONFIG_PATH "test_files/config.yml"
 
-#define MAX_CERTS 5
-#define MAX_KEYS 5
+#define MAX_CERTKEY_PAIRS 5
 
 
 enum tls_version_t {
@@ -36,10 +35,10 @@ typedef struct client_settings_st {
     enum tls_version_t min_tls_version;
     enum tls_version_t max_tls_version;
 
-    char* certificate_path[MAX_CERTS]; /* can be file or folder */
+    char* certificate_path[MAX_CERTKEY_PAIRS]; /* can be file or folder */
     int num_certs;
 
-    char* privatekey_file[MAX_KEYS];
+    char* privatekey_file[MAX_CERTKEY_PAIRS];
     int num_keys;
 
     int session_timeout;
@@ -63,11 +62,11 @@ typedef struct server_settings_st {
     enum tls_version_t min_tls_version;
     enum tls_version_t max_tls_version;
 
-    char* certificate_path[MAX_CERTS]; /* can be file or folder */
-    int num_certs;
+    char* certificates[MAX_CERTKEY_PAIRS]; /* can be file or folder */
+    int cert_cnt;
 
-    char* privatekey_file[MAX_KEYS];
-    int num_keys;
+    char* private_keys[MAX_CERTKEY_PAIRS];
+    int key_cnt;
 
     int session_timeout;
 

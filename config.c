@@ -288,17 +288,29 @@ int parse_next_server_setting(yaml_parser_t* parser, server_settings* server) {
 
     } else if (strcmp(label, SESSION_TIMEOUT) == 0) {
         ret = parse_integer(parser, &server->session_timeout);
-    /*
+    
     } else if (strcmp(label, CERT_PATH) == 0) {
-        ret = parse_string(parser, &server->certificate_path[server->num_keys]);
-        server->num_keys++;
+        if (server->key_cnt >= MAX_CERTKEY_PAIRS) {
+            log_printf(LOG_ERROR, "Config: Maximum keys (%i) exceeded\n", 
+                    MAX_CERTKEY_PAIRS);
+            ret = -1;
+        } else {
+            ret = parse_string(parser, &server->certificates[server->cert_cnt]);
+            server->key_cnt++;
+        }
 
-    } else if (strcmp(label, KEY_PATH) == 0)
-        ret = parse_string(parser, &server->privatekey_file);
-        server->num_keys++;
-    */
+    } else if (strcmp(label, KEY_PATH) == 0) {
+        if (server->cert_cnt >= MAX_CERTKEY_PAIRS) {
+            log_printf(LOG_ERROR, "Config: Maximum keys (%i) exceeded\n", 
+                    MAX_CERTKEY_PAIRS);
+            ret = -1;
+        } else {
+            ret = parse_string(parser, &server->private_keys[server->key_cnt]);
+            server->cert_cnt++;
+        }
+    
     } else {
-        log_printf(LOG_ERROR, "Undefined label %s\n", label);
+        log_printf(LOG_ERROR, "Config: Undefined label %s\n", label);
         ret = -1;
     }
 
