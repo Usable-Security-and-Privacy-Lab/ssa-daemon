@@ -64,6 +64,7 @@ int parse_string(yaml_parser_t* parser, char** string);
 int parse_string_list(yaml_parser_t* parser, char** strings[], int* num);
 int parse_string_list_member(yaml_parser_t* parser, char** strings, int* num);
 int parse_boolean(yaml_parser_t* parser, int* enabled);
+int parse_integer(yaml_parser_t* parser, int* num);
 int parse_tls_version(yaml_parser_t* parser, enum tls_version_t* version);
 
 int parse_stream(yaml_parser_t* parser, global_settings* settings);
