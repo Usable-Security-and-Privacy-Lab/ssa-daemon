@@ -39,11 +39,6 @@ int main() {
 		socklen_t addr_len = sizeof(addr);
 		int c_fd = accept(fd, (struct sockaddr*)&addr, &addr_len);
         printf("Connection received!\n");
-		if (getsockopt(c_fd, IPPROTO_TLS, TLS_HOSTNAME, servername, &servername_len) == -1) {
-			perror("getsockopt: TLS_HOSTNAME");
-			exit(EXIT_FAILURE);
-		}
-		printf("Client requested host %d %s\n", servername_len,  servername);
 		int num_received = recv(c_fd, request, BUFFER_SIZE, 0);
 		printf("Received %i bytes from client.\n", num_received);
 		handle_req(request, response, num_received);
