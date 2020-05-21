@@ -7,9 +7,8 @@
 
 #include <ctype.h>
 #include <errno.h>
-#include <yaml.h>
 #include <limits.h>
-#include <bsd/stdlib.h>
+#include <yaml.h>
 
 #include "config.h"
 #include "log.h"
@@ -463,18 +462,19 @@ int parse_boolean(yaml_parser_t* parser, int* enabled) {
  */
 int parse_integer(yaml_parser_t* parser, int* num) {
     const char *errstr;
-    long long llnum;
+    long lnum;
 
     char* label = parse_next_scalar(parser);
     if (label == NULL)
         return -1;
 
-    llnum = strtonum(label, 0, INT_MAX, &errstr);
-    if(errstr){
+
+    lnum = strtol(label, NULL, 10);
+    if(lnum >= INT_MAX || lnum == LONG_MIN) {
         free(label);
         return -1;
     }
-    *num = (int) llnum;
+    *num = (int) lnum;
 
     free(label);
     return 0;
