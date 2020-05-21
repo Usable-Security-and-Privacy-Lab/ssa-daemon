@@ -181,6 +181,8 @@ SSL_CTX* server_ctx_init(server_settings* config) {
 		goto err;
 	}
 
+	SSL_CTX_set_timeout(ctx, config->session_timeout);
+
 	/* endof TODO/WARNING */
 
 	return ctx;
