@@ -18,9 +18,6 @@ enum tls_version_t {
     TLS1_3_ENUM
 };
 
-typedef struct cert_pair_st {
-
-} cert_pair;
 
 typedef struct client_settings_st {
 
