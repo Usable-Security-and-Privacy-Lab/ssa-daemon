@@ -341,7 +341,7 @@ int get_hostname(connection* conn, char** data, unsigned int* len) {
 
 	const char* hostname;
 	
-	switch (conn->tls) {
+	switch (conn->state) {
 	case SERVER_NEW:
 	case SERVER_CONNECTING:
 	case SERVER_CONNECTED:
