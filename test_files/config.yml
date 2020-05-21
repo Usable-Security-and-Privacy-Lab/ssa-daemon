@@ -19,11 +19,6 @@ client:
   # It should be kept disabled unless other mitigations are put in place.
   tls-compression: disabled # Default: disabled
 
-  # Session Tickets posess a vulnerability in them for TLS 1.2 and lower.
-  # For more info, see here: https://blog.filippo.io/we-need-to-talk-about-session-tickets/
-  # Realistically, they should be kept disabled unless TLS-1.3 is your minimum TLS version.
-  session-tickets: disabled  # Default: disabled
-
   # Default ciphers in this list (and added by the SSA Daemon in the event of no configuration
   # file found) all maintain Forward Secrecy (the second 'E' in ECDHE is for Ephemeral).
   # NULL, RC4, MD4 and MD5 ciphers SHOULD NOT be allowed in this list, and SHA128 is
@@ -57,6 +52,17 @@ client:
 #           - TLS_AES_128_CCM_SHA256
 #           - TLS_AES_128_CCM_8_SHA256
 
+  # Sessions older than the session timeout are not reused.  Value is in seconds.
+  session-timeout: 300
+
+# Default: 300 seconds
+
+# Set the maximum number of certificates that can be traversed before certification fails.
+# To allow for unlimited certificates to be traversed, set the value to 0.
+cert-verification-depth: 100
+
+# Default: 100. This allows for the peer certificate, at most 100 intermediate CA certificates and a final trust anchor certificate.
+
 # The same settings that applied to clients should really be applied to servers as well.
 # While servers are generally not at risk of compromise based on these settings, the 
 # clients that they accept connections from are. Allowing only strict settings ensures
@@ -86,6 +92,8 @@ server:
     - TLS_CHACHA20_POLY1305_SHA256
     - TLS_AES_128_CCM_SHA256
     - TLS_AES_128_CCM_8_SHA256
+
+  session-timeout: 300
 
 # Only 'client:' and 'server:' should be in this document, and only once. Consult the SSA
 # Daemon's logs if it fails to load this file--there are usually helpful log error reports.

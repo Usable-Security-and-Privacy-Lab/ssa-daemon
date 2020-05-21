@@ -32,7 +32,6 @@ typedef struct client_settings_st {
     int ciphersuite_cnt;
  
     int tls_compression;
-    int session_tickets;
 
     enum tls_version_t min_tls_version;
     enum tls_version_t max_tls_version;
@@ -42,6 +41,9 @@ typedef struct client_settings_st {
 
     char* privatekey_file[MAX_KEYS];
     int num_keys;
+
+    int session_timeout;
+    int cert_verification_depth;
 
 } client_settings;
 
@@ -66,6 +68,8 @@ typedef struct server_settings_st {
 
     char* privatekey_file[MAX_KEYS];
     int num_keys;
+
+    int session_timeout;
 
     /* TODO: future stuff for session caching and whatnot here */
 
