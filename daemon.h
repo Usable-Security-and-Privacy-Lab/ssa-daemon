@@ -32,7 +32,7 @@
 
 #include "daemon_structs.h"
 
-int server_create(int port, char* config_path);
+int run_daemon(int port, char* config_path);
 void socket_cb(daemon_context* ctx, unsigned long id, char* comm);
 void setsockopt_cb(daemon_context* ctx, unsigned long id, int level, 
 		int option, void* value, socklen_t len);

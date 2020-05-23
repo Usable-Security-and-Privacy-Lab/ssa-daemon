@@ -46,22 +46,23 @@ client:
     - TLS_AES_128_CCM_SHA256
     - TLS_AES_128_CCM_8_SHA256
 
-# Defaults: - TLS_AES_256_GCM_SHA384
-#           - TLS_AES_128_GCM_SHA256
-#           - TLS_CHACHA20_POLY1305_SHA256
-#           - TLS_AES_128_CCM_SHA256
-#           - TLS_AES_128_CCM_8_SHA256
+  # Defaults: - TLS_AES_256_GCM_SHA384
+  #           - TLS_AES_128_GCM_SHA256
+  #           - TLS_CHACHA20_POLY1305_SHA256
+  #           - TLS_AES_128_CCM_SHA256
+  #           - TLS_AES_128_CCM_8_SHA256
 
   # Sessions older than the session timeout are not reused.  Value is in seconds.
-  session-timeout: 300
+  session-timeout: 300 # Default: 300 seconds
+  
+  # Set the maximum number of certificates that can be traversed before certification fails.
+  # To allow for unlimited certificates to be traversed, set the value to 0.
+  cert-verification-depth: 100
+  # Default: 100. This allows for the peer certificate, at most 100 intermediate CA certificates and a final trust anchor certificate.
 
-# Default: 300 seconds
+  # FOR TESTING ONLY: uncomment this line if you want to test the https_server.
+  # ca-path: test_files/certs/rootCA.pem
 
-# Set the maximum number of certificates that can be traversed before certification fails.
-# To allow for unlimited certificates to be traversed, set the value to 0.
-cert-verification-depth: 100
-
-# Default: 100. This allows for the peer certificate, at most 100 intermediate CA certificates and a final trust anchor certificate.
 
 # The same settings that applied to clients should really be applied to servers as well.
 # While servers are generally not at risk of compromise based on these settings, the 

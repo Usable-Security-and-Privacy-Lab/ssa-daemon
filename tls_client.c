@@ -69,10 +69,6 @@ SSL_CTX* client_ctx_init(client_settings* config) {
 	if (!config->tls_compression)
 		SSL_CTX_set_options(ctx, SSL_OP_NO_COMPRESSION);
 
-	/* TODO: test to see that both options are set */
-	if (!config->session_tickets)
-		SSL_CTX_set_options(ctx, SSL_OP_NO_TICKET);
-
 	tls_version = get_tls_version(config->min_tls_version);
 	if (SSL_CTX_set_min_proto_version(ctx, tls_version) != 1) 
 		goto err;

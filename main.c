@@ -55,7 +55,7 @@ int main(int argc, char* argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-    int ret = server_create(PORT, config_path);
+    int ret = run_daemon(PORT, config_path);
 
     log_close();
     return ret;

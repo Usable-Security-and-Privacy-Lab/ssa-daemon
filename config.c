@@ -219,7 +219,7 @@ int parse_next_client_setting(yaml_parser_t* parser, client_settings* client) {
         ret = parse_integer(parser, &client->session_timeout);
 
     } else if (strcmp(label, CERT_V_DEPTH) == 0) {
-        ret = parse_integer(parser, &client->cert_verification_depth);
+        ret = parse_integer(parser, &client->max_cert_chain_depth);
 
     } else {
         log_printf(LOG_ERROR, "Config: Undefined label %s\n", label);
@@ -474,13 +474,12 @@ int parse_boolean(yaml_parser_t* parser, int* enabled) {
  * @returns 0 on success, or -1 if an error occurred.
  */
 int parse_integer(yaml_parser_t* parser, int* num) {
-    const char *errstr;
+    
     long lnum;
 
     char* label = parse_next_scalar(parser);
     if (label == NULL)
         return -1;
-
 
     lnum = strtol(label, NULL, 10);
     if(lnum >= INT_MAX || lnum == LONG_MIN) {
