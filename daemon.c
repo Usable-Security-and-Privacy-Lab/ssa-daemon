@@ -443,6 +443,9 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
  * here: https://bit.ly/3eHZzFZ
  * Lastly, it ignores EINTR as that error simply means that a signal
  * interrupted the system call before a connection came in.
+ * @param listener The SSA daemon's main listener for client connections.
+ * @param ctx A void pointer to the daemon_context.
+ * @returns No return, but exits the event base loop if the error is fatal.
  */
 void accept_error_cb(struct evconnlistener *listener, void *ctx) {
 

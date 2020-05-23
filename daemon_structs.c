@@ -17,6 +17,8 @@
 
 #define HASHMAP_NUM_BUCKETS	100
 
+
+
 /**
  * Creates a new daemon_context to be used throughout the life cycle
  * of a given SSA daemon. This context holds the netlink connection,
@@ -133,7 +135,6 @@ void daemon_context_free(daemon_context* daemon) {
 
 
 
-
 /**
  * Allocates a new sock_context and assigns it the given id.
  * @param sock_ctx A memory address to be populated with the sock_context
@@ -155,9 +156,12 @@ int sock_context_new(sock_context** sock_ctx,
 	return 0;
 }
 
-/* This function is provided to the hashmap implementation
- * so that it can correctly free all held data 
- * TODO: this function needs to be updated and debugged */
+/**
+ * Frees a given sock_context and all of its internal structures. 
+ * This function is provided to the hashmap implementation so that it can 
+ * correctly free all held data.
+ * @param sock_ctx The sock_context to be free
+ */
 void sock_context_free(sock_context* sock_ctx) {
 
 	if (sock_ctx == NULL) {
@@ -179,7 +183,11 @@ void sock_context_free(sock_context* sock_ctx) {
 }
 
 
-
+/**
+ * Creates a new connection struct and assigns it to conn.
+ * @param conn The address to be assigned a new connection.
+ * @returns 0 on success, or -errno if an error occurred.
+ */
 int connection_new(connection** conn) {
 
 	(*conn) = (connection*)calloc(1, sizeof(connection));
@@ -238,7 +246,12 @@ void connection_shutdown(sock_context* sock_ctx) {
 	return;
 }
 
+/**
+ * Frees a given connection and all of its internal structures.
+ * @param conn The connection to free.
+ */ 
 void connection_free(connection* conn) {
+
 	if (conn == NULL) {
 		log_printf(LOG_WARNING, "Tried to free a NULL connection.\n");
 		return;
@@ -257,7 +270,7 @@ void connection_free(connection* conn) {
 }
 
 /**
- * Converts a given OpenSSL ERR error code into an appropriate errno code.
+ * Converts the current OpenSSL ERR error code into an appropriate errno code.
  * @returns 0 if no ERR was in the queue; -1 if the error could not be converted
  * into an error code; or a positive errno code.
  */
@@ -276,10 +289,8 @@ int ssl_err_to_errno() {
 	case ERR_R_PASSED_INVALID_ARGUMENT:
 		return EINVAL;
 	default:
-		break;
+		return ENETDOWN; /* some unrecoverable error internal to the Daemon */
 	}
-
-	return ENETDOWN;
 }
 
 /**
@@ -309,6 +320,11 @@ int ssl_malloc_err(connection* conn) {
 }
 
 
+/**
+ * Checks to see if the given connection has an active error string.
+ * @param conn The connection to check.
+ * @returns 1 if an error string was found, or 0 otherwise.
+ */
 int has_err_string(connection* conn) {
 	if (strlen(conn->err_string) > 0)
 		return 1;
@@ -316,6 +332,14 @@ int has_err_string(connection* conn) {
 		return 0;
 }
 
+/**
+ * Sets the error string of a given connection to reflect the reason for
+ * a TLS handshake failure. Note that this may return "ok" if the handshake
+ * actually passed, so the verify result should be checked to ensure that 
+ * it is not equal to X509_V_OK if no error string is desired on success.
+ * @param conn The connection to set the error sttring for.
+ * @param ssl_err The error code returned by SSL_get_verify_result().
+ */
 void set_verification_err_string(connection* conn, long ssl_err) {
 	const char* err_description = X509_verify_cert_error_string(ssl_err);
 
@@ -326,6 +350,12 @@ void set_verification_err_string(connection* conn, long ssl_err) {
 			"OpenSSL verification error %li: %s\n", ssl_err, err_description);
 }
 
+/**
+ * Sets the error string for a given connection to string (plus the additional
+ * arguments added in a printf-style way).
+ * @param conn The connection to set an error string for.
+ * @param string The printf-style string to set conn's error string to.
+ */
 void set_err_string(connection* conn, char* string, ...) {
 
 	if (conn == NULL)
@@ -339,12 +369,23 @@ void set_err_string(connection* conn, char* string, ...) {
 	va_end(args);
 }
 
+/**
+ * Clears the error string found in conn.
+ * @param conn The connection to clear an error string from.
+ */
 void clear_err_string(connection* conn) {
 	conn->err_string[0] = '\0';
 }
 
 
-
+/**
+ * Associates the given file descriptor with the given connection and 
+ * enables its bufferevent to read and write freely.
+ * @param conn The connection to have the file descriptor associated with.
+ * @param ifd The file descriptor of an internal program that will
+ * communicate to the daemon through plaintext.
+ * @returns 0 on success, or -ECONNABORTED on failure.
+ */
 int associate_fd(connection* conn, evutil_socket_t ifd) {
 
 	/* Possibility of failure is acutally none in current libevent code */
@@ -362,6 +403,11 @@ int associate_fd(connection* conn, evutil_socket_t ifd) {
 	return -ECONNABORTED; /* Only happens while client is connecting */
 }
 
+/**
+ * Retrieves an integer port number from a given sockaddr struct.
+ * @param addr The sockaddr struct to retrieve the port number of.
+ * @returns The port number.
+ */
 int get_port(struct sockaddr* addr) {
 	int port = 0;
 	if (addr->sa_family == AF_UNIX) {
