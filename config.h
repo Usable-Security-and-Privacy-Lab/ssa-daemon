@@ -42,7 +42,7 @@ typedef struct client_settings_st {
     int num_keys;
 
     int session_timeout;
-    int cert_verification_depth;
+    int max_cert_chain_depth;
 
 } client_settings;
 
