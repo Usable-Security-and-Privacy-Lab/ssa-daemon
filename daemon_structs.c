@@ -7,10 +7,141 @@
 #include <event2/listener.h>
 #include <openssl/err.h>
 
+#include "config.h"
 #include "daemon_structs.h"
 #include "log.h"
+#include "netlink.h"
+#include "tls_client.h"
+#include "tls_server.h"
 
 
+#define HASHMAP_NUM_BUCKETS	100
+
+/**
+ * Creates a new daemon_context to be used throughout the life cycle
+ * of a given SSA daemon. This context holds the netlink connection,
+ * hashmaps to store sock_context information associated with active
+ * connections, and client/server SSL_CTX objects that can be used
+ * to initialize SSL connections to secure settings.
+ * @param config_path A NULL-terminated string representing a path to
+ * a .yml file that contains client/server settings. If this input is
+ * NULL, the daemon will default secure settings.
+ * @param port The port associated with this particular daemon. It is the
+ * port that the daemon will listen on for new incoming connections from
+ * an internal program.
+ * @returns A pointer to an initialized daemon_context containing all 
+ * relevant settings from config_path.
+ */
+daemon_context* daemon_context_new(char* config_path, int port) {
+
+	global_settings* config_settings = NULL;
+	client_settings* client = NULL;
+	server_settings* server = NULL;
+	daemon_context* daemon = NULL;
+	
+	daemon = calloc(1, sizeof(daemon_context));
+	if (daemon == NULL)
+		goto err;
+
+	daemon->port = port;
+	
+	daemon->ev_base = event_base_new();
+	if (daemon->ev_base == NULL)
+		goto err;
+	if (event_base_priority_init(daemon->ev_base, 3) != 0)
+		goto err;
+
+	daemon->sock_map = hashmap_create(HASHMAP_NUM_BUCKETS);
+	if (daemon->sock_map == NULL)
+		goto err;
+
+	daemon->sock_map_port = hashmap_create(HASHMAP_NUM_BUCKETS);
+	if (daemon->sock_map_port == NULL)
+		goto err;
+
+
+	config_settings = parse_config(config_path);
+	if (config_settings != NULL) {
+		log_printf(LOG_INFO, "Successfully parsed config settings\n");
+		client = config_settings->client;
+		server = config_settings->server;
+	}
+
+	daemon->client_ctx = client_ctx_init(client);
+	if (daemon->client_ctx == NULL)
+		goto err;
+
+	daemon->server_ctx = server_ctx_init(server);
+	if (daemon->server_ctx == NULL)
+		goto err;
+
+	/* Setup netlink socket */
+	/* Set up non-blocking netlink socket with event base */
+	daemon->netlink_sock = netlink_connect(daemon);
+	if (daemon->netlink_sock == NULL)
+		goto err;
+	
+	int nl_fd = nl_socket_get_fd(daemon->netlink_sock);
+	if (evutil_make_socket_nonblocking(nl_fd) != 0)
+		goto err;
+
+	if (config_settings != NULL)
+		global_settings_free(config_settings);
+	return daemon;
+ err:
+	if (daemon != NULL)
+		daemon_context_free(daemon);
+	if (config_settings != NULL)
+		global_settings_free(config_settings);
+
+
+	log_printf(LOG_ERROR, "Error creating daemon: %s\n", strerror(errno));
+	return NULL;
+}
+
+
+/**
+ * Frees a given daemon context and all of its internals, including 
+ * sock_contexts of active connections.
+ * @param daemon A pointer to the daemon_context to free.
+ */
+void daemon_context_free(daemon_context* daemon) {
+	
+	if (daemon == NULL)
+		return;
+
+	if (daemon->client_ctx != NULL)
+		SSL_CTX_free(daemon->client_ctx);
+
+	if (daemon->server_ctx != NULL)
+		SSL_CTX_free(daemon->server_ctx);
+
+	if (daemon->netlink_sock != NULL)
+		netlink_disconnect(daemon->netlink_sock);
+
+	if (daemon->sock_map_port != NULL)
+		hashmap_free(daemon->sock_map_port);
+
+	if (daemon->sock_map != NULL)
+		hashmap_deep_free(daemon->sock_map, (void (*)(void*))sock_context_free);
+	
+	if (daemon->ev_base != NULL)
+		event_base_free(daemon->ev_base);
+
+	free(daemon);
+}
+
+
+
+
+/**
+ * Allocates a new sock_context and assigns it the given id.
+ * @param sock_ctx A memory address to be populated with the sock_context
+ * pointer.
+ * @param daemon The daemon_context of the running daemon.
+ * @param id The ID assigned to the given sock_context.
+ * @returns 0 on success, or -errno if an error occurred.
+ */
 int sock_context_new(sock_context** sock_ctx, 
 		daemon_context* daemon, unsigned long id) {
 	
@@ -67,6 +198,7 @@ int connection_new(connection** conn) {
  * given sock_context. This function should be called before the connection
  * is set to a different state, as it checks the state to do particular
  * shutdown tasks. This function does not alter state.
+ * @param sock_ctx The given sock_context to shut down.
  */
 void connection_shutdown(sock_context* sock_ctx) {
 	

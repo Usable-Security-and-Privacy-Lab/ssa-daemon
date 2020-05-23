@@ -47,7 +47,6 @@
 #include <openssl/rand.h>
 #include <openssl/ssl.h>
 
-#include "config.h"
 #include "daemon.h"
 #include "daemon_structs.h"
 #include "hashmap.h"
@@ -60,7 +59,7 @@
 
 
 #define MAX_UPGRADE_SOCKET  18
-#define HASHMAP_NUM_BUCKETS	100
+
 
 
 /* SSA direct functions */
@@ -82,175 +81,126 @@ static void upgrade_recv(evutil_socket_t fd, short events, void *arg);
 ssize_t recv_fd_from(int fd, void *ptr, size_t nbytes,
 		int *recvfd, struct sockaddr_un* addr, int addr_len);
 
-int server_create(int port, char* config_path) {
 
-	global_settings* config_settings = NULL;
-	client_settings* client_config = NULL;
-	server_settings* server_config = NULL;
-	evutil_socket_t server_sock;
+
+/**
+ * Performs all of the steps needed to run the SSA daemon, estabilshes
+ * a netlink connection with the kernel module, begins listening on the given 
+ * port for connections, and runs the libevent event base indefinitely.
+ * This function only returns if an unrecoverable error occurred in the
+ * Daemon, or if a SIGINT signal was sent to the process.
+ * @param port The port to listen on for new connections.
+ * @param config_path A NULL-terminated string identifying the file path
+ * of a .yml configuration for the daemon.
+ * @returns EXIT_SUCCESS (0) if the event base ran for some indeterminate
+ * amount of time successfully, or EXIT_FAILURE (1) if an error occurred
+ * before the event base could run.
+ */
+int run_daemon(int port, char* config_path) {
+
+	struct evconnlistener* listener = NULL;
+	daemon_context* daemon = NULL;
+
 	evutil_socket_t upgrade_sock;
-	struct evconnlistener* listener;
-	struct event* sev_pipe;
-	struct event* sev_int;
-	struct event* nl_ev;
-	struct event* upgrade_ev;
-	struct nl_sock* netlink_sock;
-	struct event_base* ev_base = event_base_new();
-	int ret;
+	evutil_socket_t server_sock;
+	
+	struct event* upgrade_ev = NULL;
+	struct event* sev_pipe = NULL;
+	struct event* sev_int = NULL;
+	struct event* nl_ev = NULL;
 
-#ifndef NO_LOG
-    const char* ev_version = event_get_version();
-#endif
+	daemon = daemon_context_new(config_path, port);
+	if (daemon == NULL)
+		goto err;
 
-	if (ev_base == NULL) {
-		perror("event_base_new");
-		return 1;
-    }
+	log_printf(LOG_INFO, 
+			"Using libevent version %s with %s behind the scenes\n", 
+			event_get_version(), event_base_get_method(daemon->ev_base));
 
-	ret = event_base_priority_init(ev_base, 3);
-	if (ret != 0) {
-		log_printf(LOG_ERROR, "Failed to enable priorities for event base\n");
-		return 1;
-	}
-
-    log_printf(LOG_INFO, "Using libevent version %s with %s behind the scenes\n", ev_version, event_base_get_method(ev_base));
 
 	/* Signal handler registration */
-	sev_pipe = evsignal_new(ev_base, SIGPIPE, signal_cb, NULL);
-	if (sev_pipe == NULL) {
-		log_printf(LOG_ERROR, "Couldn't create SIGPIPE handler event\n");
-		return EXIT_FAILURE;
-	}
-	sev_int = evsignal_new(ev_base, SIGINT, signal_cb, ev_base);
-	if (sev_int == NULL) {
-		log_printf(LOG_ERROR, "Couldn't create SIGINT handler event\n");
-		return EXIT_FAILURE;
-	}
+	sev_pipe = evsignal_new(daemon->ev_base, SIGPIPE, signal_cb, NULL);
+	if (sev_pipe == NULL)
+		goto err;
 	evsignal_add(sev_pipe, NULL);
+
+	sev_int = evsignal_new(daemon->ev_base, SIGINT, signal_cb, daemon->ev_base);
+	if (sev_int == NULL)
+		goto err;
 	evsignal_add(sev_int, NULL);
 
 
-	config_settings = parse_config(config_path);
-	if (config_settings != NULL) {
-		log_printf(LOG_INFO, "Successfully parsed config settings\n");
-		client_config = config_settings->client;
-		server_config = config_settings->server;
-	}
-
-	daemon_context context = {
-		.ev_base = ev_base,
-		.netlink_sock = NULL,
-		.port = port,
-		.sock_map = hashmap_create(HASHMAP_NUM_BUCKETS),
-		.sock_map_port = hashmap_create(HASHMAP_NUM_BUCKETS),
-		.client_ctx = client_ctx_init(client_config),
-		.server_ctx = server_ctx_init(server_config),
-	};
-
-	if (config_settings != NULL)
-		global_settings_free(config_settings);
-
-	if (context.client_ctx == NULL) {
-		log_printf(LOG_ERROR, "Couldn't load client SSL_CTX settings.\n");
-		return 1;
-	}
-	if (context.server_ctx == NULL) {
-		log_printf(LOG_ERROR, "Couldn't load server SSL_CTX settings.\n");
-		return 1;
-	}
-
 	/* Set up server socket with event base */
 	server_sock = create_server_socket(port, PF_INET, SOCK_STREAM);
-	listener = evconnlistener_new(ev_base, accept_cb, (void*)&context,
-		LEV_OPT_CLOSE_ON_FREE | LEV_OPT_THREADSAFE, SOMAXCONN, server_sock);
-	if (listener == NULL) {
-		log_printf(LOG_ERROR, "Couldn't create evconnlistener. Error code:%s\n"
-				, strerror(errno));
-		return 1;
-	}
+	listener = evconnlistener_new(daemon->ev_base, accept_cb, (void*) daemon,
+			LEV_OPT_CLOSE_ON_FREE | LEV_OPT_THREADSAFE, SOMAXCONN, server_sock);
+	if (listener == NULL) 
+		goto err;
+
 	evconnlistener_set_error_cb(listener, accept_error_cb);
 
-	/* Set up non-blocking netlink socket with event base */
-	netlink_sock = netlink_connect(&context);
-	if (netlink_sock == NULL) {
-		log_printf(LOG_ERROR, "Couldn't create Netlink socket\n");
-		return 1;
-	}
-	ret = evutil_make_socket_nonblocking(nl_socket_get_fd(netlink_sock));
-	if (ret == -1) {
-		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
-				evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-		return 1;
-	}
 
-	nl_ev = event_new(ev_base, nl_socket_get_fd(netlink_sock),
-			EV_READ | EV_PERSIST, netlink_recv, netlink_sock);
-	if (nl_ev == NULL) {
-		log_printf(LOG_ERROR, "Couldn't create netlink event\n");
-		return 1;
-	}
+	nl_ev = event_new(daemon->ev_base, nl_socket_get_fd(daemon->netlink_sock),
+			EV_READ | EV_PERSIST, netlink_recv, daemon->netlink_sock);
+	if (nl_ev == NULL)
+		goto err;
 
 	/* lower priority than read/write ops--they're 1 */
-	ret = event_priority_set(nl_ev, 2);
-	if (ret != 0) {
-		log_printf(LOG_ERROR, "Couldn't set netlinke event priority.\n");
-	}
-
-	if (event_add(nl_ev, NULL) == -1) {
-		log_printf(LOG_ERROR, "Couldn't add Netlink event\n");
-		return 1;
-	}
+	if (event_priority_set(nl_ev, 2) != 0)
+		goto err;
+	if (event_add(nl_ev, NULL) != 0)
+		goto err;
 
 	/* Set up upgrade notification socket with event base */
 	upgrade_sock = create_upgrade_socket(port);
-	upgrade_ev = event_new(ev_base, upgrade_sock,
-			EV_READ | EV_PERSIST, upgrade_recv, &context);
-	if (event_add(upgrade_ev, NULL) == -1) {
-		log_printf(LOG_ERROR, "Couldn't add upgrade event\n");
-		return 1;
-	}
+	upgrade_ev = event_new(daemon->ev_base, upgrade_sock,
+			EV_READ | EV_PERSIST, upgrade_recv, daemon);
+	if (event_add(upgrade_ev, NULL) == -1)
+		goto err;
+
 
 	/* Main event loop */
-	event_base_dispatch(ev_base);
+	if (event_base_dispatch(daemon->ev_base) != 0)
+		goto err;
+
 	log_printf(LOG_INFO, "Main event loop terminated\n");
 
-	netlink_disconnect(netlink_sock);
-	
 	/* Cleanup */
-	evconnlistener_free(listener); /* This also closes the socket due to our listener creation flags */
-	hashmap_free(context.sock_map_port);
-	hashmap_deep_free(context.sock_map, (void (*)(void*))sock_context_free);
-	event_free(nl_ev);
-	SSL_CTX_free(context.client_ctx);
-	SSL_CTX_free(context.server_ctx);
+#if LIBEVENT_VERSION_NUMBER >= 0x02010000
+	libevent_global_shutdown();
+#endif
 
+	daemon_context_free(daemon);
+	evconnlistener_free(listener); /* This also closes the socket */
+	event_free(nl_ev);
 	event_free(upgrade_ev);
 	event_free(sev_pipe);
 	event_free(sev_int);
-	event_base_free(ev_base);
-	/* This function hushes the wails of memory leak
-		* testing utilities, but was not introduced until
-		* libevent 2.1
-		*/
-	#if LIBEVENT_VERSION_NUMBER >= 0x02010000
-	libevent_global_shutdown();
-	#endif
 
-	/* Standard OpenSSL cleanup functions */
-	#if OPENSSL_VERSION_NUMBER >= 0x10100000L
 	OPENSSL_cleanup();
-	#else
-	FIPS_mode_set(0);
-	ENGINE_cleanup();
-	CONF_modules_unload(1);
-	EVP_cleanup();
-	CRYPTO_cleanup_all_ex_data();
-	ERR_remove_state(0);
-	ERR_free_strings();
-	SSL_COMP_free_compression_methods();
-	#endif
-        return 0;
+
+    return EXIT_SUCCESS;
+ err:
+
+	printf("An error occurred setting up the daemon: %s\n", strerror(errno));
+
+	if (daemon != NULL)
+		daemon_context_free(daemon);
+	if (listener != NULL)
+		evconnlistener_free(listener); /* This also closes the socket */
+	if (nl_ev != NULL)
+		event_free(nl_ev);
+	if (upgrade_ev != NULL)
+		event_free(upgrade_ev);
+	if (sev_pipe != NULL)
+		event_free(sev_pipe);
+	if (sev_int != NULL)
+		event_free(sev_int);
+
+	return EXIT_FAILURE;
 }
+
+
 
 evutil_socket_t create_upgrade_socket(int port) {
 
@@ -289,9 +239,9 @@ evutil_socket_t create_upgrade_socket(int port) {
 
 /**
  * Creates a listening socket that binds to local IPv4 and IPv6 interfaces.
- * It also makes the socket nonblocking (since this software uses libevent)
- * @param port numeric port for listening
- * @param type SOCK_STREAM or SOCK_DGRAM
+ * It also makes the socket nonblocking (since this software uses libevent).
+ * @param port The local port to listen on.
+ * @param type SOCK_STREAM or SOCK_DGRAM.
  */
 evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
 	evutil_socket_t sock;
@@ -408,7 +358,23 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
 }
 
 /**
- * WARNING: This isn't actually the callback for a listening socket to receive
+ * This function is called after an internal program calls connect() and after
+ * that given TLS connection successfully finishes its handshake, but before
+ * connect() returns for the internal program. That may seem confusing--here's
+ * another way to think of it. Once the daemon has connected on the secure 
+ * channel, it notifies the kernel module. The kernel module then takes the
+ * `connect()` request from the internal program and reroutes it to this 
+ * daemon's listening port and address (rather than the external one). This is 
+ * the function that is called once that connection is successfully established.
+ * @param listener The listener that the SSA Daemon uses to accept connections 
+ * from internal programs.
+ * @param fd The socket that is now connected with the internal program.
+ * @param address The internal program's address/port combo, encapsulated 
+ * within a sockaddr struct.
+ * @param addrlen The length of address.
+ * @param arg A void pointer referencing the daemon_context of the daemon.
+ * 
+ * WARNING: This is NOT the callback for a listening socket to receive
  * a new connection. The function for that is listener_accept_cb.
  */
 void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,

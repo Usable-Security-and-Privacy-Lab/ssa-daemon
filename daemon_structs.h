@@ -74,6 +74,8 @@ typedef struct sock_context_st {
 } sock_context;
 
 
+daemon_context *daemon_context_new(char* config_path, int port);
+void daemon_context_free(daemon_context* daemon);
 
 int sock_context_new(sock_context** sock, daemon_context* ctx, unsigned long id);
 void sock_context_free(sock_context* sock_ctx);
