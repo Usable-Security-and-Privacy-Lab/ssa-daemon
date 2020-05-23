@@ -46,7 +46,8 @@ void handle_event_eof(connection* conn, channel* startpoint, channel* endpoint);
  * and it certainly does not cause data to be written from the write buffer to
  * the fd. It merely reports once all data to be written from a buffer has been
  * written.
- *
+ * @param bev The bufferevent that triggered the write callback.
+ * @param arg the sock_context associated with the given bufferevent.
  */
 void common_bev_write_cb(struct bufferevent *bev, void *arg) {
 
@@ -69,6 +70,8 @@ void common_bev_write_cb(struct bufferevent *bev, void *arg) {
  * of the other bufferevent. If too much data is being fed through, the read 
  * operation of this bufferevent will be turned off until the other buffer has
  * written enough data out.
+ * @param bev The bufferevent that triggered the read callback.
+ * @param arg the sock_context associated with the given bufferevent.
  */
 void common_bev_read_cb(struct bufferevent* bev, void* arg) {
 	/* TODO: set read high-water mark?? */
@@ -308,6 +311,7 @@ int handle_server_event_connected(connection* conn, channel* startpoint) {
 	}
 	return 0;
 }
+
 
 void handle_event_error(connection* conn, 
 		int error, channel* startpoint, channel* endpoint) {
