@@ -23,7 +23,7 @@ void handle_event_eof(connection* conn, channel* startpoint, channel* endpoint);
 
 /*
  *******************************************************************************
- *                       BUFFEREVENT CALLBACK FUNCTIONS
+ *                  CONNECTION BUFFEREVENT CALLBACK FUNCTIONS
  *******************************************************************************
  */
 
