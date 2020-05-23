@@ -421,7 +421,6 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	hashmap_del(daemon->sock_map_port, port);
 	sock_ctx->conn->state = CLIENT_CONNECTED;
 
-	netlink_notify_kernel(daemon, sock_ctx->id, 0);
 	return;
  err:
 	if (sock_ctx != NULL) {
@@ -431,7 +430,6 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	}
 
 	EVUTIL_CLOSESOCKET(fd);
-	netlink_notify_kernel(daemon, sock_ctx->id, ret);
 	return;
 }
 
@@ -953,6 +951,7 @@ void connect_cb(daemon_context* daemon, unsigned long id,
 		response = -EBADF;
 		goto err;
 	}
+
 	conn = sock_ctx->conn;
 
 	/* Make sure the socket is in the right state to be connecting */
