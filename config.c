@@ -291,23 +291,23 @@ int parse_next_server_setting(yaml_parser_t* parser, server_settings* server) {
         ret = parse_integer(parser, &server->session_timeout);
     
     } else if (strcmp(label, CERT_PATH) == 0) {
+        if (server->cert_cnt >= MAX_CERTKEY_PAIRS) {
+            log_printf(LOG_ERROR, "Config: Maximum certs (%i) exceeded\n", 
+                    MAX_CERTKEY_PAIRS);
+            ret = -1;
+        } else {
+            ret = parse_string(parser, &server->certificates[server->cert_cnt]);
+            server->cert_cnt++;
+        }
+
+    } else if (strcmp(label, KEY_PATH) == 0) {
         if (server->key_cnt >= MAX_CERTKEY_PAIRS) {
             log_printf(LOG_ERROR, "Config: Maximum keys (%i) exceeded\n", 
                     MAX_CERTKEY_PAIRS);
             ret = -1;
         } else {
-            ret = parse_string(parser, &server->certificates[server->cert_cnt]);
-            server->key_cnt++;
-        }
-
-    } else if (strcmp(label, KEY_PATH) == 0) {
-        if (server->cert_cnt >= MAX_CERTKEY_PAIRS) {
-            log_printf(LOG_ERROR, "Config: Maximum keys (%i) exceeded\n", 
-                    MAX_CERTKEY_PAIRS);
-            ret = -1;
-        } else {
             ret = parse_string(parser, &server->private_keys[server->key_cnt]);
-            server->cert_cnt++;
+            server->key_cnt++;
         }
     
     } else {
