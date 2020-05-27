@@ -11,6 +11,7 @@
 int connect_to_host(char* host, char* service);
 void print_identity(int fd);
 
+#define ERR_BUF_SIZE 256
 #define RESPONSE_SIZE 5000
 
 int main(int argc, char* argv[]) {
@@ -80,6 +81,12 @@ int connect_to_host(char* host, char* service) {
 
 		if (connect(sock, addr_ptr->ai_addr, addr_ptr->ai_addrlen) == -1) {
 			perror("connect");
+            socklen_t len = ERR_BUF_SIZE;
+            char buf[ERR_BUF_SIZE] = {0};
+            int ret = getsockopt(sock, IPPROTO_TLS, TLS_ERROR, &buf, &len);
+            if (ret < 0)
+                perror("setsockopt on error failed");
+            printf("%s\n", buf);
 			close(sock);
 			continue;
 		}
