@@ -33,9 +33,9 @@ LIBS_EX = \
 		libevent_openssl \
 		libnl-genl-3.0 \
 		libnotify \
-	       	avahi-client \
-	       	openssl \
-		`
+	   	avahi-client \
+	  	openssl \
+	`
 
 INCLUDES= \
 	`pkg-config --cflags libnotify`
