@@ -986,7 +986,6 @@ void connect_cb(daemon_context* daemon, unsigned long id,
 	ret = bufferevent_socket_connect(conn->secure.bev, rem_addr, rem_addrlen);
 	if (ret != 0) {
 		response = -EVUTIL_SOCKET_ERROR();
-		set_err_string(conn,)
 		goto err;
 	}
 
