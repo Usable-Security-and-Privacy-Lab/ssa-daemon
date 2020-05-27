@@ -149,18 +149,14 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 
 	/* Connection closed--usually due to error or EOF */
 	if (endpoint->closed == 1 && startpoint->closed == 1) {
-		long ssl_err;
+		unsigned long ssl_err;
 		switch (conn->state) {
 		case CLIENT_CONNECTING:
-			ssl_err = SSL_get_verify_result(conn->tls);
+			ssl_err = bufferevent_get_openssl_error(bev);
 
-			if (ssl_err != X509_V_OK) {
-				set_verification_err_string(conn, ssl_err);
-				netlink_handshake_notify_kernel(daemon, id, -EPROTO);
-			} else {
-				/* Errors to do with something other than the validation */
-				netlink_handshake_notify_kernel(daemon, id, -ECONNABORTED);
-			}
+			set_verification_err_string(conn, ssl_err);
+			netlink_handshake_notify_kernel(daemon, id, -EPROTO);
+			
 			connection_shutdown(sock_ctx);
 			conn->state = CONN_ERROR;
 			break;
@@ -312,27 +308,24 @@ int handle_server_event_connected(connection* conn, channel* startpoint) {
 	return 0;
 }
 
-
+/**
+ * Handles an error event for a given bufferevent and determines whether it
+ * will close the bufferevent (by settings startpoint->closed=1 and 
+ * endpoint->closed=1) or recover from the error.
+ * 
+ */
 void handle_event_error(connection* conn, 
 		int error, channel* startpoint, channel* endpoint) {
-
-    unsigned long ssl_err = bufferevent_get_openssl_error(startpoint->bev);
 
 	log_printf(LOG_DEBUG, "%s endpoint encountered an error\n", 
 			startpoint->bev == conn->secure.bev 
 			? "encrypted" : "plaintext");
-
 	
 	if (error == ECONNRESET || error == EPIPE) {
 		log_printf(LOG_INFO, "Connection closed by local user\n");
 	} else if (error != 0){
 		log_printf(LOG_WARNING, "Unhandled error %i has occurred: %s\n", 
 				error, evutil_socket_error_to_string(error));
-	}
-	
-	if (ssl_err != 0) {
-		log_printf(LOG_WARNING, "OpenSSL error on endpoint: %s\n", 
-				ERR_error_string(ssl_err, NULL));
 	}
 
 	startpoint->closed = 1;
