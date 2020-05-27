@@ -1,7 +1,7 @@
 #include <errno.h>
 #include <string.h>
 
-#include <unistd.h> //added to use the access function call.
+#include <unistd.h> //added to use the `access()` function call.
 
 #include <openssl/ssl.h>
 #include <event2/bufferevent.h>
@@ -61,10 +61,7 @@ SSL_CTX* client_ctx_init(client_settings* config) {
 		goto err;
 
 
-	SSL_CTX_set_security_level(ctx, 0);
-
 	SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
-
 
 	if (!config->tls_compression)
 		SSL_CTX_set_options(ctx, SSL_OP_NO_COMPRESSION);

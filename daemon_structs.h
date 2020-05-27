@@ -86,7 +86,7 @@ void connection_free(connection* conn);
 
 int has_err_string(connection* conn);
 void set_err_string(connection* conn, char* string, ...);
-void set_verification_err_string(connection* conn, long ssl_err);
+void set_verification_err_string(connection* conn, unsigned long ssl_err);
 void clear_err_string(connection* conn);
 
 int ssl_malloc_err(connection* conn);

@@ -82,7 +82,7 @@ typedef struct global_settings_st {
 } global_settings;
 
 
-global_settings* parse_config(char* file_path);
+int parse_config(char* file_path, global_settings** settings);
 void global_settings_free(global_settings* settings);
 
 
