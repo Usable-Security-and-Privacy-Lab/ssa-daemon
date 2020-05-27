@@ -1,7 +1,7 @@
 #include <errno.h>
 #include <string.h>
 
-#include <unistd.h> //added to use the access function call.
+#include <unistd.h> //added to use the `access()` function call.
 
 #include <openssl/ssl.h>
 #include <event2/bufferevent.h>

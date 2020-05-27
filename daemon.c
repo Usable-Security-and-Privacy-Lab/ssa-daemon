@@ -61,7 +61,6 @@
 #define MAX_UPGRADE_SOCKET  18
 
 
-
 /* SSA direct functions */
 static void accept_error_cb(struct evconnlistener *listener, void *ctx);
 static void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
@@ -139,7 +138,6 @@ int run_daemon(int port, char* config_path) {
 
 	evconnlistener_set_error_cb(listener, accept_error_cb);
 
-
 	nl_ev = event_new(daemon->ev_base, nl_socket_get_fd(daemon->netlink_sock),
 			EV_READ | EV_PERSIST, netlink_recv, daemon->netlink_sock);
 	if (nl_ev == NULL)
@@ -159,9 +157,12 @@ int run_daemon(int port, char* config_path) {
 		goto err;
 
 
+
 	/* Main event loop */
 	if (event_base_dispatch(daemon->ev_base) != 0)
 		goto err;
+
+
 
 	log_printf(LOG_INFO, "Main event loop terminated\n");
 
@@ -985,6 +986,7 @@ void connect_cb(daemon_context* daemon, unsigned long id,
 	ret = bufferevent_socket_connect(conn->secure.bev, rem_addr, rem_addrlen);
 	if (ret != 0) {
 		response = -EVUTIL_SOCKET_ERROR();
+		set_err_string(conn,)
 		goto err;
 	}
 
