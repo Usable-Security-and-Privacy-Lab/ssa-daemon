@@ -41,6 +41,7 @@ daemon_context* daemon_context_new(char* config_path, int port) {
 	client_settings* client = NULL;
 	server_settings* server = NULL;
 	daemon_context* daemon = NULL;
+	int ret;
 	
 	daemon = calloc(1, sizeof(daemon_context));
 	if (daemon == NULL)
@@ -62,8 +63,10 @@ daemon_context* daemon_context_new(char* config_path, int port) {
 	if (daemon->sock_map_port == NULL)
 		goto err;
 
+	ret = parse_config(config_path, &config_settings);
+	if (ret != 0)
+		goto err; //Found file but failed to parse it
 
-	config_settings = parse_config(config_path);
 	if (config_settings != NULL) {
 		log_printf(LOG_INFO, "Successfully parsed config settings\n");
 		client = config_settings->client;
