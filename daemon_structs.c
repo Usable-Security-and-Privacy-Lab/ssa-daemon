@@ -1,5 +1,6 @@
 
 #include <sys/un.h>
+#include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -274,6 +275,42 @@ void connection_free(connection* conn) {
 }
 
 /**
+ * Checks the given connection to see if it matches any of the corresponding
+ * states passed into the function. If not, the error string of the connection 
+ * is set and a negative error code is returned. Any state or combination of 
+ * states may be checked using this function (even CONN_ERROR), provided the
+ * number of states to check are accurately reported in num.
+ * @param conn The connection to verify.
+ * @param num The number of connection states listed in the function arguments.
+ * @param ... The variadic list of connection states to check.
+ * @returns 0 if the state was one of the acceptable states listed, -EBADFD if 
+ * the state was CONN_ERROR when it shouldn't be, or -EOPNOTSUPP otherwise.
+ */
+int check_conn_state(connection* conn, int num, ...) {
+
+	va_list args;
+
+	va_start(args, num);
+
+	for (int i = 0; i < num; i++) {
+		enum connection_state state = va_arg(args, enum connection_state);
+		if (conn->state == state)
+			return 0;
+	}
+	va_end(args);
+
+	switch(conn->state) {
+	case CONN_ERROR:
+		set_badfd_err_string(conn);
+		return -EBADFD;
+	default:
+		set_wrong_state_err_string(conn);
+		return -EOPNOTSUPP;
+	}
+}
+
+
+/**
  * Converts the current OpenSSL ERR error code into an appropriate errno code.
  * @returns 0 if no ERR was in the queue; -1 if the error could not be converted
  * into an error code; or a positive errno code.
@@ -349,10 +386,11 @@ void set_verification_err_string(connection* conn, unsigned long openssl_err) {
 	const char* err_description;
 	long cert_err = SSL_get_verify_result(conn->tls);
 	
+	clear_err_string(conn);
+
 	if (cert_err != X509_V_OK) {
 		err_description = X509_verify_cert_error_string(cert_err);
 
-		clear_err_string(conn);
 		snprintf(conn->err_string, MAX_ERR_STRING,
 				"OpenSSL verification error %li: %s\n", 
 				cert_err, err_description);
@@ -410,7 +448,25 @@ void set_err_string(connection* conn, char* string, ...) {
  * @param conn The connection to clear an error string from.
  */
 void clear_err_string(connection* conn) {
-	conn->err_string[0] = '\0';
+	memset(conn->err_string, '\0', MAX_ERR_STRING + 1);
+}
+
+void set_badfd_err_string(connection* conn) {
+	if (conn == NULL)
+		return;
+
+	clear_err_string(conn);
+	strncpy(conn->err_string, "SSA daemon socket error: given socket previously"
+			" failed an operation in an unrecoverable way", MAX_ERR_STRING);
+}
+
+void set_wrong_state_err_string(connection* conn) {
+	if (conn == NULL)
+		return;
+
+	clear_err_string(conn);
+	strncpy(conn->err_string, "SSA daemon error: given socket is not in the right "
+			"state to perform the requested operation", MAX_ERR_STRING);
 }
 
 
