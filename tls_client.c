@@ -102,7 +102,6 @@ SSL_CTX* client_ctx_init(client_settings* config) {
 		goto err;
 
 	SSL_CTX_set_timeout(ctx, config->session_timeout);
-	SSL_CTX_set_verify_depth(ctx, config->cert_verification_depth);
 
 	return ctx;
  err:
