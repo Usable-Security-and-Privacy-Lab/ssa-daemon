@@ -104,5 +104,23 @@ server:
   # Client certificates are not currently supported, so certificate verification depth is 
   # not necessary in server settings.
 
+  # Set the path to the certificate chain to be provided to clients.
+  # There are two options for this:
+  # 1. Give the path to a file in PEM format containing the entire certificate chain.
+  #    The certificates should be in the correct order from server certificate to root certificate.
+  # 2. Give the path to a directory containing files that hold one certificate each. The files
+  #    may be in PEM format or DER (ASN1).  The files should be named such that the file with 
+  #    the first certificate in the chain ends with a '0'. The following certificates should have
+  #    names ending in '1', '2', etc. with the files in order from server certificate to intermediate
+  #    certificates to root certificate.
+  cert-path: test_files/certs/server_chain.pem
+
+  # Set the path to the file containing the private key. The file may be in PEM or DER (ASN1) format.
+  key-path: test_files/certs/server_key.pem
+
+  #Multiple certificate chain / key pairs can be provided if desired (One for RSA and one for DSA certificates).
+  # cert-path: test_files/certs/server_chain2.pem
+  # key-path: test_files/certs/server_key2.pem
+
 # Only 'client:' and 'server:' should be in this document, and only once. Consult the SSA
 # Daemon's logs if it fails to load this file--there are usually helpful log error reports.
