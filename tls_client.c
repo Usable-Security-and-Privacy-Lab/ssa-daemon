@@ -201,6 +201,8 @@ int client_connection_setup(sock_context* sock_ctx) {
 		SSL_set_tlsext_host_name(conn->tls, hostname);
 		ret = SSL_set1_host(conn->tls, hostname);
 		if (ret != 1) {
+			set_err_string(conn, "Connection setup error: "
+					"couldn't assign hostname associated with the connection");
 			ret = -ECONNABORTED; /* TODO: set SSL error here */
 			goto err;
 		}
@@ -211,6 +213,8 @@ int client_connection_setup(sock_context* sock_ctx) {
 			NOT_CONN_BEV, BEV_OPT_CLOSE_ON_FREE);
 	if (conn->plain.bev == NULL) {
 		ret = -EVUTIL_SOCKET_ERROR();
+		set_err_string(conn, "Connection setup error: "
+				"failed to allocate buffers within the SSA daemon");
 		goto err;
 	}
 
@@ -218,6 +222,8 @@ int client_connection_setup(sock_context* sock_ctx) {
 			sock_ctx->fd, conn->tls, BUFFEREVENT_SSL_CONNECTING, 0);
 	if (conn->secure.bev == NULL) {
 		ret = -EVUTIL_SOCKET_ERROR();
+		set_err_string(conn, "Connection setup error: "
+				"failed to allocate buffers within the SSA daemon");
 		goto err;
 	}
 
@@ -240,12 +246,16 @@ int client_connection_setup(sock_context* sock_ctx) {
 	ret = bufferevent_set_timeouts(conn->secure.bev, &read_timeout, NULL);
 	if (ret < 0) {
 		ret = -ECONNABORTED;
+		set_err_string(conn, "Connection setup error: "
+				"failed to set timeouts within the daemon");
 		goto err;
 	}
 
 	ret = bufferevent_enable(conn->secure.bev, EV_READ | EV_WRITE);
 	if (ret < 0) {
 		ret = -ECONNABORTED;
+		set_err_string(conn, "Connection setup error: "
+				"enabling read/write for connections within the daemon failed");
 		goto err;
 	}
 

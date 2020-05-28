@@ -127,8 +127,6 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 	if (events & BEV_EVENT_CONNECTED) {
 		if (conn->state == CLIENT_CONNECTING)
 			handle_client_event_connected(conn, daemon, id, startpoint);
-		else
-			goto err; /* why would there be a connected event otherwise?? */
 	}
 	if (events & BEV_EVENT_ERROR) {
 		handle_event_error(conn, bev_error, startpoint, endpoint);
@@ -142,6 +140,7 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 
 		endpoint->closed = 1;
 		startpoint->closed = 1;
+		set_err_string(conn, "TLS handshake error: connection timed out");
 		conn->state = CONN_ERROR;
 		bufferevent_set_timeouts(conn->secure.bev, NULL, NULL);
 		netlink_handshake_notify_kernel(daemon, id, -ENETUNREACH);
@@ -175,10 +174,6 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 
 	}
 
-	return;
- err:
-	connection_shutdown(sock_ctx);
-	conn->state = CONN_ERROR;
 	return;
 }
 
@@ -278,6 +273,7 @@ void handle_client_event_connected(connection* conn,
 			SSL_get_version(conn->tls));
 
 	netlink_handshake_notify_kernel(daemon, id, 0);
+	clear_err_string(conn);
 	return;
 }
 
