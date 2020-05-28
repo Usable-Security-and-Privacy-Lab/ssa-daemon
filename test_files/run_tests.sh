@@ -23,7 +23,7 @@ then
     exec 2>/dev/null
 fi
 
-./badssl_tests
+./badssl
 
 
 echo "Completed all tests."
