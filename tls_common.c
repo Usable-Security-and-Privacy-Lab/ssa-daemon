@@ -370,9 +370,6 @@ int get_hostname(connection* conn, char** data, unsigned int* len) {
 int get_enabled_ciphers(connection* conn, char** data, unsigned int* len) {
 	char* ciphers_str = "";
 
-
-
-
 	STACK_OF(SSL_CIPHER)* ciphers = SSL_get_ciphers(conn->tls);
 	/* TODO: replace this with SSL_get1_supported_ciphers? Maybe... */
 	if (ciphers == NULL)
@@ -405,35 +402,31 @@ int get_enabled_ciphers(connection* conn, char** data, unsigned int* len) {
  */
 
 /**
- * Sets the given connection to be either a client or server connection.
+ * Configures the given connection to be a client connection.
  * @param conn The connection whose state should be modified.
- * @param type The type of connection to change the connection to; should
- * be 0 (SERVER_CONN) to set the connection to a SERVER_NEW state, or 1 
- * (CLIENT_CONN) to set the connection to a CLIENT_NEW state.
- * 
+ * @param daemon The daemon's context.
  * @returns 0 on success, or -errno if an error occurred.
  */
-int set_connection_type(connection* conn, daemon_context* daemon, int type) {
+int set_connection_client(connection* conn, daemon_context* daemon) {
 
-	int ret;
+	int ret = client_SSL_new(conn, daemon);
+	if (ret == 0)
+		conn->state = CLIENT_NEW;
 
-	switch(conn->state) {
-	case CLIENT_NEW:
-	case SERVER_NEW:
-		break; /* Socket in good state */
-	default:
-		return -ENOPROTOOPT;
-	}
+	return ret;
+}
 
-	if (type == CLIENT_CONN)
-		ret = client_SSL_new(conn, daemon);
-	else /* type == SERVER_CONN */
-		ret = server_SSL_new(conn, daemon);
+/**
+ * Configures the given connection to be a server connection.
+ * @param conn The connection whose state should be modified.
+ * @param daemon The daemon's context.
+ * @returns 0 on success, or -errno if an error occurred.
+ */
+int set_connection_server(connection* conn, daemon_context* daemon) {
 
-	if (ret != 0)
-		conn->state = CONN_ERROR;
-	else
-		conn->state = (type == CLIENT_CONN) ? CLIENT_NEW : SERVER_NEW;
+	int ret = server_SSL_new(conn, daemon);
+	if (ret == 0)
+		conn->state = SERVER_NEW;
 
 	return ret;
 }
@@ -549,15 +542,6 @@ int set_private_key(connection* conn, char* path) {
  * @returns 0 on success, or -ernno if an error occurred. 
  */
 int set_trusted_CA_certificates(connection* conn, char* path) {
-
-	switch (conn->state) {
-	case CLIENT_NEW:
-	case SERVER_NEW:
-		break;
-
-	default:
-		return -EINVAL; /* TODO: correct return value? */
-	}
 	
 	STACK_OF(X509_NAME)* cert_names = SSL_load_client_CA_file(path);
 	if (cert_names == NULL)
