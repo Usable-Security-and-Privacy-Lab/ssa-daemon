@@ -348,6 +348,9 @@ int ssl_malloc_err(connection* conn) {
 	unsigned long ssl_err = ERR_get_error();
 	ERR_clear_error();
 
+	set_err_string(conn, "Daemon failed to allocate sufficient buffers: %s", 
+			ERR_reason_error_string(ERR_GET_REASON(ssl_err)));
+
 	if (ERR_GET_REASON(ssl_err) == ERR_R_MALLOC_FAILURE) {
 		log_printf(LOG_ERROR, "OpenSSL malloc failure caught\n");
 		set_err_string(conn, "Insufficient alloc memory for the SSA daemon");
@@ -391,9 +394,9 @@ void set_verification_err_string(connection* conn, unsigned long openssl_err) {
 	if (cert_err != X509_V_OK) {
 		err_description = X509_verify_cert_error_string(cert_err);
 
-		snprintf(conn->err_string, MAX_ERR_STRING,
-				"OpenSSL verification error %li: %s\n", 
-				cert_err, err_description);
+		set_err_string(conn, 
+				"TLS handshake error %li: %s\n", cert_err, err_description);
+
 		log_printf(LOG_ERROR,
 				"OpenSSL verification error %li: %s\n", 
 				cert_err, err_description);
@@ -402,17 +405,17 @@ void set_verification_err_string(connection* conn, unsigned long openssl_err) {
 		
 		switch (ERR_GET_REASON(openssl_err)) {
 		case SSL_R_SSLV3_ALERT_HANDSHAKE_FAILURE:
-			strncpy(conn->err_string, "OpenSSL handshake error: server supports"
+			strncpy(conn->err_string, "TLS handshake error: server supports"
 					" none of the allowed ciphers\n", MAX_ERR_STRING);
 			break;
 
 		case SSL_R_TLSV1_ALERT_PROTOCOL_VERSION:
-			strncpy(conn->err_string, "OpenSSL handshake error: server supports"
+			strncpy(conn->err_string, "TLS handshake error: server supports"
 					" none of the allowed TLS versions\n", MAX_ERR_STRING);
 			break;
 
 		case SSL_R_UNSUPPORTED_PROTOCOL: 
-			strncpy(conn->err_string, "OpenSSL handshake error: server supports"
+			strncpy(conn->err_string, "TLS handshake error: server supports"
 					" none of the allowed TLS versions\n", MAX_ERR_STRING);
 			break;
 

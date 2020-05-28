@@ -21,7 +21,7 @@ int concat_ciphers(char** list, int num, char** out);
 int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist);
 int get_ciphers_strlen(STACK_OF(SSL_CIPHER)* ciphers);
 int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len);
-int check_key_cert_pair(SSL* tls);
+int check_key_cert_pair(connection* conn);
 
 
 /**
@@ -254,7 +254,7 @@ int get_peer_certificate(connection* conn, char** data, unsigned int* len) {
 
 	cert = SSL_get_peer_certificate(conn->tls);
 	if (cert == NULL) {
-		/* TODO: get specific error from OpenSSL */
+		set_err_string(conn, "TLS error: peer certificate not found");
 		ret = -ENOTCONN;
 		goto end;
 	}
@@ -262,12 +262,13 @@ int get_peer_certificate(connection* conn, char** data, unsigned int* len) {
 	bio = BIO_new(BIO_s_mem());
 	if (bio == NULL) {
 		/* TODO: get specific error from OpenSSL */
-		ret = -ENOMEM;
+		ret = ssl_malloc_err(conn);
 		goto end;
 	}
 
 	if (PEM_write_bio_X509(bio, cert) == 0) {
 		/* TODO: get specific error from OpenSSL */
+		set_err_string(conn, "Daemon error: couldn't convert cert to ASCII");
 		ret = -ENOTSUP;
 		goto end;
 	}
@@ -276,6 +277,7 @@ int get_peer_certificate(connection* conn, char** data, unsigned int* len) {
 	pem_data = malloc(cert_len + 1); /* +1 for null terminator */
 	if (pem_data == NULL) {
 		ret = -errno;
+		set_err_string(conn, "Daemon error: failed to allocate buffers");
 		goto end;
 	}
 
@@ -306,14 +308,19 @@ int get_peer_identity(connection* conn, char** identity, unsigned int* len) {
 	X509_NAME* subject_name;
 	X509* cert;
 
-	if (conn->tls == NULL)
-		return -ENOTCONN;
-
 	cert = SSL_get_peer_certificate(conn->tls);
-	if (cert == NULL)
+	if (cert == NULL) {
+		set_err_string(conn, "TLS error: couldn't get peer certificate - %s",
+				ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
 		return -ENOTCONN;
+	}
 
-	subject_name = X509_get_subject_name(cert); /* internal ptr; don't free */
+	subject_name = X509_get_subject_name(cert);
+	if (subject_name == NULL) {
+		set_err_string(conn, "TLS error: peer's certificate has no identity");
+		return -EINVAL;
+	}
+
 	*identity = X509_NAME_oneline(subject_name, NULL, 0);
 	if (*identity == NULL) {
 		X509_free(cert);
@@ -341,18 +348,12 @@ int get_hostname(connection* conn, char** data, unsigned int* len) {
 
 	const char* hostname;
 	
-	switch (conn->state) {
-	case SERVER_NEW:
-	case SERVER_CONNECTING:
-	case SERVER_CONNECTED:
-		break;
-	default:
+	hostname = SSL_get_servername(conn->tls, TLSEXT_NAMETYPE_host_name);
+	if (hostname == NULL) {
+		set_err_string(conn, "TLS error: couldn't get the server hostname - %s",
+				ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
 		return -EINVAL;
 	}
-
-	hostname = SSL_get_servername(conn->tls, TLSEXT_NAMETYPE_host_name);
-	if (hostname == NULL)
-		return -EINVAL;
 
 	*data = (char*)hostname;
 	*len = strlen(hostname)+1;
@@ -368,7 +369,8 @@ int get_hostname(connection* conn, char** data, unsigned int* len) {
  * @returns 0 on success; -errno otherwise.
  */
 int get_enabled_ciphers(connection* conn, char** data, unsigned int* len) {
-	char* ciphers_str = "";
+	
+	char* ciphers_str;
 
 	STACK_OF(SSL_CIPHER)* ciphers = SSL_get_ciphers(conn->tls);
 	/* TODO: replace this with SSL_get1_supported_ciphers? Maybe... */
@@ -380,12 +382,13 @@ int get_enabled_ciphers(connection* conn, char** data, unsigned int* len) {
 		goto end;
 
 	ciphers_str = (char*) malloc(ciphers_len + 1);
-	if (ciphers_str == NULL)
+	if (ciphers_str == NULL) {
+		set_err_string(conn, "Daemon error: failed to allocate buffer");
 		return -errno;
-
-	if (get_ciphers_string(ciphers, ciphers_str, ciphers_len + 1) != 0) {
-		log_printf(LOG_ERROR, "Buffer wasn't big enough; had to be truncated.\n");
 	}
+
+	if (get_ciphers_string(ciphers, ciphers_str, ciphers_len + 1) != 0)
+		log_printf(LOG_ERROR, "Buffer had to be truncated.\n");
 
 	*len = ciphers_len + 1;
  end:
@@ -441,7 +444,9 @@ int set_connection_server(connection* conn, daemon_context* daemon) {
 int set_certificate_chain(connection* conn, char* path) {
 
 	struct stat file_stats;
-	int ret;
+	int ret, ssl_err;
+
+	ERR_clear_error();
 
 	ret = stat(path, &file_stats);
 	if (ret != 0) {
@@ -475,9 +480,14 @@ int set_certificate_chain(connection* conn, char* path) {
 
 	return 0;
  err:
-	log_printf(LOG_ERROR, "Failed to set cert chain: %i\n", ret);
+	ssl_err = ERR_GET_REASON(ERR_get_error());
+
+	set_err_string(conn, "TLS error: couldn't set certificate chain - %s",
+			ssl_err ? ERR_reason_error_string(ssl_err) : strerror(-ret));
 	return ret;
 }
+
+
 
 /**
  * Sets a private key for the given connection conn using the key located 
@@ -507,31 +517,35 @@ int set_private_key(connection* conn, char* path) {
 
 	ret = SSL_use_PrivateKey_file(conn->tls, path, SSL_FILETYPE_PEM);
 	if (ret == 1) /* pem key loaded */
-		return check_key_cert_pair(conn->tls); 
+		return check_key_cert_pair(conn); 
 	else
 		ERR_clear_error();
 
 	ret = SSL_use_PrivateKey_file(conn->tls, path, SSL_FILETYPE_ASN1);
 	if (ret == 1) /* ASN.1 key loaded */
-		return check_key_cert_pair(conn->tls);  
+		return check_key_cert_pair(conn);  
 	else
 		ERR_clear_error();
 
 	ret = SSL_use_PrivateKey_file(conn->tls, path, SSL_FILETYPE_PEM);
 	if (ret == 1) /* pem RSA key loaded */
-		return check_key_cert_pair(conn->tls); 
+		return check_key_cert_pair(conn); 
 	else
 		ERR_clear_error();
 
 	ret = SSL_use_RSAPrivateKey_file(conn->tls, path, SSL_FILETYPE_ASN1);
 	if (ret == 1) /* ASN.1 RSA key loaded */
-		return check_key_cert_pair(conn->tls); 
-	
-	/* TODO: set ret to OpenSSL error */
-	ret = -EBADF;
+		return check_key_cert_pair(conn);
+	else
+		goto err;
+
+	return 0;
  err:
-	log_printf(LOG_ERROR, "Failed to set private key: %i\n", ret);
-	return ret;
+	log_printf(LOG_ERROR, "Failed to set private key: %s\n", 
+			ERR_reason_error_string(ERR_GET_REASON(ERR_peek_error())));
+	set_err_string(conn, "TLS error: failed to set private key - %s",
+			ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
+	return -EBADF;
 }
 
 /**
@@ -544,8 +558,11 @@ int set_private_key(connection* conn, char* path) {
 int set_trusted_CA_certificates(connection* conn, char* path) {
 	
 	STACK_OF(X509_NAME)* cert_names = SSL_load_client_CA_file(path);
-	if (cert_names == NULL)
+	if (cert_names == NULL) {
+		set_err_string(conn, "TLS error: unable to load CA certificates - %s",
+				ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
 		return -EBADF;
+	}
 
 	SSL_set_client_CA_list(conn->tls, cert_names);
 
@@ -564,13 +581,16 @@ int disable_cipher(connection* conn, char* cipher) {
 
 	STACK_OF(SSL_CIPHER)* cipherlist = SSL_get_ciphers(conn->tls);
 	if (cipherlist == NULL)
-		return -EINVAL;
+		goto err;
 
 	int ret = clear_from_cipherlist(cipher, cipherlist);
 	if (ret != 0)
-		return -EINVAL;
+		goto err;
 
 	return 0;
+ err:
+	set_err_string(conn, "TLS error: Specified cipher already disabled");
+	return -EINVAL;
 }
 
 /*
@@ -662,14 +682,18 @@ int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist) {
  * for which to check.
  * @returns 0 if the checks succeeded; -EPROTO otherwise. 
  */
-int check_key_cert_pair(SSL* tls) {
-	if (SSL_check_private_key(tls) != 1) {
+int check_key_cert_pair(connection* conn) {
+	if (SSL_check_private_key(conn->tls) != 1) {
 		log_printf(LOG_ERROR, "Key and certificate don't match.\n");
+		set_err_string(conn, "TLS error: certificate/privateKey mismatch - %s",
+				ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
 		goto err;
 	}
 
-	if (SSL_build_cert_chain(tls, SSL_BUILD_CHAIN_FLAG_CHECK) != 1) {
+	if (SSL_build_cert_chain(conn->tls, SSL_BUILD_CHAIN_FLAG_CHECK) != 1) {
 		log_printf(LOG_ERROR, "Certificate chain failed to build.\n");
+		set_err_string(conn, "TLS error: privateKey/cert chain incomplete - %s",
+				ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
 		goto err;
 	}
 
