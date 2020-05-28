@@ -672,6 +672,7 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 	response = sock_context_new(&sock_ctx, daemon, id);
 	if (response != 0)
 		goto err;
+
 	response = connection_new(&(sock_ctx->conn));
 	if (response != 0)
 		goto err;
@@ -718,17 +719,14 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 
 	switch (option) {
 	case TLS_REMOTE_HOSTNAME:
-		/* The kernel validated this data for us */
-
-		if ((response = check_conn_state(conn, 2, CLIENT_NEW, SERVER_NEW)) != 0)
+		if ((response = check_conn_state(conn, 1, CLIENT_NEW)) != 0)
 			break;
 
-		memcpy(sock_ctx->rem_hostname, value, len);
+		memcpy(sock_ctx->rem_hostname, value, len); /* kernel validated this */
 		log_printf(LOG_INFO,
 				"Assigning %s to socket %lu\n", sock_ctx->rem_hostname, id);
 
-		if (set_remote_hostname(sock_ctx->conn, value) == 0)
-			response = -EINVAL;
+		response = set_remote_hostname(sock_ctx->conn, value);
 		break;
 
 	case TLS_DISABLE_CIPHER:
@@ -776,7 +774,7 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 	default:
 		if (setsockopt(sock_ctx->fd, level, option, value, len) == -1) {
 			response = -errno;
-			set_err_string(conn, "setsockopt failed from within daemon");
+			set_err_string(conn, "Daemon error: internal fd setsockopt failed");
 		}
 		break;
 	}
@@ -816,8 +814,8 @@ void getsockopt_cb(daemon_context* daemon,
 		break;
 
 	case TLS_REMOTE_HOSTNAME:
-		if ((response = check_conn_state(conn, 2, 
-				CLIENT_NEW, CLIENT_CONNECTED)) != 0)
+		if ((response = check_conn_state(conn,
+				2, CLIENT_NEW, CLIENT_CONNECTED)) != 0)
 			break;
 
 		if (strlen(sock_ctx->rem_hostname) > 0) {
@@ -827,8 +825,8 @@ void getsockopt_cb(daemon_context* daemon,
 		break;
 
 	case TLS_HOSTNAME:
-		if ((response = check_conn_state(conn, 2, 
-				SERVER_NEW, SERVER_CONNECTED)) != 0)
+		if ((response = check_conn_state(conn, 
+				3, SERVER_NEW, SERVER_LISTENING, SERVER_CONNECTED)) != 0)
 			break;
 
 		if(get_hostname(conn, &data, &len) == 0) {
@@ -892,9 +890,9 @@ void getsockopt_cb(daemon_context* daemon,
 	clear_err_string(conn);
 
 	netlink_send_and_notify_kernel(daemon, id, data, len);
-	if (need_free == 1) {
+	if (need_free == 1)
 		free(data);
-	}
+	
 	return;
 }
 
@@ -932,8 +930,7 @@ void bind_cb(daemon_context* daemon, unsigned long id,
 
 	if (bind(sock_ctx->fd, ext_addr, ext_addrlen) != 0) {
 		response = -errno;
-		set_err_string(conn, "Bind error: "
-				"SSA daemon's internal socket failed to bind");
+		set_err_string(conn, "Bind error: SSA daemon socket failed to bind");
 		goto err;
 	}
 
@@ -999,8 +996,8 @@ void connect_cb(daemon_context* daemon, unsigned long id,
 
 	clear_err_string(conn);
 
-	response = check_conn_state(conn, 3, 
-			CLIENT_NEW, CLIENT_CONNECTING, CLIENT_CONNECTED);
+	response = check_conn_state(conn, 
+			3, CLIENT_NEW, CLIENT_CONNECTING, CLIENT_CONNECTED);
 	if (response != 0) {
 		netlink_notify_kernel(daemon, id, response);
 		return;
@@ -1071,6 +1068,7 @@ void listen_cb(daemon_context* daemon, unsigned long id,
 	}
 
 	conn = sock_ctx->conn;
+	clear_err_string(conn);
 
 	/* convert a CLIENT_NEW connection into a SERVER_NEW automatically */
 	if (conn->state == CLIENT_NEW) {
@@ -1112,9 +1110,8 @@ void listen_cb(daemon_context* daemon, unsigned long id,
 	conn->state = SERVER_LISTENING;
 
 	netlink_notify_kernel(daemon, id, NOTIFY_SUCCESS);
-	log_printf(LOG_DEBUG, "port now listening for incoming connections\n");
 
-	clear_err_string(conn);
+	log_printf(LOG_DEBUG, "port now listening for incoming connections\n");
 	return;
  err:
 	log_printf(LOG_ERROR, "listen_cb failed: %i.\n", response);
