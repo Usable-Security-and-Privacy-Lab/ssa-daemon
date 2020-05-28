@@ -5,6 +5,7 @@
 
 #include <event2/bufferevent.h>
 #include <event2/listener.h>
+#include <event2/bufferevent_ssl.h>
 #include <openssl/err.h>
 
 #include "config.h"
@@ -40,6 +41,7 @@ daemon_context* daemon_context_new(char* config_path, int port) {
 	client_settings* client = NULL;
 	server_settings* server = NULL;
 	daemon_context* daemon = NULL;
+	int ret;
 	
 	daemon = calloc(1, sizeof(daemon_context));
 	if (daemon == NULL)
@@ -61,8 +63,10 @@ daemon_context* daemon_context_new(char* config_path, int port) {
 	if (daemon->sock_map_port == NULL)
 		goto err;
 
+	ret = parse_config(config_path, &config_settings);
+	if (ret != 0)
+		goto err; //Found file but failed to parse it
 
-	config_settings = parse_config(config_path);
 	if (config_settings != NULL) {
 		log_printf(LOG_INFO, "Successfully parsed config settings\n");
 		client = config_settings->client;
@@ -340,14 +344,46 @@ int has_err_string(connection* conn) {
  * @param conn The connection to set the error sttring for.
  * @param ssl_err The error code returned by SSL_get_verify_result().
  */
-void set_verification_err_string(connection* conn, long ssl_err) {
-	const char* err_description = X509_verify_cert_error_string(ssl_err);
+void set_verification_err_string(connection* conn, unsigned long openssl_err) {
 
-	clear_err_string(conn);
-	snprintf(conn->err_string, MAX_ERR_STRING,
-			"OpenSSL verification error %li: %s\n", ssl_err, err_description);
-	log_printf(LOG_ERROR,
-			"OpenSSL verification error %li: %s\n", ssl_err, err_description);
+	const char* err_description;
+	long cert_err = SSL_get_verify_result(conn->tls);
+	
+	if (cert_err != X509_V_OK) {
+		err_description = X509_verify_cert_error_string(cert_err);
+
+		clear_err_string(conn);
+		snprintf(conn->err_string, MAX_ERR_STRING,
+				"OpenSSL verification error %li: %s\n", 
+				cert_err, err_description);
+		log_printf(LOG_ERROR,
+				"OpenSSL verification error %li: %s\n", 
+				cert_err, err_description);
+    } else {
+		/* an error not to do with the certificate validation */
+		
+		switch (ERR_GET_REASON(openssl_err)) {
+		case SSL_R_SSLV3_ALERT_HANDSHAKE_FAILURE:
+			strncpy(conn->err_string, "OpenSSL handshake error: server supports"
+					" none of the allowed ciphers\n", MAX_ERR_STRING);
+			break;
+
+		case SSL_R_TLSV1_ALERT_PROTOCOL_VERSION:
+			strncpy(conn->err_string, "OpenSSL handshake error: server supports"
+					" none of the allowed TLS versions\n", MAX_ERR_STRING);
+			break;
+
+		case SSL_R_UNSUPPORTED_PROTOCOL: 
+			strncpy(conn->err_string, "OpenSSL handshake error: server supports"
+					" none of the allowed TLS versions\n", MAX_ERR_STRING);
+			break;
+
+		default:
+			/* Add more here as needs be */
+			break;
+		}
+
+	}
 }
 
 /**

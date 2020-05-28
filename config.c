@@ -545,11 +545,12 @@ int parse_tls_version(yaml_parser_t* parser, enum tls_version_t* version) {
  * with the configurations.
  * @param file_path The path to the .yml config file, or NULL if the default
  * file path is desired.
- * @returns An allocated global_settings struct, or NULL on error.
+ * @param global_settings A struct to be allocated and populated with the 
+ * appropriate TLS settings if the parser succeeds at parsing the file.
+ * @returns 0 on success (and/or if no file was found), or -1 on failure.
  */
-global_settings* parse_config(char* file_path) {
+int parse_config(char* file_path, global_settings** settings) {
     
-    global_settings* settings = NULL;
     yaml_parser_t parser;
     FILE* input = NULL;
 
@@ -558,42 +559,53 @@ global_settings* parse_config(char* file_path) {
 
     if (yaml_parser_initialize(&parser) != 1) {
         log_printf(LOG_ERROR, "Failed to initialize config parser\n");
-        return NULL;
+        *settings = NULL;
+        return -1;
     }
 
-    settings = calloc(1, sizeof(global_settings));
+    input = fopen(file_path, "r");
+    if (input == NULL) {
+        log_printf(LOG_WARNING, 
+                "Couldn't find config file--using default settings...\n");
+
+        yaml_parser_delete(&parser);
+        *settings = NULL;
+        return 0;
+    }
+
+    
+
+    *settings = calloc(1, sizeof(global_settings));
     if (settings == NULL) {
         log_printf(LOG_ERROR, "Failed to allocate settings struct: %s\n",
                 strerror(errno));
         goto err;
     }
-    
-    input = fopen(file_path, "r");
-    if (input == NULL)
-        goto err;
 
     yaml_parser_set_input_file(&parser, input);
 
     if (parse_next_event(&parser) != YAML_STREAM_START_EVENT)
         goto err;
 
-    if (parse_stream(&parser, settings) != 0)
+    if (parse_stream(&parser, *settings) != 0)
         goto err;
 
     fclose(input);
     yaml_parser_delete(&parser);
-    return settings;
+    
+    return 0;
  err:
     log_parser_error(parser);
     yaml_parser_delete(&parser);
 
-    if (settings != NULL)
-        global_settings_free(settings);
+    if (*settings != NULL)
+        global_settings_free(*settings);
+    *settings = NULL;
     
     if (input != NULL)
         fclose(input);
 
-    return NULL;
+    return -1;
 }
 
 /**

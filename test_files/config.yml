@@ -69,14 +69,18 @@ client:
 # While servers are generally not at risk of compromise based on these settings, the 
 # clients that they accept connections from are. Allowing only strict settings ensures
 # that such clients will not be vulnerable to Man-in-the-Middle attacks while connected
-# to your site, even if their browser is generally succeptible to such.
+# to your site, even if their browser is generally susceptible to such.
 server:
 
   # Note that these settings have the same defaults as that of client settings (for now)
   min-tls-version: 1.2       
   max-tls-version: 1.3       
   tls-compression: disabled  
-  session-tickets: disabled  
+
+  # Session Tickets posess a vulnerability in them for TLS 1.2 and lower.
+  # For more info, see here: https://blog.filippo.io/we-need-to-talk-about-session-tickets/
+  # Realistically, they should be kept disabled unless TLS-1.3 is your minimum TLS version.
+  session-tickets: disabled  # Default: disabled
 
   CA-path: test_files/certs/rootCA.pem
 
@@ -96,6 +100,9 @@ server:
     - TLS_AES_128_CCM_8_SHA256
 
   session-timeout: 300
+
+  # Client certificates are not currently supported, so certificate verification depth is 
+  # not necessary in server settings.
 
 # Only 'client:' and 'server:' should be in this document, and only once. Consult the SSA
 # Daemon's logs if it fails to load this file--there are usually helpful log error reports.
