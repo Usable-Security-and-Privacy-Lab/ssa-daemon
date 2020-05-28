@@ -71,3 +71,4 @@ ssa_daemon
 .idea/*
 cmake-build-debug/*
 CMakeLists.txt
+test_files/badssl
