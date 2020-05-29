@@ -140,10 +140,10 @@ struct nl_sock* netlink_connect(daemon_context* ctx) {
  *
  * When the daemon's event base senses that the netlink socket is ready
  * to read information from, it will call this method (as it was the
- * callback function set in server_create when event_new was called for
+ * callback function set in run_daemon when event_new was called for
  * the netlink socket).
  *
- * @see server_create in daemon.c
+ * @see run_daemon in daemon.c
  * @see netlink_connect
  */
 void netlink_recv(evutil_socket_t fd, short events, void *arg) {
