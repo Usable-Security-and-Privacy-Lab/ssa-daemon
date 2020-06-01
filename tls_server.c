@@ -107,6 +107,8 @@ SSL_CTX* server_ctx_init_default() {
 }
 
 
+int load_certificate(SSL_CTX* ctx, char* path);
+
 SSL_CTX* server_ctx_init(server_settings* config) {
 
 	SSL_CTX* ctx = NULL;
@@ -160,8 +162,13 @@ SSL_CTX* server_ctx_init(server_settings* config) {
 		goto err;
 
 	/* TODO: WARNING: temporary--for debugging. Remove for prod */
+
+	// make sure config file has comment about ca_path
+	// if certificate chain is one pem formated file -> use certificate chain file
+	// else if ca_path is a directory, load individually in alphabetical order
+	// add certificate/key pair for both RSA and DSA?
 	
-	ret = SSL_CTX_use_certificate_chain_file(ctx, DEBUG_CERT_CHAIN);
+	ret = load_certificate(ctx, config->ca_path); // key values mismatch here
 	if (ret != 1)
 		goto err;
 	
@@ -223,6 +230,37 @@ int accept_SSL_new(connection* conn, connection* old) {
 		return ssl_malloc_err(old);
 	else
 		return 0;
+}
+
+/**
+ * If the last 4 chars of a string are ".pem" return 1, else return 0.
+ */
+int is_pem_file(char* path) {
+	int len = strlen(path);
+	char* type = &path[len - 4]; // label this?
+
+	printf("Type: %s\n", type); // for debugging
+	if(strcmp(type, ".pem") == 0) 
+		return 1;
+	else
+		return 0;
+}
+
+/**
+ * 
+ */
+int load_certificate(SSL_CTX* ctx, char* path) { 
+
+	if(is_pem_file(path)) {
+		return SSL_CTX_use_certificate_chain_file(ctx, path);
+	}
+
+	// else if(is_directory(config->ca_path)) {}
+
+	else {
+		log_printf(LOG_ERROR, "[CA_path] must be a pem file or directory.\n");
+		return 0;
+	}
 }
 
 /**
