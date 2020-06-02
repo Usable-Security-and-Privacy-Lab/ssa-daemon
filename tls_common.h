@@ -24,10 +24,6 @@
 #include "daemon_structs.h"
 
 
-/* for set_connection_type() */
-#define SERVER_CONN 0
-#define CLIENT_CONN 1
-
 
 /* SSL_CTX loading */
 long get_tls_version(enum tls_version_t version);
@@ -43,7 +39,8 @@ int get_hostname(connection* conn_ctx, char** data, unsigned int* len);
 int get_enabled_ciphers(connection* conn, char** data, unsigned int* len);
 
 /* setsockopt */
-int set_connection_type(connection* conn, daemon_context* daemon, int type);
+int set_connection_client(connection* conn, daemon_context* daemon);
+int set_connection_server(connection* conn, daemon_context* daemon);
 int set_trusted_CA_certificates(connection* conn, char* path);
 int disable_cipher(connection* conn, char* cipher);
 int set_certificate_chain(connection* conn, char* path);

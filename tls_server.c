@@ -289,17 +289,23 @@ err:
 
 
 
-/*
- *******************************************************************************
+/*******************************************************************************
  *                      SETSOCKOPT FUNCTIONS
- *******************************************************************************
+ ******************************************************************************/
+
+/**
+ *
+ * 
  */
-int set_remote_hostname(connection* conn_ctx, char* hostname) {
-	if (conn_ctx == NULL) {
-		/* We don't fail here because this will be set when the
-		 * connection is actually created by tls_client_setup */
-		return 1;
+int set_remote_hostname(connection* conn, char* hostname) {
+
+	SSL_set_tlsext_host_name(conn->tls, hostname);
+	
+	if (SSL_set1_host(conn->tls, hostname) != 1) {
+		set_err_string(conn, "TLS error: unable to set hostname - %s", 
+				ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
+		return -EINVAL;
 	}
-	SSL_set_tlsext_host_name(conn_ctx->tls, hostname);
-	return 1;
+
+	return 0;
 }
