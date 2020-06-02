@@ -85,7 +85,7 @@ int connect_to_host(char* host, char* service) {
             char buf[ERR_BUF_SIZE] = {0};
             int ret = getsockopt(sock, IPPROTO_TLS, TLS_ERROR, &buf, &len);
             if (ret < 0)
-                perror("setsockopt on error failed");
+                perror("getsockopt on error failed");
             printf("%s\n", buf);
 			close(sock);
 			continue;
