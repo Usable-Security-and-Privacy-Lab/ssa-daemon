@@ -12,8 +12,16 @@
 #define MAX_HOSTNAME 255
 #define NOT_CONN_BEV -1 /** Designation for bufferevent with no set fd */
 
+#define NO_REVOCATION_CHECKS     (1 << 0)
+#define NO_OCSP_STAPLED_CHECKS   (1 << 1)
+#define NO_OCSP_RESPONDER_CHECKS (1 << 2)
+#define NO_CRL_RESPONDER_CHECKS  (1 << 3)
+
+
+
+
 enum connection_state {
-	CONN_ERROR,
+	CONN_ERROR = 0,
 	CLIENT_NEW,
 	CLIENT_CONNECTING,
 	CLIENT_CONNECTED,
@@ -21,10 +29,15 @@ enum connection_state {
 	SERVER_LISTENING,
 	SERVER_CONNECTING,
 	SERVER_CONNECTED,
-	DISCONNECTED,
+	DISCONNECTED
 };
 
-
+enum revocation_state {
+	CERT_R_POLLING = 0,
+	CERT_R_REVOKED,
+	CERT_R_UNKNOWN,
+	CERT_R_GOOD
+};
 
 typedef struct channel_st {
 	struct bufferevent* bev;
@@ -42,6 +55,29 @@ typedef struct daemon_context_st {
 	SSL_CTX* server_ctx;
 } daemon_context;
 
+typedef struct rev_client_st {
+	struct bufferevent* bev;
+	char* url;
+
+	unsigned char* buffer; /**< A temporary buffer to store read data */
+	int buf_size;
+	int tot_read;
+	int buffer_is_body;
+} rev_client;
+
+typedef struct revocation_context_st {
+	enum revocation_state state; // Might not need this...
+	unsigned int num_rev_checks; /**< How many different types of revocation will be checked */
+	int crl_clients_left;
+
+	rev_client* ocsp_clients;
+	unsigned int ocsp_client_cnt;
+	rev_client* crl_clients;
+	unsigned int crl_client_cnt;
+
+	int checks; // bitmap; see defined options above
+} revocation_context; 
+
 typedef struct connection_st {
 	channel plain;
 	channel secure;
@@ -56,6 +92,7 @@ typedef struct sock_context_st {
 	unsigned long id;
 	evutil_socket_t fd;
 	connection* conn;
+	revocation_context revocation;
 
 	struct sockaddr int_addr; /** Internal address--the program using SSA */
 	int int_addrlen;
@@ -79,6 +116,9 @@ void daemon_context_free(daemon_context* daemon);
 
 int sock_context_new(sock_context** sock, daemon_context* ctx, unsigned long id);
 void sock_context_free(sock_context* sock_ctx);
+
+void revocation_context_cleanup(revocation_context* ctx);
+void responder_cleanup(rev_client resp);
 
 int connection_new(connection** conn);
 void connection_shutdown(sock_context* sock_ctx);

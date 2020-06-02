@@ -23,15 +23,39 @@
 #ifndef TLS_CLIENT_H
 #define TLS_CLIENT_H
 
+#include <openssl/ocsp.h>
+
 #include "config.h"
 #include "daemon_structs.h"
 
 
+
 #define EXT_CONN_TIMEOUT 15 /* seconds */
+
+#define MAX_HEADER_SIZE 8192
+
+#define MAX_OCSP_RESPONDERS 5
+#define OCSP_READ_TIMEOUT 8
+
+#define LEEWAY_90_SECS 90
+#define MAX_OCSP_AGE 604800L /* 7 days is pretty standard for OCSP */
 
 SSL_CTX* client_ctx_init(client_settings* config);
 
 int client_SSL_new(connection* conn, daemon_context* daemon);
 int client_connection_setup(sock_context* sock_ctx);
+
+int begin_responder_revocation_checks(sock_context* sock_ctx);
+int check_stapled_response(SSL* tls);
+
+char** retrieve_ocsp_urls(X509* cert, int* num_urls);
+char** retrieve_crl_urls(X509* cert, int* num_urls);
+
+int parse_url(char* url, char** host_out, int* port_out, char** path_out);
+
+int get_ocsp_basicresp(unsigned char* bytes, int len, OCSP_BASICRESP** resp);
+int check_ocsp_response(OCSP_BASICRESP* response, SSL* tls);
+int check_crl_response(X509_CRL* response, SSL* tls);
+OCSP_CERTID* get_ocsp_certid(SSL* tls);
 
 #endif

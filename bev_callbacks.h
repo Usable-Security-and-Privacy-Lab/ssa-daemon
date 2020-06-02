@@ -15,4 +15,8 @@ void common_bev_read_cb(struct bufferevent *bev, void *arg);
 void client_bev_event_cb(struct bufferevent *bev, short events, void *arg);
 void server_bev_event_cb(struct bufferevent *bev, short events, void *arg);
 
+void ocsp_responder_read_cb(struct bufferevent* bev, void* arg);
+void ocsp_responder_write_cb(struct bufferevent* bev, void* arg);
+void ocsp_responder_event_cb(struct bufferevent* bev, short events, void* arg);
+
 #endif
