@@ -1088,6 +1088,16 @@ void global_settings_free(global_settings* settings) {
             }
             free(server->ciphersuites);
         }
+
+        for (int i = 0; i < server->cert_cnt; i++) {
+            if (server->certificates[i] != NULL)
+                free(server->certificates[i]);
+        }
+
+        for (int i = 0; i < server->key_cnt; i++) {
+            if (server->private_keys[i] != NULL)
+                free(server->private_keys[i]);
+        }
         
         free(server);
     }
