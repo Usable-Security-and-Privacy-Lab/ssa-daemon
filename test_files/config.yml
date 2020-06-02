@@ -55,10 +55,16 @@ client:
   # Sessions older than the session timeout are not reused.  Value is in seconds.
   session-timeout: 300 # Default: 300 seconds
   
-  # Set the maximum number of certificates that can be traversed before certification fails.
+  # Set the maximum number of certificates that can be traversed before certification fails. 
   # To allow for unlimited certificates to be traversed, set the value to 0.
   cert-verification-depth: 100
   # Default: 100. This allows for the peer certificate, at most 100 intermediate CA certificates and a final trust anchor certificate.
+
+  # Enable certificate transparency verification. Servers that do not provide a valid SCT will not be connected with.
+  # Provides greater security by guarding against several types of certificate-based threats.
+  # See http://www.certificate-transparency.org/what-is-ct for more information.
+  verify-cert-transparency: enabled
+  # Default: enabled
 
   # FOR TESTING ONLY: uncomment this line if you want to test the https_server.
   # ca-path: test_files/certs/rootCA.pem
