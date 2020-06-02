@@ -18,8 +18,6 @@
 #define NO_CRL_RESPONDER_CHECKS  (1 << 3)
 
 
-
-
 enum connection_state {
 	CONN_ERROR = 0,
 	CLIENT_NEW,
@@ -32,12 +30,7 @@ enum connection_state {
 	DISCONNECTED
 };
 
-enum revocation_state {
-	CERT_R_POLLING = 0,
-	CERT_R_REVOKED,
-	CERT_R_UNKNOWN,
-	CERT_R_GOOD
-};
+
 
 typedef struct channel_st {
 	struct bufferevent* bev;
@@ -53,6 +46,8 @@ typedef struct daemon_context_st {
 	hmap_t* sock_map_port;
 	SSL_CTX* client_ctx;
 	SSL_CTX* server_ctx;
+
+	hmap_t* rev_status_map;
 } daemon_context;
 
 typedef struct rev_client_st {
@@ -66,7 +61,6 @@ typedef struct rev_client_st {
 } rev_client;
 
 typedef struct revocation_context_st {
-	enum revocation_state state; // Might not need this...
 	unsigned int num_rev_checks; /**< How many different types of revocation will be checked */
 	int crl_clients_left;
 
