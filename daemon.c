@@ -170,14 +170,13 @@ int run_daemon(int port, char* config_path) {
 #if LIBEVENT_VERSION_NUMBER >= 0x02010000
 	libevent_global_shutdown();
 #endif
-
-	daemon_context_free(daemon);
 	evconnlistener_free(listener); /* This also closes the socket */
 	event_free(nl_ev);
 	event_free(upgrade_ev);
 	event_free(sev_pipe);
 	event_free(sev_int);
 
+	daemon_context_free(daemon); //Free last
 	OPENSSL_cleanup();
 
     return EXIT_SUCCESS;
@@ -185,8 +184,7 @@ int run_daemon(int port, char* config_path) {
 
 	printf("An error occurred setting up the daemon: %s\n", strerror(errno));
 
-	if (daemon != NULL)
-		daemon_context_free(daemon);
+
 	if (listener != NULL)
 		evconnlistener_free(listener); /* This also closes the socket */
 	if (nl_ev != NULL)
@@ -198,6 +196,8 @@ int run_daemon(int port, char* config_path) {
 	if (sev_int != NULL)
 		event_free(sev_int);
 
+	if (daemon != NULL)
+		daemon_context_free(daemon);
 	return EXIT_FAILURE;
 }
 
@@ -887,12 +887,11 @@ void getsockopt_cb(daemon_context* daemon,
 		return;
 	}
 
-	clear_err_string(conn);
-
 	netlink_send_and_notify_kernel(daemon, id, data, len);
 	if (need_free == 1)
 		free(data);
 	
+	clear_err_string(conn);
 	return;
 }
 
