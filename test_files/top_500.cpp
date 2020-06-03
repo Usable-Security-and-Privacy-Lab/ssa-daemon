@@ -29,85 +29,24 @@ extern "C" { // To indicate that the code is C code when linking--important
 
 extern "C" {
 
-// These were taken from 5000best.com
-
-#define GOOGLE "www.google.com"
-#define FACEBOOK "facebook.com"
-#define YOUTUBE "youtube.com"
-#define YAHOO "yahoo.com"
-#define TWITTER "twitter.com"
-#define AMAZON "amazon.com"
-#define EBAY "ebay.com"
-#define CNN "cnn.com"
-#define LINKEDIN "linkedin.com"
-#define PINTEREST "pinterest.com"
-#define NYTIMES "nytimes.com"
-#define WIKIPEDIA "wikipedia.org"
-#define BING "bing.com"
-#define APPLE "apple.com"
-#define WEATHER "weather.com"
-#define MSN "www.msn.com"
-#define MICROSOFT "microsoft.com"
-#define WORDPRESS "wordpress.com"
-#define AOL "aol.com"
-#define TUMBLR "tumblr.com"
-
-#define HUFFPOST "huffingtonpost.com"
-#define LIVE "live.com"
-#define FLICKR "flickr.com"
-#define ETSY "etsy.com"
-#define PAYPAL "paypal.com"
-#define IMDB "imdb.com"
-#define BLOGSPOT "blogspot.com"
-#define ASK "ask.com"
-#define ABOUT "about.com"
-#define REDDIT "reddit.com"
-#define PANDORA "pandora.com"
-#define BBC "bbc.co.uk"
-#define NFL "nfl.com"
-#define WALMART "walmart.com"
-#define USATODAY "usatoday.com"
-#define FOXNEWS "foxnews.com"
-#define DROPBOX "dropbox.com"
-#define NEWEGG "newegg.com"
-#define CRAIGSLIST "craigslist.com"
-#define SWAGBUCKS "swagbucks.com"
-
-#define NBCNEWS "nbcnews.com"
-#define HULU "hulu.com"
-#define CNET "cnet.com"
-#define EHOW "ehow.com"
-#define COMO "como.com"
-#define DEVIANTART "deviantart.com"
-#define VIMEO "vimeo.com"
-#define ADOBE "adobe.com"
-#define WASHINGTONPOST "washingtonpost.com"
-#define TARGET "target.com"
-#define NBA "nba.com"
-#define BESTBUY "bestbuy.com"
-#define STUMBLEUPON "stumbleupon.com"
-#define GIZMODO "gizmodo.com"
-#define POLITICO "politico.com"
-#define STACKOVERFLOW "stackoverflow.com"
-#define WIRED "wired.com"
-#define SOUNDCLOUD "soundcloud.com"
-#define MEDIAFIRE "mediafire.com"
-#define HOOTSUITE "hootsuite.com"
-
-#define GODADDY "godaddy.com"
-#define NETFLIX "netflix.com"
-#define BLOGGER "blogger.com"
-#define INSTAGRAM "instagram.com"
-
-
 #define HTTPS_PORT "443"
 
 }
 
+#define RUN_TEST(test_label, hostname)                                      \
+    TEST_F(Top500WebsitesTest, test_label) {                                \
+                                                                            \
+        TEST_TIMEOUT_BEGIN                                                  \
+        std::string str = hostname;                                         \
+        result = run_http_client(str.c_str(), HTTPS_PORT, &resp, &resp_len);    \
+        EXPECT_EQ(result, (int) E_SUCCESS);                                 \
+                                                                            \
+        TEST_TIMEOUT_FAIL_END(TIMEOUT)                                      \
+    }                                                                   
+
 
 
 class Top500WebsitesTest : public testing::Test {
-
 public:
     char *resp;
     int resp_len;
@@ -122,644 +61,176 @@ public:
     virtual void TearDown() { }
 };
 
+// 150ish of the top websites
+
+RUN_TEST(Google, "www.google.com")
+RUN_TEST(Facebook, "facebook.com")
+RUN_TEST(Youtube, "youtube.com")
+RUN_TEST(Yahoo, "yahoo.com")
+RUN_TEST(Twitter, "twitter.com")
+RUN_TEST(Amazon, "amazon.com")
+RUN_TEST(Ebay, "ebay.com")
+RUN_TEST(CNN, "cnn.com")
+RUN_TEST(LinkedIn, "linkedin.com")
+RUN_TEST(Pinterest, "pinterest.com")
+RUN_TEST(NYTimes, "nytimes.com")
+RUN_TEST(Wikipedia, "wikipedia.org")
+RUN_TEST(Bing, "bing.com")
+RUN_TEST(Apple, "apple.com")
+RUN_TEST(Weather, "weather.com")
+RUN_TEST(MSN, "www.msn.com");
+RUN_TEST(Microsoft, "microsoft.com")
+RUN_TEST(Wordpress, "wordpress.com")
+RUN_TEST(AOL, "aol.com")
+RUN_TEST(Tumblr, "tumblr.com")
+RUN_TEST(HuffingtonPost, "huffingtonpost.com")
+RUN_TEST(Live, "live.com")
+RUN_TEST(Flickr, "flickr.com")
+RUN_TEST(Etsy, "etsy.com")
+RUN_TEST(Paypal, "paypal.com")
+RUN_TEST(IMDB, "imdb.com")
+RUN_TEST(Blogspot, "blogspot.com")
+RUN_TEST(Ask, "ask.com")
+RUN_TEST(About, "about.com")
+RUN_TEST(Reddit, "reddit.com")
+RUN_TEST(Pandora, "pandora.com")
+RUN_TEST(BBC, "bbc.co.uk")
+RUN_TEST(NFL, "nfl.com")
+RUN_TEST(Walmart, "walmart.com")
+RUN_TEST(USAToday, "usatoday.com")
+RUN_TEST(FoxNews, "foxnews.com")
+RUN_TEST(Dropbox, "dropbox.com")
+RUN_TEST(NewEgg, "newegg.com")
+RUN_TEST(Craigslist, "craigslist.com")
+RUN_TEST(SwagBucks, "swagbucks.com")
+RUN_TEST(NBCNews, "www.nbcnews.com")
+RUN_TEST(Hulu, "hulu.com")
+RUN_TEST(CNet, "cnet.com")
+RUN_TEST(eHow, "ehow.com")
+RUN_TEST(Como, "como.com")
+RUN_TEST(DeviantArt, "deviantart.com")
+RUN_TEST(Vimeo, "vimeo.com")
+RUN_TEST(Adobe, "adobe.com")
+RUN_TEST(WashingtonPost, "washingtonpost.com")
+RUN_TEST(Target, "target.com")
+RUN_TEST(NBA, "nba.com")
+RUN_TEST(BestBuy, "bestbuy.com")
+RUN_TEST(StumbleUpon, "stumbleupon.com")
+RUN_TEST(Gizmodo, "gizmodo.com")
+RUN_TEST(Politico, "politico.com")
+RUN_TEST(StackOverflow, "stackoverflow.com")
+RUN_TEST(Wired, "wired.com")
+RUN_TEST(SoundCloud, "soundcloud.com")
+RUN_TEST(MediaFire, "mediafire.com")
+RUN_TEST(HootSuite, "hootsuite.com")
+RUN_TEST(GoDaddy, "godaddy.com")
+RUN_TEST(Netflix, "netflix.com")
+RUN_TEST(Blogger, "blogger.com")
+RUN_TEST(Instagram, "instagram.com")
+RUN_TEST(IGN, "ign.com")
+RUN_TEST(AVG, "avg.com")
+RUN_TEST(Groupon, "groupon.com")
+RUN_TEST(CBSSports, "cbssports.com")
+RUN_TEST(Reuters, "reuters.com")
+RUN_TEST(TheFreeDictionary, "thefreedictionary.com")
+RUN_TEST(SalesForce, "salesforce.com")
+RUN_TEST(Southwest, "southwest.com")
+RUN_TEST(Woot, "woot.com")
+RUN_TEST(QQ, "qq.com")
+RUN_TEST(TaoBao, "world.taobao.com")
+RUN_TEST(TMall, "tmall.com")
+RUN_TEST(Sohu, "sohu.com")
+RUN_TEST(VK, "vk.com")
+RUN_TEST(Sina, "sina.com.cn")
+RUN_TEST(Weibo, "weibo.com")
+RUN_TEST(Twitch, "twitch.tv")
+RUN_TEST(WhatsApp, "whatsapp.com")
+RUN_TEST(AliPay, "www.alipay.com")
+RUN_TEST(Naver, "naver.com")
+RUN_TEST(AliexPress, "aliexpress.com")
+RUN_TEST(GitHub, "github.com")
+RUN_TEST(Office, "office.com")
+RUN_TEST(AmazonJapan, "amazon.co.jp")
+RUN_TEST(Fandom, "fandom.com")
+RUN_TEST(Imgur, "imgur.com")
+RUN_TEST(Quora, "quora.com")
+RUN_TEST(Roblox, "roblox.com")
+RUN_TEST(AmazonAWS, "aws.amazon.com")
+RUN_TEST(Chase, "chase.com")
+RUN_TEST(Spotify, "spotify.com")
+RUN_TEST(ESPN, "espn.com")
+RUN_TEST(Discord, "discordapp.com")
+RUN_TEST(Medium, "medium.com")
+RUN_TEST(StackExchange, "stackexchange.com")
+RUN_TEST(NIH, "nih.gov")
+RUN_TEST(Indeed, "indeed.com")
+RUN_TEST(ResearchGate, "researchgate.net")
+RUN_TEST(Trello, "trello.com")
+RUN_TEST(W3Schools, "www.w3schools.com")
+RUN_TEST(TheGuardian, "theguardian.com")
+RUN_TEST(Alibaba, "alibaba.com")
+RUN_TEST(Shutterstock, "shutterstock.com")
+RUN_TEST(DuckDuckGo, "duckduckgo.com")
+RUN_TEST(Canva, "canva.com")
+RUN_TEST(Slack, "slack.com")
+RUN_TEST(DailyMotion, "dailymotion.com")
+RUN_TEST(BankOfAmerica, "www.bankofamerica.com")
+RUN_TEST(WellsFargo, "wellsfargo.com")
+RUN_TEST(SteamCommunity, "steamcommunity.com")
+RUN_TEST(SpeedTest, "www.speedtest.net")
+RUN_TEST(Yelp, "www.yelp.com")
+RUN_TEST(Gamepedia, "www.gamepedia.com")
+RUN_TEST(Softonic, "en.softonic.com")
+RUN_TEST(Vice, "vice.com")
+RUN_TEST(WikiHow, "wikihow.com")
+RUN_TEST(Scribd, "scribd.com")
+RUN_TEST(Messenger, "messenger.com")
+RUN_TEST(TripAdvisor, "tripadvisor.com")
+RUN_TEST(Mozilla, "mozilla.org")
+RUN_TEST(Archive, "archive.org")
+RUN_TEST(AirBNB, "airbnb.com")
+RUN_TEST(Gfycat, "gfycat.com")
+RUN_TEST(DailyMail, "dailymail.co.uk")
+RUN_TEST(Intuit, "intuit.com")
+RUN_TEST(Shopify, "shopify.com")
+RUN_TEST(HomeDepot, "homedepot.com")
+RUN_TEST(Patreon, "patreon.com")
+RUN_TEST(GoFundMe, "gofundme.com")
+RUN_TEST(USPS, "usps.com")
+RUN_TEST(Breitbart, "breitbart.com")
+RUN_TEST(HP, "hp.com")
+RUN_TEST(CapitalOne, "capitalone.com")
 
-// TODO: in the future, test the error strings as well
 
-TEST_F(Top500WebsitesTest, Google) {
 
-    TEST_TIMEOUT_BEGIN
 
-    result = run_http_client(GOOGLE, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
 
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
 
-TEST_F(Top500WebsitesTest, Facebook) {
 
-    TEST_TIMEOUT_BEGIN
 
-    result = run_http_client(FACEBOOK, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
 
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
 
-TEST_F(Top500WebsitesTest, Youtube) {
 
-    TEST_TIMEOUT_BEGIN
 
-    result = run_http_client(YOUTUBE, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
 
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
 
-TEST_F(Top500WebsitesTest, Yahoo) {
 
-    TEST_TIMEOUT_BEGIN
 
-    result = run_http_client(YAHOO, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
 
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
 
-TEST_F(Top500WebsitesTest, Twitter) {
 
-    TEST_TIMEOUT_BEGIN
 
-    result = run_http_client(TWITTER, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
 
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
 
-TEST_F(Top500WebsitesTest, Amazon) {
 
-    TEST_TIMEOUT_BEGIN
 
-    result = run_http_client(AMAZON, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
 
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
 
-TEST_F(Top500WebsitesTest, Ebay) {
 
-    TEST_TIMEOUT_BEGIN
 
-    result = run_http_client(EBAY, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
 
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
 
-TEST_F(Top500WebsitesTest, cnn) {
 
-    TEST_TIMEOUT_BEGIN
 
-    result = run_http_client(CNN, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
 
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, LinkedIn) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(LINKEDIN, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Pinterest) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(PINTEREST, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, NYTimes) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(NYTIMES, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Wikipedia) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(WIKIPEDIA, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Bing) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(BING, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Apple) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(APPLE, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Weather) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(WEATHER, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, msn) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(MSN, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Microsoft) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(MICROSOFT, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Wordpress) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(WORDPRESS, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, aol) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(AOL, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Tumblr) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(TUMBLR, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, HuffingtonPost) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(HUFFPOST, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Live) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(LIVE, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Flickr) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(FLICKR, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Etsy) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(ETSY, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, PayPal) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(PAYPAL, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Imdb) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(IMDB, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Blogspot) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(BLOGSPOT, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Ask) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(ASK, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, About) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(ABOUT, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Reddit) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(REDDIT, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Pandora) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(PANDORA, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, bbc) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(BBC, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, nfl) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(NFL, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Walmart) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(WALMART, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, USAToday) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(USATODAY, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, FoxNews) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(FOXNEWS, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Dropbox) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(DROPBOX, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, NewEgg) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(NEWEGG, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Craigslist) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(CRAIGSLIST, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Swagbucks) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(SWAGBUCKS, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, NBCNews) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(NBCNEWS, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Hulu) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(HULU, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, CNet) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(CNET, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, eHow) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(EHOW, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Como) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(COMO, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, DeviantArt) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(DEVIANTART, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Vimeo) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(VIMEO, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Adobe) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(ADOBE, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, WashingtonPost) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(WASHINGTONPOST, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Target) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(TARGET, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, nba) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(NBA, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, BestBuy) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(BESTBUY, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, StumbleUpon) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(STUMBLEUPON, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Gizmodo) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(GIZMODO, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Politico) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(POLITICO, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, StackOverflow) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(STACKOVERFLOW, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Wired) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(WIRED, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, SoundCloud) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(SOUNDCLOUD, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, MediaFire) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(MEDIAFIRE, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}TEST_F(Top500WebsitesTest, HootSuite) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(HOOTSUITE, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, GoDaddy) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(GODADDY, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Netflix) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(NETFLIX, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Blogger) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(BLOGGER, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
-
-TEST_F(Top500WebsitesTest, Instagram) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(INSTAGRAM, HTTPS_PORT, &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_SUCCESS);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
 
