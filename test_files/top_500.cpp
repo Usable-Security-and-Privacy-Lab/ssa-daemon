@@ -33,15 +33,15 @@ extern "C" {
 
 }
 
-#define RUN_TEST(test_label, hostname)                                      \
-    TEST_F(Top500WebsitesTest, test_label) {                                \
-                                                                            \
-        TEST_TIMEOUT_BEGIN                                                  \
-        std::string str = hostname;                                         \
+#define RUN_TEST(test_label, hostname)                                          \
+    TEST_F(Top500WebsitesTest, test_label) {                                    \
+                                                                                \
+        TEST_TIMEOUT_BEGIN                                                      \
+        std::string str = hostname;                                             \
         result = run_http_client(str.c_str(), HTTPS_PORT, &resp, &resp_len);    \
-        EXPECT_EQ(result, (int) E_SUCCESS);                                 \
-                                                                            \
-        TEST_TIMEOUT_FAIL_END(TIMEOUT)                                      \
+        EXPECT_EQ(result, (int) E_SUCCESS);                                     \
+                                                                                \
+        TEST_TIMEOUT_FAIL_END(TIMEOUT)                                          \
     }                                                                   
 
 
