@@ -72,3 +72,4 @@ ssa_daemon
 cmake-build-debug/*
 CMakeLists.txt
 test_files/badssl
+test_files/top500
