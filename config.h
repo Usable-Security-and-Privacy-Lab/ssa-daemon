@@ -44,6 +44,8 @@ typedef struct client_settings_st {
     int session_timeout;
     int max_cert_chain_depth;
 
+    int verify_cert_transparency;
+
 } client_settings;
 
 typedef struct server_settings_st {

@@ -29,6 +29,7 @@
 #define KEY_PATH        "key-path"
 #define SESSION_TIMEOUT "session-timeout"
 #define CERT_V_DEPTH    "cert-verification-depth"
+#define VERIFY_CT       "verify-cert-transparency"
 
 
 /* different values that we accept in place of just 'true' or 'false' */
@@ -220,6 +221,9 @@ int parse_next_client_setting(yaml_parser_t* parser, client_settings* client) {
 
     } else if (strcmp(label, CERT_V_DEPTH) == 0) {
         ret = parse_integer(parser, &client->max_cert_chain_depth);
+
+    } else if (strcmp(label, VERIFY_CT) == 0) {
+        ret = parse_boolean(parser, &client->verify_cert_transparency);
 
     } else {
         log_printf(LOG_ERROR, "Config: Undefined label %s\n", label);

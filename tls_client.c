@@ -110,6 +110,16 @@ SSL_CTX* client_ctx_init(client_settings* config) {
 	SSL_CTX_set_timeout(ctx, config->session_timeout);
 	SSL_CTX_set_verify_depth(ctx, config->max_cert_chain_depth);
 
+	if(config->verify_cert_transparency){
+		ret = SSL_CTX_enable_ct(ctx, SSL_CT_VALIDATION_STRICT);
+		if (ret != 1)
+			goto err;
+
+		ret = SSL_CTX_set_ctlog_list_file(ctx, "ct_log_list.cnf");
+		if(ret != 1)
+			goto err;
+	}
+
 	return ctx;
  err:
 	if (ERR_peek_error())
