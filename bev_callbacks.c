@@ -290,13 +290,13 @@ void handle_client_event_connected(sock_context* sock_ctx,
 			SSL_get_version(conn->tls));
 
 
-	if (sock_ctx->revocation.state & NO_REVOCATION_CHECKS) {
+	if (sock_ctx->revocation.checks & NO_REVOCATION_CHECKS) {
 		/* all done */
 		netlink_handshake_notify_kernel(daemon, id, NOTIFY_SUCCESS);
 		return;
 	}
 
-	if (!(sock_ctx->revocation.state & NO_OCSP_STAPLED_CHECKS)) {
+	if (!(sock_ctx->revocation.checks & NO_OCSP_STAPLED_CHECKS)) {
 		ret = check_stapled_response(conn->tls);
 		if (ret == V_OCSP_CERTSTATUS_GOOD) {
 			log_printf(LOG_INFO, "OCSP Stapled response: good\n");

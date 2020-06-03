@@ -298,13 +298,13 @@ int begin_responder_revocation_checks(sock_context* sock_ctx) {
 	char crl_url_cnt = 0;
 	int ret;
 		
-	if (!(sock_ctx->revocation.state & NO_OCSP_RESPONDER_CHECKS)) {
+	if (!(sock_ctx->revocation.checks & NO_OCSP_RESPONDER_CHECKS)) {
 		ocsp_urls = retrieve_ocsp_urls(cert, &ocsp_url_cnt);
 		if (ocsp_urls == NULL)
 			return -2;
 	}
 
-	if (!(sock_ctx->revocation.state & NO_CRL_RESPONDER_CHECKS)) {
+	if (!(sock_ctx->revocation.checks & NO_CRL_RESPONDER_CHECKS)) {
 		//parse crl urls
 	}
 
