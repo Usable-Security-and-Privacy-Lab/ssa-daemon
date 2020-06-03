@@ -41,4 +41,10 @@ int hashmap_del(hmap_t* map, unsigned long key);
 void* hashmap_get(hmap_t* map, unsigned long key);
 void hashmap_print(hmap_t* map);
 
+int hashmap_add_str(hmap_t* map, char* key, void* value);
+int hashmap_del_str(hmap_t* map, char* key);
+void* hashmap_get_str(hmap_t* map, char* key);
+void hashmap_print_str(hmap_t* map);
+
+
 #endif
