@@ -23,7 +23,7 @@ char** retrieve_ocsp_urls(X509* cert, int* num_urls);
 
 char** retrieve_crl_urls(X509* cert, int* num_urls);
 
-int parse_url(char* url, char** host_out, int* port_out, char** path_out);
+int parse_url(char* url, char** host_out, char** port_out, char** path_out);
 
 
 

@@ -160,24 +160,19 @@ char** retrieve_crl_urls(X509* cert, int* num_urls) {
  * of the outputs are desired).
  * @param url The given url to parse.
  * @param host_out An address to populate with the hostname of the url.
- * @param port_out An address to populate with the numeric port of the url.
+ * @param port_out An address to populate with the port of the url.
  * @param path_out An address to populate with the path of the url.
  * @returns 0 if the url could be successfully parsed, or -1 otherwise.
  */
-int parse_url(char* url, char** host_out, int* port_out, char** path_out) {
+int parse_url(char* url, char** host_out, char** port_out, char** path_out) {
 
 	char* host;
-	char* port_ptr;
+	char* port;
 	char* path;
 	int ret, use_ssl;
-	long port;
 
-	ret = OCSP_parse_url(url, &host, &port_ptr, &path, &use_ssl);
+	ret = OCSP_parse_url(url, &host, &port, &path, &use_ssl);
 	if (ret != 1)
-		return -1;
-
-	port = strtol(port_ptr, NULL, 10);
-	if (port >= INT_MAX || port < 0)
 		return -1;
 
 	if (host_out != NULL)
@@ -187,8 +182,8 @@ int parse_url(char* url, char** host_out, int* port_out, char** path_out) {
 	
 	if (port_out != NULL)
 		*port_out = port;
-
-	free(port_ptr);
+	else
+		free(port);
 
 
 	if (path_out != NULL)
