@@ -27,9 +27,8 @@ enum connection_state {
 	SERVER_LISTENING,
 	SERVER_CONNECTING,
 	SERVER_CONNECTED,
-	DISCONNECTED
+	DISCONNECTED,
 };
-
 
 
 typedef struct channel_st {
@@ -47,26 +46,26 @@ typedef struct daemon_context_st {
 	SSL_CTX* client_ctx;
 	SSL_CTX* server_ctx;
 
-	hmap_t* rev_status_map;
+	hmap_t* revocation_cache;
 } daemon_context;
 
-typedef struct rev_client_st {
+typedef struct responder_ctx_st {
 	struct bufferevent* bev;
 	char* url;
 
 	unsigned char* buffer; /**< A temporary buffer to store read data */
 	int buf_size;
 	int tot_read;
-	int buffer_is_body;
-} rev_client;
+	int reading_body;
+} responder_ctx;
 
 typedef struct revocation_context_st {
 	unsigned int num_rev_checks; /**< How many different types of revocation will be checked */
 	int crl_clients_left;
 
-	rev_client* ocsp_clients;
+	responder_ctx* ocsp_clients;
 	unsigned int ocsp_client_cnt;
-	rev_client* crl_clients;
+	responder_ctx* crl_clients;
 	unsigned int crl_client_cnt;
 
 	int checks; // bitmap; see defined options above
@@ -112,7 +111,7 @@ int sock_context_new(sock_context** sock, daemon_context* ctx, unsigned long id)
 void sock_context_free(sock_context* sock_ctx);
 
 void revocation_context_cleanup(revocation_context* ctx);
-void responder_cleanup(rev_client resp);
+void responder_cleanup(responder_ctx* resp);
 
 int connection_new(connection** conn);
 void connection_shutdown(sock_context* sock_ctx);
