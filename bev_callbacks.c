@@ -5,6 +5,7 @@
 #include <event2/buffer.h>
 #include <event2/bufferevent_ssl.h>
 #include <event2/event.h>
+#include <event2/dns.h>
 #include <openssl/err.h>
 #include <openssl/ocsp.h>
 
@@ -35,6 +36,8 @@ int launch_ocsp_checks(sock_context* sock_ctx, char** urls, int num_urls);
 int launch_crl_checks(sock_context* sock_ctx, char** urls, int num_urls);
 int launch_ocsp_client(sock_context* sock_ctx, char* url);
 
+
+void ocsp_dns_cb(int result, struct evutil_addrinfo* res, void* arg);
 
 responder_ctx* get_responder_ctx(sock_context* sock_ctx, struct bufferevent* bev);
 
@@ -456,7 +459,7 @@ void ocsp_responder_read_cb(struct bufferevent* bev, void* arg) {
 	
 	sock_context* sock_ctx = (sock_context*) arg;
 
-	revocation_context* rev_ctx = &sock_ctx->revocation;
+	revocation_ctx* rev_ctx = &sock_ctx->revocation;
 	daemon_context* daemon = sock_ctx->daemon;
 	unsigned long id = sock_ctx->id;
 
@@ -657,7 +660,7 @@ int begin_responder_revocation_checks(sock_context* sock_ctx) {
  */
 int launch_ocsp_checks(sock_context* sock_ctx, char** urls, int num_urls) {
 
-	revocation_context* rev = &sock_ctx->revocation;
+	revocation_ctx* rev = &sock_ctx->revocation;
 
 	rev->ocsp_clients = calloc(MAX_OCSP_RESPONDERS, sizeof(responder_ctx));
 	if (rev->ocsp_clients == NULL)
@@ -684,71 +687,115 @@ int launch_ocsp_checks(sock_context* sock_ctx, char** urls, int num_urls) {
  */
 int launch_ocsp_client(sock_context* sock_ctx, char* url) {
 
-	revocation_context* rev = &sock_ctx->revocation;
+	revocation_ctx* rev = &sock_ctx->revocation;
 	responder_ctx* ocsp_client = &rev->ocsp_clients[rev->ocsp_client_cnt];
-	struct bufferevent* bev = NULL;
 	char* hostname = NULL;
-	int port, ret;
+	char* port = NULL;
+	int ret;
 
-	struct timeval read_timeout = {
-		.tv_sec = OCSP_READ_TIMEOUT,
-		.tv_usec = 0,
-	};
-
-	int fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (fd == -1)
-		goto err;
-
-	ret = evutil_make_socket_nonblocking(fd);
-	if (ret != 0)
-		goto err;
-	
-	bev = bufferevent_socket_new(sock_ctx->daemon->ev_base, 
-			fd, BEV_OPT_CLOSE_ON_FREE);
-	if (bev == NULL)
-		goto err;
-
-	ret = bufferevent_set_timeouts(bev, &read_timeout, NULL);
-	if (ret != 0)
-		goto err;
-
-	bufferevent_setcb(bev, ocsp_responder_read_cb, NULL, 
-			ocsp_responder_event_cb, (void*) sock_ctx);
-
-	// TODO: add support for IPv6 OCSP responders in future
 	ret = parse_url(url, &hostname, &port, NULL);
 	if (ret != 0)
 		goto err;
 
-	// TODO: at some point we'll use an evdns_base to make the DNS async
-	ret = bufferevent_socket_connect_hostname(bev, 
-			NULL, AF_INET, hostname, (int) port);
-	if (ret != 0)
+	struct addrinfo hints = {0};
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_protocol = IPPROTO_TCP;
+	hints.ai_flags = EVUTIL_AI_ADDRCONFIG;
+
+	// TODO: do evdns stuff here
+	if (evdns_getaddrinfo(sock_ctx->daemon->dns_base, 
+			hostname, port, &hints, ocsp_dns_cb, (void*) ocsp_client) == NULL)
 		goto err;
 
 	ocsp_client->buffer = (unsigned char*) calloc(1, MAX_HEADER_SIZE + 1);
 	if (ocsp_client->buffer == NULL) 
 		goto err;
 
+	ocsp_client->sock_ctx = sock_ctx;
 	ocsp_client->buf_size = MAX_HEADER_SIZE;
-	ocsp_client->bev = bev;
 	ocsp_client->url = url;
 		
 	rev->num_rev_checks++;
 	rev->ocsp_client_cnt++;
 
 	free(hostname);
+	free(port);
 	return 0;
  err:
 	if (hostname != NULL)
 		free(hostname);
+	if (ocsp_client->buffer != NULL)
+		free(ocsp_client->buffer);
+	if (port != NULL)
+		free(port);
 
-	if (bev != NULL)
-		bufferevent_free(bev);
-	else if (fd != -1)
-		close(fd);
-	
 	return -1;
+}
+
+void ocsp_dns_cb(int result, struct evutil_addrinfo* res, void* arg) {
+
+	responder_ctx* resp_ctx = (responder_ctx*) arg;
+	sock_context* sock_ctx = resp_ctx->sock_ctx;
+	struct evutil_addrinfo* curr;
+	struct bufferevent* bev;
+	int ret;
+
+	struct timeval read_timeout = {
+		.tv_sec = OCSP_READ_TIMEOUT,
+		.tv_usec = 0,
+	};
+
+	for (curr = res; curr != NULL; curr = curr->ai_next) {
+		int fd = socket(curr->ai_family, curr->ai_socktype, curr->ai_protocol);
+		if (fd == -1)
+			continue;
+
+		ret = evutil_make_socket_nonblocking(fd);
+		if (ret != 0) {
+			close(fd);
+			continue;
+		}
+		
+		bev = bufferevent_socket_new(sock_ctx->daemon->ev_base, 
+				fd, BEV_OPT_CLOSE_ON_FREE);
+		if (bev == NULL) {
+			close(fd);
+			continue;
+		}
+
+		ret = bufferevent_set_timeouts(bev, &read_timeout, NULL);
+		if (ret != 0) {
+			bufferevent_free(bev);
+			continue;
+		}
+
+		bufferevent_setcb(bev, ocsp_responder_read_cb, NULL, 
+				ocsp_responder_event_cb, (void*) sock_ctx);
+
+		ret = bufferevent_socket_connect(bev, curr->ai_addr, curr->ai_addrlen);
+		if (ret != 0) {
+			bufferevent_free(bev);
+			continue;
+		}
+
+		// Success!
+		resp_ctx->bev = bev;
+		evutil_freeaddrinfo(res);
+		return;
+	}
+
+	if (res != NULL)
+		evutil_freeaddrinfo(res);
+
+	responder_cleanup(resp_ctx);
+
+	if (sock_ctx->revocation.num_rev_checks-- == 0) {
+		set_err_string(sock_ctx->conn, "TLS handshake failure: "
+				"the certificate's revocation status could not be determined");
+
+		fail_revocation_checks(sock_ctx);
+	}
 }
 
 
@@ -766,7 +813,7 @@ void fail_revocation_checks(sock_context* sock_ctx) {
 
 
 /*******************************************************************************
- *              HELPER FUNCTIONS FOR HTTP CONNECTION
+ *              HELPER FUNCTIONS FOR OCSP HTTP CONNECTION
  ******************************************************************************/
 
 
@@ -984,7 +1031,7 @@ int launch_crl_checks(sock_context* sock_ctx, char** urls, int num_urls) {
 		//char* url = crl_urls[i];
 
 		//set up bufferevent here (with timeout),
-		//pass in callbacks (with revocation_context* as the (void*) arg)
+		//pass in callbacks (with revocation_ctx* as the (void*) arg)
 		//start the bufferevent's connection
 	}
 
