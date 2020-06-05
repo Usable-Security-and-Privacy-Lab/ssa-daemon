@@ -3,21 +3,21 @@
 
 #include <unistd.h> //added to use the `access()` function call.
 
-#include <openssl/ssl.h>
+
 #include <event2/bufferevent.h>
 #include <event2/bufferevent_ssl.h>
 #include <event2/event.h>
-
 #include <openssl/err.h>
+#include <openssl/ocsp.h>
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 
+#include "bev_callbacks.h"
 #include "config.h"
 #include "log.h"
 #include "tls_client.h"
 #include "tls_common.h"
 #include "daemon_structs.h"
-#include "bev_callbacks.h"
 
 
 #define DEFAULT_CIPHER_LIST "ECDHE-ECDSA-AES256-GCM-SHA384:"  \
@@ -32,6 +32,7 @@
 							 "TLS_CHACHA20_POLY1305_SHA256:" \
 							 "TLS_AES_128_CCM_SHA256:"       \
 							 "TLS_AES_128_CCM_8_SHA256"
+
 
 
 
@@ -98,6 +99,11 @@ SSL_CTX* client_ctx_init(client_settings* config) {
 	if (ret != 1)
 		goto err;
 
+    /* TODO: if (!config->no_ocsp_stapling) */
+	SSL_CTX_set_tlsext_status_type(ctx, TLSEXT_STATUSTYPE_ocsp);
+
+
+
 	SSL_CTX_set_timeout(ctx, config->session_timeout);
 
 	return ctx;
@@ -147,6 +153,8 @@ SSL_CTX* client_ctx_init_default() {
 	ret = load_certificate_authority(ctx, NULL);
 	if (ret != 1)
 		goto err;
+
+	SSL_CTX_set_tlsext_status_type(ctx, TLSEXT_STATUSTYPE_ocsp);
 
 	return ctx;
  err:

@@ -29,6 +29,7 @@
 #define KEY_PATH        "key-path"
 #define SESSION_TIMEOUT "session-timeout"
 #define CERT_V_DEPTH    "cert-verification-depth"
+#define VERIFY_CT       "verify-cert-transparency"
 
 
 /* different values that we accept in place of just 'true' or 'false' */
@@ -221,6 +222,9 @@ int parse_next_client_setting(yaml_parser_t* parser, client_settings* client) {
     } else if (strcmp(label, CERT_V_DEPTH) == 0) {
         ret = parse_integer(parser, &client->max_cert_chain_depth);
 
+    } else if (strcmp(label, VERIFY_CT) == 0) {
+        ret = parse_boolean(parser, &client->verify_cert_transparency);
+
     } else {
         log_printf(LOG_ERROR, "Config: Undefined label %s\n", label);
         ret = -1;
@@ -291,23 +295,23 @@ int parse_next_server_setting(yaml_parser_t* parser, server_settings* server) {
         ret = parse_integer(parser, &server->session_timeout);
     
     } else if (strcmp(label, CERT_PATH) == 0) {
-        if (server->key_cnt >= MAX_CERTKEY_PAIRS) {
-            log_printf(LOG_ERROR, "Config: Maximum keys (%i) exceeded\n", 
-                    MAX_CERTKEY_PAIRS);
-            ret = -1;
-        } else {
-            ret = parse_string(parser, &server->certificates[server->cert_cnt]);
-            server->key_cnt++;
-        }
-
-    } else if (strcmp(label, KEY_PATH) == 0) {
         if (server->cert_cnt >= MAX_CERTKEY_PAIRS) {
             log_printf(LOG_ERROR, "Config: Maximum keys (%i) exceeded\n", 
                     MAX_CERTKEY_PAIRS);
             ret = -1;
         } else {
-            ret = parse_string(parser, &server->private_keys[server->key_cnt]);
+            ret = parse_string(parser, &server->certificates[server->cert_cnt]);
             server->cert_cnt++;
+        }
+
+    } else if (strcmp(label, KEY_PATH) == 0) {
+        if (server->key_cnt >= MAX_CERTKEY_PAIRS) {
+            log_printf(LOG_ERROR, "Config: Maximum keys (%i) exceeded\n", 
+                    MAX_CERTKEY_PAIRS);
+            ret = -1;
+        } else {
+            ret = parse_string(parser, &server->private_keys[server->key_cnt]);
+            server->key_cnt++;
         }
     
     } else {
@@ -1087,6 +1091,16 @@ void global_settings_free(global_settings* settings) {
                 free(server->ciphersuites[i]);
             }
             free(server->ciphersuites);
+        }
+
+        for (int i = 0; i < server->cert_cnt; i++) {
+            if (server->certificates[i] != NULL)
+                free(server->certificates[i]);
+        }
+
+        for (int i = 0; i < server->key_cnt; i++) {
+            if (server->private_keys[i] != NULL)
+                free(server->private_keys[i]);
         }
         
         free(server);

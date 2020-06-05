@@ -170,14 +170,13 @@ int run_daemon(int port, char* config_path) {
 #if LIBEVENT_VERSION_NUMBER >= 0x02010000
 	libevent_global_shutdown();
 #endif
-
-	daemon_context_free(daemon);
 	evconnlistener_free(listener); /* This also closes the socket */
 	event_free(nl_ev);
 	event_free(upgrade_ev);
 	event_free(sev_pipe);
 	event_free(sev_int);
 
+	daemon_context_free(daemon); //Free last
 	OPENSSL_cleanup();
 
     return EXIT_SUCCESS;
@@ -185,8 +184,7 @@ int run_daemon(int port, char* config_path) {
 
 	printf("An error occurred setting up the daemon: %s\n", strerror(errno));
 
-	if (daemon != NULL)
-		daemon_context_free(daemon);
+
 	if (listener != NULL)
 		evconnlistener_free(listener); /* This also closes the socket */
 	if (nl_ev != NULL)
@@ -198,6 +196,8 @@ int run_daemon(int port, char* config_path) {
 	if (sev_int != NULL)
 		event_free(sev_int);
 
+	if (daemon != NULL)
+		daemon_context_free(daemon);
 	return EXIT_FAILURE;
 }
 
@@ -384,8 +384,6 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	sock_context* sock_ctx;
 	int port, ret;
 	
-	log_printf(LOG_INFO, "Received internal part of client connection\n");
-
 	port = get_port(address);
 	sock_ctx = (sock_context*)hashmap_get(daemon->sock_map_port, port);
 	if (sock_ctx == NULL) {
@@ -887,12 +885,11 @@ void getsockopt_cb(daemon_context* daemon,
 		return;
 	}
 
-	clear_err_string(conn);
-
 	netlink_send_and_notify_kernel(daemon, id, data, len);
 	if (need_free == 1)
 		free(data);
 	
+	clear_err_string(conn);
 	return;
 }
 
@@ -984,7 +981,7 @@ void connect_cb(daemon_context* daemon, unsigned long id,
 
 	sock_context* sock_ctx;
 	connection* conn;
-	int response = 0, port, ret;
+	int response = 0, ret;
 
 	sock_ctx = (sock_context*)hashmap_get(daemon->sock_map, id);
 	if (sock_ctx == NULL) {
@@ -1030,10 +1027,7 @@ void connect_cb(daemon_context* daemon, unsigned long id,
 		goto err;
 	}
 
-	port = get_port(int_addr);
-	log_printf(LOG_INFO, "Placing sock_ctx for port %d\n", port);
-
-	hashmap_add(daemon->sock_map_port, port, sock_ctx);
+	hashmap_add(daemon->sock_map_port, get_port(int_addr), sock_ctx);
 	conn->state = CLIENT_CONNECTING;
 
 	if (!blocking) {

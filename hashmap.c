@@ -26,12 +26,17 @@
  */
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "hashmap.h"
 
 typedef struct hnode {
 	struct hnode* next;
-	unsigned long key;
+	union {
+		unsigned long k_long;
+		char* k_str;
+		void* k_ptr;
+	} key;
 	void* value;
 } hnode_t;
 
@@ -89,25 +94,28 @@ int hashmap_add(hmap_t* map, unsigned long key, void* value) {
 	hnode_t* cur;
 	hnode_t* next;
 	hnode_t* new_node = (hnode_t*)malloc(sizeof(hnode_t));
-	new_node->key = key;
+
+	new_node->key.k_long = key;
 	new_node->value = value;
 	new_node->next = NULL;
 	
 	index = hash(map, key);
+
 	cur = map->buckets[index];
-	next = cur;
 	if (cur == NULL) {
 		map->buckets[index] = new_node;
 		map->item_count++;
 		return 0;
 	}
 
+	next = cur;
 	do {
 		cur = next;
-		if (cur->key == key) {
-			/* Duplicate entry */
-			return 1;
+		if (cur->key.k_long == key) {
+			free(new_node);
+			return 1; /* Duplicate entry */
 		}
+		
 		next = cur->next;
 	} while (next != NULL);
 
@@ -126,14 +134,15 @@ int hashmap_del(hmap_t* map, unsigned long key) {
 		/* Not found */
 		return 1;
 	}
-	if (cur->key == key) {
+
+	if (cur->key.k_long == key) {
 		map->buckets[index] = cur->next;
 		free(cur);
 		map->item_count--;
 		return 0;
 	}
 	while (cur->next != NULL) {
-		if (cur->next->key == key) {
+		if (cur->next->key.k_long == key) {
 			tmp = cur->next;
 			cur->next = cur->next->next;
 			free(tmp);
@@ -142,8 +151,7 @@ int hashmap_del(hmap_t* map, unsigned long key) {
 		}
 		cur = cur->next;
 	}
-	/* Not found */
-	return 1;
+	return 1; /* Not found */
 }
 
 void* hashmap_get(hmap_t* map, unsigned long key) {
@@ -155,15 +163,14 @@ void* hashmap_get(hmap_t* map, unsigned long key) {
 		/* Not found */
 		return NULL;
 	}
-	if (cur->key == key) {
-		return cur->value;
-	}
-	while (cur->next != NULL) {
-		if (cur->next->key == key) {
-			return cur->next->value;
-		}
+
+	do {
+		if (cur->key.k_long == key)
+			return cur->value;
+		
 		cur = cur->next;
-	}
+	} while (cur != NULL);
+	
 	return NULL;
 }
 
@@ -176,9 +183,152 @@ void hashmap_print(hmap_t* map) {
 		cur = map->buckets[i];
 		while (cur) {
 			printf("\t\tNode [key = %lu, value=%p]\n",
-				cur->key, cur->value);
+				cur->key.k_long, cur->value);
 			cur = cur->next;
 		}
 	}
 	return;
 }
+
+/*******************************************************************************
+ *                   ADDED FUNCTIONS FOR CACHING
+ ******************************************************************************/
+
+int hash_str(hmap_t* map, char* key) {
+
+	unsigned long hash = 5381;
+    int character;
+
+    while ((character = *key++) != 0)
+        hash = ((hash << 5) + hash) + character; /* hash * 33 + c */
+
+    return hash % map->num_buckets;	
+
+}
+
+int hashmap_add_str(hmap_t* map, char* key, void* value) {
+	int index;
+	hnode_t* cur;
+	hnode_t* next;
+	hnode_t* new_node = (hnode_t*)malloc(sizeof(hnode_t));
+
+	new_node->key.k_str = key;
+	new_node->value = value;
+	new_node->next = NULL;
+	
+	index = hash_str(map, key);
+
+	cur = map->buckets[index];
+	if (cur == NULL) {
+		map->buckets[index] = new_node;
+		map->item_count++;
+		return 0;
+	}
+
+	next = cur;
+	do {
+		cur = next;
+		if (strcmp(cur->key.k_str, key) == 0) {
+			free(new_node);
+			return 1; /* Duplicate entry */
+		}
+		
+		next = cur->next;
+	} while (next != NULL);
+
+	cur->next = new_node;
+	map->item_count++;
+	return 0;
+}
+
+int hashmap_del_str(hmap_t* map, char* key) {
+	int index;
+	hnode_t* cur;
+	hnode_t* tmp;
+	index = hash_str(map, key);
+	cur = map->buckets[index];
+	if (cur == NULL)
+		return 1; /* Not found */
+
+	if (strcmp(cur->key.k_str, key) == 0) {
+		map->buckets[index] = cur->next;
+		free(cur->key.k_str);
+		free(cur);
+		map->item_count--;
+		return 0;
+	}
+	while (cur->next != NULL) {
+		if (strcmp(cur->next->key.k_str, key) == 0) {
+			tmp = cur->next;
+			cur->next = cur->next->next;
+			free(tmp->key.k_str);
+			free(tmp);
+			map->item_count--;
+			return 0;
+		}
+		cur = cur->next;
+	}
+
+	return 1; /* Not found */
+}
+
+void* hashmap_get_str(hmap_t* map, char* key) {
+	int index;
+	hnode_t* cur;
+	index = hash_str(map, key);
+	cur = map->buckets[index];
+	if (cur == NULL) {
+		/* Not found */
+		return NULL;
+	}
+
+	do {
+		if (strcmp(cur->key.k_str, key) == 0)
+			return cur->value;
+		
+		cur = cur->next;
+	} while (cur != NULL);
+	
+	return NULL;
+}
+
+void hashmap_print_str(hmap_t* map) {
+	int i;
+	hnode_t* cur;
+	printf("Hash map contents:\n");
+	for (i = 0; i < map->num_buckets; i++) {
+		printf("\tBucket %d:\n", i);
+		cur = map->buckets[i];
+		while (cur) {
+			printf("\t\tNode [key = %s, value=%p]\n",
+				cur->key.k_str, cur->value);
+			cur = cur->next;
+		}
+	}
+	return;
+}
+
+void hashmap_deep_str_free(hmap_t* map, void (*free_func)(void*)) {
+	hnode_t* cur = NULL;
+	hnode_t* tmp = NULL;
+	int i;
+	if (map == NULL) 
+		return;
+	
+	for (i = 0; i < map->num_buckets; i++) {
+		cur = map->buckets[i];
+		while (cur != NULL) {
+			tmp = cur->next;
+			if (free_func != NULL) {
+				free_func(cur->value);
+			}
+			free(cur->key.k_str);
+			free(cur);
+			cur = tmp;
+		}
+	}
+	free(map->buckets);
+	free(map);
+	return;
+}
+

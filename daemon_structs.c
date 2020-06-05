@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include <event2/bufferevent.h>
+#include <event2/dns.h>
 #include <event2/listener.h>
 #include <event2/bufferevent_ssl.h>
 #include <openssl/err.h>
@@ -18,6 +19,7 @@
 
 
 #define HASHMAP_NUM_BUCKETS	100
+#define CACHE_NUM_BUCKETS 20
 
 
 
@@ -56,12 +58,20 @@ daemon_context* daemon_context_new(char* config_path, int port) {
 	if (event_base_priority_init(daemon->ev_base, 3) != 0)
 		goto err;
 
+	daemon->dns_base = evdns_base_new(daemon->ev_base, 1);
+	if (daemon->dns_base == NULL)
+		goto err;
+
 	daemon->sock_map = hashmap_create(HASHMAP_NUM_BUCKETS);
 	if (daemon->sock_map == NULL)
 		goto err;
 
 	daemon->sock_map_port = hashmap_create(HASHMAP_NUM_BUCKETS);
 	if (daemon->sock_map_port == NULL)
+		goto err;
+
+	daemon->revocation_cache = hashmap_create(HASHMAP_NUM_BUCKETS);
+	if (daemon->revocation_cache == NULL)
 		goto err;
 
 	ret = parse_config(config_path, &config_settings);
@@ -88,12 +98,14 @@ daemon_context* daemon_context_new(char* config_path, int port) {
 	if (daemon->netlink_sock == NULL)
 		goto err;
 	
+	
 	int nl_fd = nl_socket_get_fd(daemon->netlink_sock);
 	if (evutil_make_socket_nonblocking(nl_fd) != 0)
 		goto err;
 
 	if (config_settings != NULL)
 		global_settings_free(config_settings);
+
 	return daemon;
  err:
 	if (daemon != NULL)
@@ -101,8 +113,8 @@ daemon_context* daemon_context_new(char* config_path, int port) {
 	if (config_settings != NULL)
 		global_settings_free(config_settings);
 
-
-	log_printf(LOG_ERROR, "Error creating daemon: %s\n", strerror(errno));
+	if (errno)
+		log_printf(LOG_ERROR, "Error creating daemon: %s\n", strerror(errno));
 	return NULL;
 }
 
@@ -116,6 +128,12 @@ void daemon_context_free(daemon_context* daemon) {
 	
 	if (daemon == NULL)
 		return;
+
+	if (daemon->dns_base != NULL)
+		evdns_base_free(daemon->dns_base, 1);
+
+	if (daemon->revocation_cache != NULL)
+		hashmap_deep_str_free(daemon->revocation_cache, (void (*)(void*))OCSP_BASICRESP_free);
 
 	if (daemon->client_ctx != NULL)
 		SSL_CTX_free(daemon->client_ctx);
@@ -179,12 +197,52 @@ void sock_context_free(sock_context* sock_ctx) {
 	} else if (sock_ctx->fd != -1) { 
 		EVUTIL_CLOSESOCKET(sock_ctx->fd);
 	}
+
+	revocation_context_cleanup(&sock_ctx->revocation);
 	
 	if (sock_ctx->conn != NULL)
 		connection_free(sock_ctx->conn);
 	free(sock_ctx);
 
 	return;
+}
+
+
+void revocation_context_cleanup(revocation_ctx* ctx) {
+
+	if (ctx->crl_clients != NULL) {
+		for (int i = 0; i < ctx->crl_client_cnt; i++) {
+			responder_cleanup(&ctx->crl_clients[i]);
+		}
+		free(ctx->crl_clients);
+		ctx->crl_clients = NULL;
+	}
+
+	if (ctx->ocsp_clients != NULL) {
+		for (int i = 0; i < ctx->ocsp_client_cnt; i++) {
+			responder_cleanup(&ctx->ocsp_clients[i]);
+		}
+		free(ctx->ocsp_clients);
+		ctx->ocsp_clients = NULL;
+	}
+}
+
+void responder_cleanup(responder_ctx* resp) {
+
+	if (resp->bev != NULL) {
+		bufferevent_free(resp->bev);
+		resp->bev = NULL;
+	}
+
+	if (resp->buffer != NULL) {
+		free(resp->buffer);
+		resp->buffer = NULL;
+	}
+
+	if (resp->url != NULL) {
+		free(resp->url);
+		resp->url = NULL;
+	}
 }
 
 
@@ -389,7 +447,6 @@ void set_verification_err_string(connection* conn, unsigned long openssl_err) {
 	const char* err_description;
 	long cert_err = SSL_get_verify_result(conn->tls);
 	
-	clear_err_string(conn);
 
 	if (cert_err != X509_V_OK) {
 		err_description = X509_verify_cert_error_string(cert_err);

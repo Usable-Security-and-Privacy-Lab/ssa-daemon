@@ -115,7 +115,8 @@ struct nl_sock* netlink_connect(daemon_context* ctx) {
 	}
 
 	if ((family = genl_ctrl_resolve(netlink_sock, "SSA")) < 0) {
-		log_printf(LOG_ERROR, "Failed to resolve SSA family identifier\n");
+		log_printf(LOG_ERROR, "Failed to resolve SSA family identifier--"
+				"make sure that the SSA kernel module is properly loaded\n");
 		return NULL;
 	}
 	ctx->netlink_family = family;

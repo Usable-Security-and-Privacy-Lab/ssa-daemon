@@ -1,0 +1,8 @@
+client:
+  CA-path: test_files/certs/rootCA.pem
+
+
+server:
+  CA-path: test_files/certs/rootCA.pem
+  cert-path: test_files/certs/server_chain.pem
+  key-path: test_files/certs/server_key.pem

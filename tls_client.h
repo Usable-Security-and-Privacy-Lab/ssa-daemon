@@ -23,15 +23,21 @@
 #ifndef TLS_CLIENT_H
 #define TLS_CLIENT_H
 
+#include <openssl/ocsp.h>
+
 #include "config.h"
 #include "daemon_structs.h"
 
 
+
 #define EXT_CONN_TIMEOUT 15 /* seconds */
+
+
 
 SSL_CTX* client_ctx_init(client_settings* config);
 
 int client_SSL_new(connection* conn, daemon_context* daemon);
 int client_connection_setup(sock_context* sock_ctx);
+
 
 #endif
