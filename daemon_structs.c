@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include <event2/bufferevent.h>
+#include <event2/dns.h>
 #include <event2/listener.h>
 #include <event2/bufferevent_ssl.h>
 #include <openssl/err.h>
@@ -18,6 +19,7 @@
 
 
 #define HASHMAP_NUM_BUCKETS	100
+#define CACHE_NUM_BUCKETS 20
 
 
 
@@ -56,12 +58,20 @@ daemon_context* daemon_context_new(char* config_path, int port) {
 	if (event_base_priority_init(daemon->ev_base, 3) != 0)
 		goto err;
 
+	daemon->dns_base = evdns_base_new(daemon->ev_base, 1);
+	if (daemon->dns_base == NULL)
+		goto err;
+
 	daemon->sock_map = hashmap_create(HASHMAP_NUM_BUCKETS);
 	if (daemon->sock_map == NULL)
 		goto err;
 
 	daemon->sock_map_port = hashmap_create(HASHMAP_NUM_BUCKETS);
 	if (daemon->sock_map_port == NULL)
+		goto err;
+
+	daemon->revocation_cache = hashmap_create(HASHMAP_NUM_BUCKETS);
+	if (daemon->revocation_cache == NULL)
 		goto err;
 
 	ret = parse_config(config_path, &config_settings);
@@ -95,6 +105,7 @@ daemon_context* daemon_context_new(char* config_path, int port) {
 
 	if (config_settings != NULL)
 		global_settings_free(config_settings);
+
 	return daemon;
  err:
 	if (daemon != NULL)
@@ -117,6 +128,12 @@ void daemon_context_free(daemon_context* daemon) {
 	
 	if (daemon == NULL)
 		return;
+
+	if (daemon->dns_base != NULL)
+		evdns_base_free(daemon->dns_base, 1);
+
+	if (daemon->revocation_cache != NULL)
+		hashmap_deep_str_free(daemon->revocation_cache, (void (*)(void*))OCSP_BASICRESP_free);
 
 	if (daemon->client_ctx != NULL)
 		SSL_CTX_free(daemon->client_ctx);
@@ -191,11 +208,11 @@ void sock_context_free(sock_context* sock_ctx) {
 }
 
 
-void revocation_context_cleanup(revocation_context* ctx) {
+void revocation_context_cleanup(revocation_ctx* ctx) {
 
 	if (ctx->crl_clients != NULL) {
 		for (int i = 0; i < ctx->crl_client_cnt; i++) {
-			responder_cleanup(ctx->crl_clients[i]);
+			responder_cleanup(&ctx->crl_clients[i]);
 		}
 		free(ctx->crl_clients);
 		ctx->crl_clients = NULL;
@@ -203,28 +220,28 @@ void revocation_context_cleanup(revocation_context* ctx) {
 
 	if (ctx->ocsp_clients != NULL) {
 		for (int i = 0; i < ctx->ocsp_client_cnt; i++) {
-			responder_cleanup(ctx->ocsp_clients[i]);
+			responder_cleanup(&ctx->ocsp_clients[i]);
 		}
 		free(ctx->ocsp_clients);
 		ctx->ocsp_clients = NULL;
 	}
 }
 
-void responder_cleanup(rev_client resp) {
+void responder_cleanup(responder_ctx* resp) {
 
-	if (resp.bev != NULL) {
-		bufferevent_free(resp.bev);
-		resp.bev = NULL;
+	if (resp->bev != NULL) {
+		bufferevent_free(resp->bev);
+		resp->bev = NULL;
 	}
 
-	if (resp.buffer != NULL) {
-		free(resp.buffer);
-		resp.buffer = NULL;
+	if (resp->buffer != NULL) {
+		free(resp->buffer);
+		resp->buffer = NULL;
 	}
 
-	if (resp.url != NULL) {
-		free(resp.url);
-		resp.url = NULL;
+	if (resp->url != NULL) {
+		free(resp->url);
+		resp->url = NULL;
 	}
 }
 

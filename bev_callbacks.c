@@ -1,8 +1,11 @@
+#include <sys/socket.h>
 #include <limits.h>
+#include <unistd.h>
 
 #include <event2/buffer.h>
 #include <event2/bufferevent_ssl.h>
 #include <event2/event.h>
+#include <event2/dns.h>
 #include <openssl/err.h>
 #include <openssl/ocsp.h>
 
@@ -10,7 +13,12 @@
 #include "daemon_structs.h"
 #include "log.h"
 #include "netlink.h"
-#include "tls_client.h"
+#include "revocation.h"
+
+#define MAX_HEADER_SIZE 8192
+
+#define MAX_OCSP_RESPONDERS 5
+#define OCSP_READ_TIMEOUT 8
 
 
 
@@ -21,15 +29,30 @@ void handle_event_error(connection* conn,
 		int error, channel* startpoint, channel* endpoint);
 void handle_event_eof(connection* conn, channel* startpoint, channel* endpoint);
 
+// Revocation-specific helper functions
+
+int begin_responder_revocation_checks(sock_context* sock_ctx);
+int launch_ocsp_checks(sock_context* sock_ctx, char** urls, int num_urls);
+int launch_crl_checks(sock_context* sock_ctx, char** urls, int num_urls);
+int launch_ocsp_client(sock_context* sock_ctx, char* url);
+
+
+void ocsp_dns_cb(int result, struct evutil_addrinfo* res, void* arg);
+
+responder_ctx* get_responder_ctx(sock_context* sock_ctx, struct bufferevent* bev);
+
 OCSP_REQUEST* create_ocsp_request(SSL* tls);
 int form_http_request(unsigned char **http_req, 
         OCSP_REQUEST *ocsp_req, const char *host, const char *path);
 int send_ocsp_request(struct bufferevent* bev, char* url, OCSP_REQUEST* req);
 
-rev_client* get_rev_client(sock_context* sock_ctx, struct bufferevent* bev);
-int get_http_body_len(char* response);
 int is_bad_http_response(char* response);
-int start_reading_body(rev_client* resp);
+int get_http_body_len(char* response);
+int start_reading_body(responder_ctx* resp_ctx);
+int done_reading_body(responder_ctx* resp_ctx);
+
+void fail_revocation_checks(sock_context* sock_ctx);
+
 
 
 
@@ -290,14 +313,29 @@ void handle_client_event_connected(sock_context* sock_ctx,
 			SSL_get_version(conn->tls));
 
 
-	if (sock_ctx->revocation.state & NO_REVOCATION_CHECKS) {
-		/* all done */
+
+	if (sock_ctx->revocation.checks & NO_REVOCATION_CHECKS) {
 		netlink_handshake_notify_kernel(daemon, id, NOTIFY_SUCCESS);
 		return;
 	}
 
-	if (!(sock_ctx->revocation.state & NO_OCSP_STAPLED_CHECKS)) {
-		ret = check_stapled_response(conn->tls);
+	ret = check_cached_response(sock_ctx);
+	if (ret == V_OCSP_CERTSTATUS_GOOD) {
+		log_printf(LOG_INFO, "OCSP cached response: good\n");
+		netlink_handshake_notify_kernel(daemon, id, NOTIFY_SUCCESS);
+		return;
+
+	} else if (ret == V_OCSP_CERTSTATUS_REVOKED) {
+		set_err_string(conn, "TLS handshake error: "
+				"certificate revoked (cached OCSP response)");
+		goto err;
+
+	} else {
+		log_printf(LOG_INFO, "No cached revocation response were found\n");
+	}
+
+	if (!(sock_ctx->revocation.checks & NO_OCSP_STAPLED_CHECKS)) {
+		ret = check_stapled_response(sock_ctx);
 		if (ret == V_OCSP_CERTSTATUS_GOOD) {
 			log_printf(LOG_INFO, "OCSP Stapled response: good\n");
 			netlink_handshake_notify_kernel(daemon, id, NOTIFY_SUCCESS);
@@ -309,7 +347,6 @@ void handle_client_event_connected(sock_context* sock_ctx,
 			goto err;
 		}
 	}
-	// certificate response is unknown; do other checks (if enabled)
 
 	ret = begin_responder_revocation_checks(sock_ctx);
 	if (ret != 0) {
@@ -320,11 +357,9 @@ void handle_client_event_connected(sock_context* sock_ctx,
 
 	return;
  err:
-	conn->state = CONN_ERROR;
 	conn->plain.closed = 1;
 	conn->secure.closed = 1;
-	SSL_shutdown(sock_ctx->conn->tls);
-	netlink_handshake_notify_kernel(daemon, id, -EPROTO);
+	fail_revocation_checks(sock_ctx);
 }
 
 /**
@@ -422,145 +457,111 @@ void handle_event_eof(connection* conn,
 
 void ocsp_responder_read_cb(struct bufferevent* bev, void* arg) {
 	
-	sock_context* sock_ctx = (sock_context*) arg;
+    responder_ctx* resp_ctx = (responder_ctx*) arg;
+	sock_context* sock_ctx = resp_ctx->sock_ctx;
+
+	revocation_ctx* rev_ctx = &sock_ctx->revocation;
 	daemon_context* daemon = sock_ctx->daemon;
-	OCSP_BASICRESP* basicresp = NULL;
-	rev_client* resp;
 	unsigned long id = sock_ctx->id;
+
+	int ret, status;
 	int num_read;
-	int ret;
 
-	log_printf(LOG_INFO, "read cb called!\n");
+	num_read = bufferevent_read(bev, &resp_ctx->buffer[resp_ctx->tot_read], 
+			resp_ctx->buf_size - resp_ctx->tot_read);
 
-	resp = get_rev_client(sock_ctx, bev);
-	if (resp == NULL)
-		goto err;
+	resp_ctx->tot_read += num_read;
 
-	num_read = bufferevent_read(bev, &resp->buffer[resp->tot_read], 
-			resp->buf_size - resp->tot_read);
+	if (!resp_ctx->reading_body) {
 
-	resp->tot_read += num_read;
-
-	if (!resp->buffer_is_body) {
-
-		if (strstr((char*)resp->buffer, "\r\n\r\n") != NULL) { 
-			ret = start_reading_body(resp);
+		if (strstr((char*)resp_ctx->buffer, "\r\n\r\n") != NULL) {
+			ret = start_reading_body(resp_ctx);
 			if (ret != 0)
 				goto err;
 
-		} else if (resp->tot_read == resp->buf_size) {
+		} else if (resp_ctx->tot_read == resp_ctx->buf_size) {
 			goto err;
 		}
 	}
 
-	if (resp->buffer_is_body && resp->tot_read == resp->buf_size) {
+	// A connection could be all done reading both header and body in one go
+	if (done_reading_body(resp_ctx)) {
+		status = do_ocsp_response_checks(resp_ctx->buffer, 
+				resp_ctx->tot_read, sock_ctx);
 
-		ret = get_ocsp_basicresp(resp->buffer, resp->tot_read, &basicresp);
-		if (ret != 0)
+		switch (status) {
+		case V_OCSP_CERTSTATUS_UNKNOWN:
 			goto err;
 
-		ret = check_ocsp_response(basicresp, sock_ctx->conn->tls);
-		if (ret == V_OCSP_CERTSTATUS_GOOD) {
-			log_printf(LOG_INFO, "its good!\n");
-
+		case V_OCSP_CERTSTATUS_GOOD:
+			revocation_context_cleanup(rev_ctx);
 			netlink_handshake_notify_kernel(daemon, id, NOTIFY_SUCCESS);
-		
-		} else if (ret == V_OCSP_CERTSTATUS_REVOKED) {
+			break;
+
+		case V_OCSP_CERTSTATUS_REVOKED:
 			set_err_string(sock_ctx->conn, "TLS handshake error: "
 					"certificate revoked (OCSP remote response)");
 			
-			sock_ctx->conn->state = CONN_ERROR;
-			SSL_shutdown(sock_ctx->conn->tls);
-			connection_shutdown(sock_ctx);
-
-			netlink_handshake_notify_kernel(daemon, id, -EPROTO);
-		} else {
-			OCSP_BASICRESP_free(basicresp);
-			goto err;
+			fail_revocation_checks(sock_ctx);
+			break;
 		}
-
-		revocation_context_cleanup(&sock_ctx->revocation);
-		OCSP_BASICRESP_free(basicresp);
 	}
 
 	return;
  err:
-	responder_cleanup(*resp);
+	responder_cleanup(resp_ctx);
 
-	sock_ctx->revocation.num_rev_checks -= 1;
-	if (sock_ctx->revocation.num_rev_checks == 0) {
-		log_printf(LOG_ERROR, "checks failed.\n");
+	if (rev_ctx->num_rev_checks-- == 0) {
+		set_err_string(sock_ctx->conn, "TLS handshake failure: "
+				"the certficate's revocation status could not be determined");
 
-		set_err_string(sock_ctx->conn, "TLS handshake error: "
-				"could not check peer certificate's revocation status");
-
-		revocation_context_cleanup(&sock_ctx->revocation);
-		connection_shutdown(sock_ctx);
-		sock_ctx->conn->state = CONN_ERROR;
-
-		netlink_handshake_notify_kernel(daemon, id, -EPROTO);
+		fail_revocation_checks(sock_ctx);
 	}
 }
 
 
-
-
 void ocsp_responder_event_cb(struct bufferevent* bev, short events, void* arg) {
 
-	sock_context* sock_ctx = (sock_context*) arg;
+    responder_ctx* resp_ctx = (responder_ctx*) arg;
+	sock_context* sock_ctx = resp_ctx->sock_ctx;
 	SSL* tls = sock_ctx->conn->tls;
+	OCSP_REQUEST* request = NULL;
 	int ret;
-
-	rev_client* resp = get_rev_client(sock_ctx, bev);
-	if (resp == NULL)
-		return;
 
 	if (events & BEV_EVENT_CONNECTED) {
 		OCSP_REQUEST* request = create_ocsp_request(tls);
-		if (request == NULL) {
-			log_printf(LOG_ERROR, "Create_ocsp_request falied\n");
+		if (request == NULL)
 			goto err;
-		}
 
-		ret = send_ocsp_request(bev, resp->url, request);
-		if (ret != 0) {
-			OCSP_REQUEST_free(request);
+		ret = send_ocsp_request(bev, resp_ctx->url, request);
+		if (ret != 0)
 			goto err;
-		}
-
-		OCSP_REQUEST_free(request);
 
 		ret = bufferevent_enable(bev, EV_READ | EV_WRITE);
-		if (ret != 0) {
-			log_printf(LOG_ERROR, "bufferevent_enable failed\n");
+		if (ret != 0)
 			goto err;
-		}
-	}
 
-	// Don't bother with BEV_EVENT_EOF--read_cb or timeout does everything
+		OCSP_REQUEST_free(request);
+	}
 
 	if (events & BEV_EVENT_TIMEOUT || events & BEV_EVENT_ERROR) {
 		log_printf(LOG_ERROR, "Bufferevent timed out/encountered error\n");
 		goto err;
 	}
-	
+
 	return;
  err:
-	log_printf(LOG_ERROR, "Error on ocsp bufferevent\n");
+	if (request != NULL)
+		OCSP_REQUEST_free(request);
+	
+	responder_cleanup(resp_ctx);
 
-	responder_cleanup(*resp);
-	sock_ctx->revocation.num_rev_checks -= 1;
-	if (sock_ctx->revocation.num_rev_checks == 0) {
+	if (sock_ctx->revocation.num_rev_checks-- == 0) {
 		set_err_string(sock_ctx->conn, "TLS handshake failure: "
-				"the certficate's revocation status could not be determined.");
+				"the certificate's revocation status could not be determined");
 
-		revocation_context_cleanup(&sock_ctx->revocation);
-		connection_shutdown(sock_ctx);
-		sock_ctx->conn->state = CONN_ERROR;
-		netlink_handshake_notify_kernel(sock_ctx->daemon,
-				sock_ctx->id, -EPROTO);
+		fail_revocation_checks(sock_ctx);
 	}
-	return;
 }
 
 
@@ -570,117 +571,216 @@ void ocsp_responder_event_cb(struct bufferevent* bev, short events, void* arg) {
 
 
 /**
- * Transitions a given responder's buffer and buffer length to reading an HTTP
- * response body (rather than reading the header + body). This function 
- * re-allocates the buffer within resp to the correct size for the body and sets
- * the flag in responder indicating that the buffer contains only the response
- * body.
- * @param resp The given responder to modify the buffer of.
- * @returns 0 on success, or if an error occurred.
+ * Performs the desired revocation checks on a given connection
+ * @param conn The connection to perform checks on.
+ * @returns 0 if the checks were successfully started, -1 if no distribution 
+ * points were found (and/or if the responder revocation methods are disabled),
+ * or -2 if an unrecoverable error occurred.
  */
-int start_reading_body(rev_client* client) {
-	log_printf(LOG_INFO, "Called start_reading_body\n");
+int begin_responder_revocation_checks(sock_context* sock_ctx) {
 
-	unsigned char* body_start;
-	int header_len;
-	int body_len;
+	X509* cert = SSL_get_peer_certificate(sock_ctx->conn->tls);
+	char** ocsp_urls = NULL;
+	int ocsp_url_cnt = 0;
+	char** crl_urls = NULL;
+	int crl_url_cnt = 0;
+    int ocsp_fail, crl_fail;
 
-	if (is_bad_http_response((char*) client->buffer))
+    if (cert == NULL)
+        return -2;
+
+    if (!(sock_ctx->revocation.checks & NO_OCSP_RESPONDER_CHECKS))
+        ocsp_urls = retrieve_ocsp_urls(cert, &ocsp_url_cnt);
+
+
+    if (!(sock_ctx->revocation.checks & NO_CRL_RESPONDER_CHECKS))
+        crl_urls = retrieve_crl_urls(cert, &crl_url_cnt);
+
+
+    X509_free(cert);
+
+	if (ocsp_url_cnt == 0 && crl_url_cnt == 0)
+		return -1; // No responder distribution points to check
+
+	if (ocsp_url_cnt > 0)
+		ocsp_fail = launch_ocsp_checks(sock_ctx, ocsp_urls, ocsp_url_cnt);
+	
+
+	if (crl_url_cnt > 0) {
+        crl_fail = launch_crl_checks(sock_ctx, crl_urls, crl_url_cnt);
+		//begin_crl_responder_checks
+		// increment conn->revocation.crl_responder_cnt
+		// increment conn->revocation.num_responder_types
+	}
+
+	free(ocsp_urls);
+
+    if (ocsp_fail && crl_fail)
+        return -2;
+
+    return 0;
+}
+
+/**
+ * Initiates clients to connect to the given OCSP responder URLs and retrieve
+ * OCSP revocation responses from them.
+ * @param sock_ctx The socket context that the checks are being performed
+ * on behalf of.
+ * @param urls The URLs of OCSP responders for the clients to connect to.
+ * @param num_ocsp_urls The number of URLs found in urls.
+ */
+int launch_ocsp_checks(sock_context* sock_ctx, char** urls, int num_urls) {
+
+	revocation_ctx* rev = &sock_ctx->revocation;
+
+	rev->ocsp_clients = calloc(MAX_OCSP_RESPONDERS, sizeof(responder_ctx));
+	if (rev->ocsp_clients == NULL)
+		return 0;
+
+
+	for (int i = 0; i < num_urls && i < MAX_OCSP_RESPONDERS; i++)
+		launch_ocsp_client(sock_ctx, urls[i]);
+
+	if (rev->ocsp_client_cnt == 0)
 		return -1;
-
-	body_start = (unsigned char*) strstr((char*) client->buffer, "\r\n\r\n") 
-			+ strlen("\r\n\r\n");
-	header_len = body_start - client->buffer;
-
-	body_len = get_http_body_len((char*) client->buffer);
-	if (body_len < 0)
-		return -1;
-
-	unsigned char* tmp_buffer = (unsigned char*) malloc(body_len);
-	if (tmp_buffer == NULL)
-		return -1;
-
-	client->tot_read -= header_len;
-	client->buf_size = body_len;
-
-	memcpy(tmp_buffer, body_start, client->tot_read);
-	free(client->buffer);
-	client->buffer = tmp_buffer;
-
-	client->buffer_is_body = 1;
 
 	return 0;
 }
 
 /**
- * Determines the length of an HTTP response's body, based on the Content-Length
- * field in the HTTP header.
- * @param response the HTTP response to parse the response from.
- * @returns The length of the response body, or -1 on error.
+ * Creates a new bufferevent and initiates an HTTP connection with the server 
+ * specified by url. On success, the information about the given connection 
+ * (such as the bufferevent and the url) is stored in the revocation context
+ * of the given socket context.
+ * @param sock_ctx The given socket context to initiate an OCSP client for.
+ * @param url The URL of the OCSP responder for the client to connect to.
+ * @returns 0 on success, or -1 if an error occurred.
  */
-int get_http_body_len(char* response) {
+int launch_ocsp_client(sock_context* sock_ctx, char* url) {
 
-	long body_length;
+	revocation_ctx* rev = &sock_ctx->revocation;
+	responder_ctx* ocsp_client = &rev->ocsp_clients[rev->ocsp_client_cnt];
+    struct bufferevent* bev = NULL;
+	char* hostname = NULL;
+	int port;
+	int ret;
 
-	char* length_ptr = strstr(response, "Content-Length");
-	if (length_ptr == NULL)
-		return -1;
+    struct timeval read_timeout = {
+		.tv_sec = OCSP_READ_TIMEOUT,
+		.tv_usec = 0,
+	};
 
-	if (length_ptr > strstr(response, "\r\n\r\n"))
-		return -1;
+	ret = parse_url(url, &hostname, &port, NULL);
+	if (ret != 0)
+		goto err;
 
-	length_ptr += strlen("Content-Length");
-	
-	while(*length_ptr == ' ' || *length_ptr == ':')
-		++length_ptr;
 
-	body_length = strtol(length_ptr, NULL, 10);
-	if (body_length >= INT_MAX || body_length < 0)
-		return -1;
+    bev = bufferevent_socket_new(sock_ctx->daemon->ev_base, 
+            -1, BEV_OPT_CLOSE_ON_FREE);
+    if (bev == NULL)
+        goto err;
 
-	return (int) body_length;
-}
+    ret = bufferevent_set_timeouts(bev, &read_timeout, NULL);
+    if (ret != 0)
+        goto err;
 
-/**
- * Checks to see if a given response has a a return code.
- * @param response The response to check the HTTP response code of.
- * @returns 0 if the response contains an HTTP 200 code (OK), or 1 otherwise.
- */
-int is_bad_http_response(char* response) {
+    bufferevent_setcb(bev, ocsp_responder_read_cb, NULL, 
+            ocsp_responder_event_cb, (void*) ocsp_client);
 
-	char* firstline_end = strstr(response, "\r\n");
-	char* response_code_ptr = strchr(response, ' ') + 1;
-	
-	if (response_code_ptr >= firstline_end) 
-		return 1;
+    ret = bufferevent_socket_connect_hostname(bev, 
+            sock_ctx->daemon->dns_base, AF_UNSPEC, hostname, port);
+    if (ret != 0)
+        goto err;
 
-	long response_code = strtol(response_code_ptr, NULL, 10);
-	if (response_code != 200)
-		return 1;
+    ocsp_client->buffer = (unsigned char*) calloc(1, MAX_HEADER_SIZE + 1);
+	if (ocsp_client->buffer == NULL) 
+		goto err;
 
+    ocsp_client->bev = bev;
+	ocsp_client->sock_ctx = sock_ctx;
+	ocsp_client->buf_size = MAX_HEADER_SIZE;
+	ocsp_client->url = url;
+		
+	rev->num_rev_checks++;
+	rev->ocsp_client_cnt++;
+
+	free(hostname);
 	return 0;
+ err:
+    if (bev != NULL)
+        bufferevent_free(bev);
+    if (hostname != NULL)
+		free(hostname);
+	if (ocsp_client->buffer != NULL)
+		free(ocsp_client->buffer);
+
+	return -1;
 }
 
+
+void fail_revocation_checks(sock_context* sock_ctx) {
+
+	revocation_context_cleanup(&sock_ctx->revocation);
+
+	SSL_shutdown(sock_ctx->conn->tls);
+	connection_shutdown(sock_ctx);
+	sock_ctx->conn->state = CONN_ERROR;
+
+	netlink_handshake_notify_kernel(sock_ctx->daemon, sock_ctx->id, -EPROTO);
+}
+
+
+/*******************************************************************************
+ *              HELPER FUNCTIONS FOR OCSP HTTP CONNECTION
+ ******************************************************************************/
+
+
 /**
- * Retrieves the revocation client with the given bufferevent bev from sock_ctx.
- * If used as intended, this function should never return NULL.
- * @param sock_ctx The socket context to search for a revocation client in.
- * @param bev The bufferevent to match with a revocation client.
- * @returns The revocation client of bev; or NULL on failure.
+ * Takes in a given OCSP_REQUEST and forms the http request to query the OCSP
+ * responder with. The formed request is allocated and stored in *http_req.
+ * @returns The length of the request, or -1 if an error occurred.
  */
-rev_client* get_rev_client(sock_context* sock_ctx, struct bufferevent* bev) {
+int form_http_request(unsigned char **http_req, 
+        OCSP_REQUEST *ocsp_req, const char *host, const char *path) {
+
+    unsigned char* full_request;
+    unsigned char* body = NULL;
+    int header_len;
+    int body_len;
+    char header[MAX_HEADER_SIZE];
+
+    body_len = i2d_OCSP_REQUEST(ocsp_req, &body);
+    if (body_len <= 0) {
+        log_printf(LOG_ERROR, "Malformed OCSP Request (internal error)\n");
+        return -1;
+    }
+
+    header_len = snprintf(header, MAX_HEADER_SIZE, 
+            "POST %s HTTP/1.1\r\n"
+            "Host: %s\r\n"
+            "Accept: */*\r\n"
+            "Accept-Language: en-US,en;q=0.5\r\n"
+            "Connection: close\r\n"
+            "Content-Type: application/ocsp-request\r\n"
+            "Content-Length: %i\r\n\r\n",
+            path, host, body_len);
+    if (header_len < 0 || header_len >= MAX_HEADER_SIZE)
+        return -1; /* snprintf failed; or too much header */
 	
-	for (int i = 0; i < sock_ctx->revocation.ocsp_client_cnt; i++) {
-		if (bev == sock_ctx->revocation.ocsp_clients[i].bev)
-			return &(sock_ctx->revocation.ocsp_clients[i]);
+    
+    full_request = calloc(1, header_len + body_len); /* no '\0' */
+    if (full_request == NULL) {
+		free(body);
+        return -1; /* ENOMEM */
 	}
 
-	for (int i = 0; i < sock_ctx->revocation.crl_client_cnt; i++) {
-		if (bev == sock_ctx->revocation.crl_clients[i].bev)
-			return &(sock_ctx->revocation.crl_clients[i]);
-	}
+    memcpy(full_request, header, header_len);
+    memcpy(&full_request[header_len], body, body_len);
 
-	return NULL;
+    *http_req = full_request;
+
+	free(body);
+    return header_len + body_len;
 }
 
 /**
@@ -730,89 +830,102 @@ int send_ocsp_request(struct bufferevent* bev, char* url, OCSP_REQUEST* req) {
 }
 
 
-/**
- * Creates an OCSP Request for the given subject certificate and
- * populates it with all the necessary information needed to query
- * an OCSP Responder. Note that this allocates an OCSP_REQUEST struct
- * that should be freed after use.
- * @param subject The certificate to be checked.
- * @param issuer The parent CA certificate of subject.
- * @returns A pointer to a fully-formed OCSP_REQUEST struct.
- * @see OCSP_REQUEST_free 
- */
-OCSP_REQUEST* create_ocsp_request(SSL* tls)
-{
-    OCSP_REQUEST* request = NULL;
-	OCSP_CERTID* id = NULL;
-
-    request = OCSP_REQUEST_new();
-    if (request == NULL)
-        goto err;
-
-    id = get_ocsp_certid(tls);
-	if (id == NULL)
-		goto err;
-
-    if (OCSP_request_add0_id(request, id) == NULL)
-		goto err;
-
-    return request;
- err:
-	OCSP_REQUEST_free(request);
-	return NULL;
-}
-
 
 /**
- * Takes in a given OCSP_REQUEST and forms the http request to query the OCSP
- * responder with. The formed request is allocated and stored in *http_req.
- * @returns The length of the request, or -1 if an error occurred.
+ * Checks to see if a given response has a a return code.
+ * @param response The response to check the HTTP response code of.
+ * @returns 0 if the response contains an HTTP 200 code (OK), or 1 otherwise.
  */
-int form_http_request(unsigned char **http_req, 
-        OCSP_REQUEST *ocsp_req, const char *host, const char *path) {
+int is_bad_http_response(char* response) {
 
-    unsigned char* full_request;
-    unsigned char* body = NULL;
-    int header_len;
-    int body_len;
-    char header[MAX_HEADER_SIZE];
-
-    body_len = i2d_OCSP_REQUEST(ocsp_req, &body);
-    if (body_len <= 0) {
-        log_printf(LOG_ERROR, "Malformed OCSP Request (internal error)\n");
-        return -1;
-    }
-
-	log_printf(LOG_INFO, "body_len = %i\n", body_len);
-    
-
-    header_len = snprintf(header, MAX_HEADER_SIZE, 
-            "POST %s HTTP/1.1\r\n"
-            "Host: %s\r\n"
-            "Accept: */*\r\n"
-            "Accept-Language: en-US,en;q=0.5\r\n"
-            "Connection: close\r\n"
-            "Content-Type: application/ocsp-request\r\n"
-            "Content-Length: %i\r\n\r\n",
-            path, host, body_len);
-    if (header_len < 0 || header_len >= MAX_HEADER_SIZE)
-        return -1; /* snprintf failed; or too much header */
+	char* firstline_end = strstr(response, "\r\n");
+	char* response_code_ptr = strchr(response, ' ') + 1;
 	
-    
-    full_request = calloc(1, header_len + body_len); /* no '\0' */
-    if (full_request == NULL) {
-		free(body);
-        return -1; /* ENOMEM */
-	}
+	if (response_code_ptr >= firstline_end) 
+		return 1;
 
-    memcpy(full_request, header, header_len);
-    memcpy(&full_request[header_len], body, body_len);
+	long response_code = strtol(response_code_ptr, NULL, 10);
+	if (response_code != 200)
+		return 1;
 
-    *http_req = full_request;
-
-	free(body);
-    return header_len + body_len;
+	return 0;
 }
+
+/**
+ * Determines the length of an HTTP response's body, based on the Content-Length
+ * field in the HTTP header.
+ * @param response the HTTP response to parse the response from.
+ * @returns The length of the response body, or -1 on error.
+ */
+int get_http_body_len(char* response) {
+
+	long body_length;
+
+	char* length_ptr = strstr(response, "Content-Length");
+	if (length_ptr == NULL)
+		return -1;
+
+	if (length_ptr > strstr(response, "\r\n\r\n"))
+		return -1;
+
+	length_ptr += strlen("Content-Length");
+	
+	while(*length_ptr == ' ' || *length_ptr == ':')
+		++length_ptr;
+
+	body_length = strtol(length_ptr, NULL, 10);
+	if (body_length >= INT_MAX || body_length < 0)
+		return -1;
+
+	return (int) body_length;
+}
+
+/**
+ * Transitions a given responder's buffer and buffer length to reading an HTTP
+ * response body (rather than reading the header + body). This function 
+ * re-allocates the buffer within resp_ctx to the correct size for the body and sets
+ * the flag in responder indicating that the buffer contains only the response
+ * body.
+ * @param resp_ctx The given responder to modify the buffer of.
+ * @returns 0 on success, or if an error occurred.
+ */
+int start_reading_body(responder_ctx* client) {
+
+	unsigned char* body_start;
+	int header_len;
+	int body_len;
+
+	if (is_bad_http_response((char*) client->buffer))
+		return -1;
+
+	body_start = (unsigned char*) strstr((char*) client->buffer, "\r\n\r\n") 
+			+ strlen("\r\n\r\n");
+	header_len = body_start - client->buffer;
+
+	body_len = get_http_body_len((char*) client->buffer);
+	if (body_len < 0)
+		return -1;
+
+	unsigned char* tmp_buffer = (unsigned char*) malloc(body_len);
+	if (tmp_buffer == NULL)
+		return -1;
+
+	client->tot_read -= header_len;
+	client->buf_size = body_len;
+
+	memcpy(tmp_buffer, body_start, client->tot_read);
+	free(client->buffer);
+	client->buffer = tmp_buffer;
+
+	client->reading_body = 1;
+
+	return 0;
+}
+
+int done_reading_body(responder_ctx* resp_ctx) {
+	return resp_ctx->reading_body && (resp_ctx->tot_read == resp_ctx->buf_size);
+}
+
 
 
 /*******************************************************************************
@@ -820,5 +933,27 @@ int form_http_request(unsigned char **http_req,
  ******************************************************************************/
 
 
+
+
+/**
+ * Initiates clients to connect to the given CRL responder URLs and retreive
+ * Certificate Revocation Lists (CRLs) from them.
+ * @param sock_ctx The socket context that the checks are being performed
+ * on behalf of.
+ * @param urls The URLs of OCSP responders for the clients to connect to.
+ * @param num_ocsp_urls The number of URLs found in urls.
+ */
+int launch_crl_checks(sock_context* sock_ctx, char** urls, int num_urls) {
+
+	for (int i = 0; i < num_urls; i++) {
+		//char* url = crl_urls[i];
+
+		//set up bufferevent here (with timeout),
+		//pass in callbacks (with revocation_ctx* as the (void*) arg)
+		//start the bufferevent's connection
+	}
+
+	return 0; // TODO: stub
+}
 
 

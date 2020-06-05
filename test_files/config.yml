@@ -79,8 +79,8 @@ client:
 server:
 
   # Note that these settings have the same defaults as that of client settings (for now)
-  min-tls-version: 1.2       
-  max-tls-version: 1.3       
+  min-tls-version: 1.2
+  max-tls-version: 1.3
   tls-compression: disabled  
 
   # Session Tickets posess a vulnerability in them for TLS 1.2 and lower.
