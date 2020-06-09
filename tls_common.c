@@ -15,13 +15,132 @@
 #define UBUNTU_DEFAULT_CA "/etc/ssl/certs/ca-certificates.crt"
 #define FEDORA_DEFAULT_CA "/etc/pki/tls/certs/ca-bundle.crt"
 
+#define DEFAULT_CIPHER_LIST "ECDHE-ECDSA-AES256-GCM-SHA384:"  \
+							"ECDHE-RSA-AES256-GCM-SHA384:"    \
+							"ECDHE-ECDSA-CHACHA20-POLY1305:"  \
+							"ECDHE-RSA-CHACHA20-POLY1305:"    \
+							"ECDHE-ECDSA-AES128-GCM-SHA256:"  \
+							"ECDHE-RSA-AES128-GCM-SHA256"
+
+#define DEFAULT_CIPHERSUITES "TLS_AES_256_GCM_SHA384:"       \
+                             "TLS_AES_128_GCM_SHA256:"       \
+							 "TLS_CHACHA20_POLY1305_SHA256:" \
+							 "TLS_AES_128_CCM_SHA256:"       \
+							 "TLS_AES_128_CCM_8_SHA256"
+
+#define DEBUG_TEST_CA "test_files/certs/rootCA.pem"
+#define DEBUG_CERT_CHAIN "test_files/certs/server_chain.pem"
+#define DEBUG_PRIVATE_KEY "test_files/certs/server_key.pem"
+
 
 int concat_ciphers(char** list, int num, char** out);
 
 int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist);
 int get_ciphers_strlen(STACK_OF(SSL_CIPHER)* ciphers);
 int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len);
-int check_key_cert_pair(connection* conn);
+int check_key_cert_pair(socket_ctx* sock_ctx);
+
+
+SSL_CTX* SSL_CTX_create(global_config* settings) {
+
+    SSL_CTX* ctx = NULL;
+	long tls_version;
+	int ret;
+
+	ctx = SSL_CTX_new(TLS_method());
+	if (ctx == NULL)
+		goto err;
+
+	SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
+
+
+	if (!settings->tls_compression)
+		SSL_CTX_set_options(ctx, SSL_CTX_get_options(ctx) 
+                | SSL_OP_NO_COMPRESSION);
+
+	if (!settings->session_tickets)
+		SSL_CTX_set_options(ctx, SSL_CTX_get_options(ctx) 
+                | SSL_OP_NO_TICKET);
+
+	tls_version = get_tls_version(settings->min_tls_version);
+	if (SSL_CTX_set_min_proto_version(ctx, tls_version) != 1) 
+		goto err;
+
+	tls_version = get_tls_version(settings->max_tls_version);
+	if (SSL_CTX_set_max_proto_version(ctx, tls_version) != 1)
+		goto err;
+
+
+	if (settings->cipher_list_cnt > 0) {
+		ret = load_cipher_list(ctx, 
+				settings->cipher_list, settings->cipher_list_cnt);
+	} else {
+		ret = SSL_CTX_set_cipher_list(ctx, DEFAULT_CIPHER_LIST);
+	}
+	if (ret != 1)
+		goto err;
+	
+
+	if (settings->ciphersuite_cnt > 0) {
+		ret = load_ciphersuites(ctx, 
+				settings->ciphersuites, settings->ciphersuite_cnt);
+	} else {
+		ret = SSL_CTX_set_ciphersuites(ctx, DEFAULT_CIPHERSUITES);
+	}
+	if (ret != 1)
+		goto err;
+
+	ret = load_certificate_authority(ctx, settings->ca_path);
+	if (ret != 1)
+		goto err;
+
+	SSL_CTX_set_timeout(ctx, settings->session_timeout);
+	SSL_CTX_set_verify_depth(ctx, settings->max_chain_depth);
+
+	if(settings->ct_checks) {
+		ret = SSL_CTX_enable_ct(ctx, SSL_CT_VALIDATION_STRICT);
+		if (ret != 1)
+			goto err;
+
+		ret = SSL_CTX_set_ctlog_list_file(ctx, "ct_log_list.cnf");
+		if(ret != 1)
+			goto err;
+	}
+
+    /* TODO: WARNING: temporary--for debugging. Remove for prod */
+    /* TODO: Chris, you should build a function here to load in certs/keys */
+
+	ret = SSL_CTX_use_certificate_chain_file(ctx, DEBUG_CERT_CHAIN);
+	if (ret != 1)
+		goto err;
+	
+	ret = SSL_CTX_use_PrivateKey_file(ctx, DEBUG_PRIVATE_KEY, SSL_FILETYPE_PEM);
+	if (ret != 1)
+		goto err;
+
+	ret = SSL_CTX_check_private_key(ctx);
+	if (ret != 1) {
+		log_printf(LOG_ERROR, "Loaded Private Key didn't match cert chain\n");
+		goto err;
+	}
+
+	ret = SSL_CTX_build_cert_chain(ctx, SSL_BUILD_CHAIN_FLAG_CHECK);
+	if (ret != 1) {
+		log_printf(LOG_ERROR, "Incomplete server certificate chain\n");
+		goto err;
+	}
+
+	return ctx;
+ err:
+	if (ERR_peek_error())
+		log_printf(LOG_ERROR, "OpenSSL error initializing client SSL_CTX: %s\n",
+				ERR_error_string(ERR_get_error(), NULL));
+	
+	if (ctx != NULL)
+		SSL_CTX_free(ctx);
+    return NULL;
+}
+
 
 
 /**
@@ -31,12 +150,12 @@ int check_key_cert_pair(connection* conn);
  */
 
 /**
- * Converts the given tls_version_t enum into the OpenSSL-specific version.
+ * Converts the given tls_version enum into the OpenSSL-specific version.
  * @param version The version given to us by the config file.
  * @returns The OpenSSL representation of the TLS Version, or TLS1_2_VERSION
  * if no version was set (a safe default).
  */
-long get_tls_version(enum tls_version_t version) {
+long get_tls_version(enum tls_version version) {
 
 	long tls_version = 0;
 
@@ -252,7 +371,7 @@ int get_peer_certificate(connection* conn, char** data, unsigned int* len) {
 	unsigned int cert_len;
 	int ret;
 
-	cert = SSL_get_peer_certificate(conn->tls);
+	cert = SSL_get_peer_certificate(conn->ssl);
 	if (cert == NULL) {
 		set_err_string(conn, "TLS error: peer certificate not found");
 		ret = -ENOTCONN;
@@ -308,7 +427,7 @@ int get_peer_identity(connection* conn, char** identity, unsigned int* len) {
 	X509_NAME* subject_name;
 	X509* cert;
 
-	cert = SSL_get_peer_certificate(conn->tls);
+	cert = SSL_get_peer_certificate(conn->ssl);
 	if (cert == NULL) {
 		set_err_string(conn, "TLS error: couldn't get peer certificate - %s",
 				ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
@@ -347,8 +466,8 @@ int get_peer_identity(connection* conn, char** identity, unsigned int* len) {
 int get_hostname(connection* conn, char** data, unsigned int* len) {
 
 	const char* hostname;
-	
-	hostname = SSL_get_servername(conn->tls, TLSEXT_NAMETYPE_host_name);
+
+	hostname = SSL_get_servername(conn->ssl, TLSEXT_NAMETYPE_host_name);
 	if (hostname == NULL) {
 		set_err_string(conn, "TLS error: couldn't get the server hostname - %s",
 				ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
@@ -372,7 +491,7 @@ int get_enabled_ciphers(connection* conn, char** data, unsigned int* len) {
 	
 	char* ciphers_str;
 
-	STACK_OF(SSL_CIPHER)* ciphers = SSL_get_ciphers(conn->tls);
+	STACK_OF(SSL_CIPHER)* ciphers = SSL_get_ciphers(conn->ssl);
 	/* TODO: replace this with SSL_get1_supported_ciphers? Maybe... */
 	if (ciphers == NULL)
 		goto end; /* no ciphers available; just return NULL. */
@@ -404,35 +523,6 @@ int get_enabled_ciphers(connection* conn, char** data, unsigned int* len) {
  *******************************************************************************
  */
 
-/**
- * Configures the given connection to be a client connection.
- * @param conn The connection whose state should be modified.
- * @param daemon The daemon's context.
- * @returns 0 on success, or -errno if an error occurred.
- */
-int set_connection_client(connection* conn, daemon_context* daemon) {
-
-	int ret = client_SSL_new(conn, daemon);
-	if (ret == 0)
-		conn->state = CLIENT_NEW;
-
-	return ret;
-}
-
-/**
- * Configures the given connection to be a server connection.
- * @param conn The connection whose state should be modified.
- * @param daemon The daemon's context.
- * @returns 0 on success, or -errno if an error occurred.
- */
-int set_connection_server(connection* conn, daemon_context* daemon) {
-
-	int ret = server_SSL_new(conn, daemon);
-	if (ret == 0)
-		conn->state = SERVER_NEW;
-
-	return ret;
-}
 
 /**
  * Sets the certificate chain to be used for a given connection conn using
@@ -441,7 +531,7 @@ int set_connection_server(connection* conn, daemon_context* daemon) {
  * @param path The path to the certificate chain directory/file.
  * @returns 0 on success, or -errno if an error occurred.
  */
-int set_certificate_chain(connection* conn, char* path) {
+int set_certificate_chain(socket_ctx* sock_ctx, char* path) {
 
 	struct stat file_stats;
 	int ret, ssl_err;
@@ -456,7 +546,7 @@ int set_certificate_chain(connection* conn, char* path) {
 
 	if (S_ISREG(file_stats.st_mode)) {
 		/* is a file */
-		ret = SSL_use_certificate_chain_file(conn->tls, path);
+		ret = SSL_CTX_use_certificate_chain_file(sock_ctx->ssl_ctx, path);
 		if (ret != 1) {
 			log_printf(LOG_ERROR, "Failed to load cert chain\n");
 			/* TODO: set errno to SSL error */
@@ -482,7 +572,7 @@ int set_certificate_chain(connection* conn, char* path) {
  err:
 	ssl_err = ERR_GET_REASON(ERR_get_error());
 
-	set_err_string(conn, "TLS error: couldn't set certificate chain - %s",
+	set_err_string(sock_ctx->conn, "TLS error: couldn't set certificate chain - %s",
 			ssl_err ? ERR_reason_error_string(ssl_err) : strerror(-ret));
 	return ret;
 }
@@ -500,7 +590,7 @@ int set_certificate_chain(connection* conn, char* path) {
  * @param path The location of the Private Key file.
  * @returns 0 on success, or -errno if an error occurred.
  */
-int set_private_key(connection* conn, char* path) {
+int set_private_key(socket_ctx* sock_ctx, char* path) {
 
 	struct stat file_stats;
 	int ret;
@@ -515,27 +605,27 @@ int set_private_key(connection* conn, char* path) {
 		goto err;
 	}
 
-	ret = SSL_use_PrivateKey_file(conn->tls, path, SSL_FILETYPE_PEM);
+	ret = SSL_CTX_use_PrivateKey_file(sock_ctx->ssl_ctx, path, SSL_FILETYPE_PEM);
 	if (ret == 1) /* pem key loaded */
-		return check_key_cert_pair(conn); 
+		return check_key_cert_pair(sock_ctx); 
 	else
 		ERR_clear_error();
 
-	ret = SSL_use_PrivateKey_file(conn->tls, path, SSL_FILETYPE_ASN1);
+	ret = SSL_CTX_use_PrivateKey_file(sock_ctx->ssl_ctx, path, SSL_FILETYPE_ASN1);
 	if (ret == 1) /* ASN.1 key loaded */
-		return check_key_cert_pair(conn);  
+		return check_key_cert_pair(sock_ctx);  
 	else
 		ERR_clear_error();
 
-	ret = SSL_use_PrivateKey_file(conn->tls, path, SSL_FILETYPE_PEM);
+	ret = SSL_CTX_use_PrivateKey_file(sock_ctx->ssl_ctx, path, SSL_FILETYPE_PEM);
 	if (ret == 1) /* pem RSA key loaded */
-		return check_key_cert_pair(conn); 
+		return check_key_cert_pair(sock_ctx); 
 	else
 		ERR_clear_error();
 
-	ret = SSL_use_RSAPrivateKey_file(conn->tls, path, SSL_FILETYPE_ASN1);
+	ret = SSL_CTX_use_RSAPrivateKey_file(sock_ctx->ssl_ctx, path, SSL_FILETYPE_ASN1);
 	if (ret == 1) /* ASN.1 RSA key loaded */
-		return check_key_cert_pair(conn);
+		return check_key_cert_pair(sock_ctx);
 	else
 		goto err;
 
@@ -543,7 +633,7 @@ int set_private_key(connection* conn, char* path) {
  err:
 	log_printf(LOG_ERROR, "Failed to set private key: %s\n", 
 			ERR_reason_error_string(ERR_GET_REASON(ERR_peek_error())));
-	set_err_string(conn, "TLS error: failed to set private key - %s",
+	set_err_string(sock_ctx->conn, "TLS error: failed to set private key - %s",
 			ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
 	return -EBADF;
 }
@@ -555,16 +645,16 @@ int set_private_key(connection* conn, char* path) {
  * @param path The path to a file containing .pem encoded CA's.
  * @returns 0 on success, or -ernno if an error occurred. 
  */
-int set_trusted_CA_certificates(connection* conn, char* path) {
+int set_trusted_CA_certificates(socket_ctx *sock_ctx, char* path) {
 	
 	STACK_OF(X509_NAME)* cert_names = SSL_load_client_CA_file(path);
 	if (cert_names == NULL) {
-		set_err_string(conn, "TLS error: unable to load CA certificates - %s",
+		set_err_string(sock_ctx->conn, "TLS error: unable to load CA certificates - %s",
 				ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
 		return -EBADF;
 	}
 
-	SSL_set_client_CA_list(conn->tls, cert_names);
+	SSL_CTX_set_client_CA_list(sock_ctx->ssl_ctx, cert_names);
 
 	return 0;
 }
@@ -572,14 +662,14 @@ int set_trusted_CA_certificates(connection* conn, char* path) {
 /**
  * Removes a given cipher from the set of enabled ciphers for a connection.
  * TODO: Allow multiple ciphers to be disabled at the same time?
- * @param conn The connection context to remove a cipher from.
+ * @param sock_ctx The socket context to remove a cipher from.
  * @param cipher A string representation of the cipher to be removed.
  * @returns 0 on success; -errno otherwise. EINVAL means the cipher to be
  * removed was not found.
  */
-int disable_cipher(connection* conn, char* cipher) {
+int disable_cipher(socket_ctx* sock_ctx, char* cipher) {
 
-	STACK_OF(SSL_CIPHER)* cipherlist = SSL_get_ciphers(conn->tls);
+	STACK_OF(SSL_CIPHER)* cipherlist = SSL_CTX_get_ciphers(sock_ctx->ssl_ctx);
 	if (cipherlist == NULL)
 		goto err;
 
@@ -589,7 +679,7 @@ int disable_cipher(connection* conn, char* cipher) {
 
 	return 0;
  err:
-	set_err_string(conn, "TLS error: Specified cipher already disabled");
+	set_err_string(sock_ctx->conn, "TLS error: cipher already disabled");
 	return -EINVAL;
 }
 
@@ -682,17 +772,17 @@ int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist) {
  * for which to check.
  * @returns 0 if the checks succeeded; -EPROTO otherwise. 
  */
-int check_key_cert_pair(connection* conn) {
-	if (SSL_check_private_key(conn->tls) != 1) {
+int check_key_cert_pair(socket_ctx* sock_ctx) {
+	if (SSL_CTX_check_private_key(sock_ctx->ssl_ctx) != 1) {
 		log_printf(LOG_ERROR, "Key and certificate don't match.\n");
-		set_err_string(conn, "TLS error: certificate/privateKey mismatch - %s",
+		set_err_string(sock_ctx->conn, "TLS error: certificate/privateKey mismatch - %s",
 				ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
 		goto err;
 	}
 
-	if (SSL_build_cert_chain(conn->tls, SSL_BUILD_CHAIN_FLAG_CHECK) != 1) {
+	if (SSL_CTX_build_cert_chain(sock_ctx->ssl_ctx, SSL_BUILD_CHAIN_FLAG_CHECK) != 1) {
 		log_printf(LOG_ERROR, "Certificate chain failed to build.\n");
-		set_err_string(conn, "TLS error: privateKey/cert chain incomplete - %s",
+		set_err_string(sock_ctx->conn, "TLS error: privateKey/cert chain incomplete - %s",
 				ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
 		goto err;
 	}

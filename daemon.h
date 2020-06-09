@@ -33,20 +33,20 @@
 #include "daemon_structs.h"
 
 int run_daemon(int port, char* config_path);
-void socket_cb(daemon_context* ctx, unsigned long id, char* comm);
-void setsockopt_cb(daemon_context* ctx, unsigned long id, int level, 
+void socket_cb(daemon_ctx* ctx, unsigned long id, char* comm);
+void setsockopt_cb(daemon_ctx* ctx, unsigned long id, int level, 
 		int option, void* value, socklen_t len);
-void getsockopt_cb(daemon_context* ctx, unsigned long id, int level, int option);
-void bind_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr, 
+void getsockopt_cb(daemon_ctx* ctx, unsigned long id, int level, int option);
+void bind_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr, 
 	int int_addrlen, struct sockaddr* ext_addr, int ext_addrlen);
-void connect_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr, 
+void connect_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr, 
 	int int_addrlen, struct sockaddr* rem_addr, int rem_addrlen, int blocking);
-void listen_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr,
+void listen_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr,
 	int int_addrlen, struct sockaddr* ext_addr, int ext_addrlen);
-void associate_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr,
+void associate_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr,
 	       	int int_addrlen);
-void close_cb(daemon_context* ctx, unsigned long id);
-void upgrade_cb(daemon_context* ctx, unsigned long id, struct sockaddr* int_addr, 
+void close_cb(daemon_ctx* ctx, unsigned long id);
+void upgrade_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr, 
 	int int_addrlen);
 
 #endif

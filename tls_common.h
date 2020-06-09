@@ -23,10 +23,11 @@
 #include <event2/util.h>
 #include "daemon_structs.h"
 
-
+/* Initialization of a new SSL_CTX */
+SSL_CTX* SSL_CTX_create(global_config* settings);
 
 /* SSL_CTX loading */
-long get_tls_version(enum tls_version_t version);
+long get_tls_version(enum tls_version version);
 int load_certificate_authority(SSL_CTX* ctx, char* CA_path);
 int load_cipher_list(SSL_CTX* ctx, char** list, int num);
 int load_ciphersuites(SSL_CTX* ctx, char** list, int num);
@@ -39,11 +40,11 @@ int get_hostname(connection* conn_ctx, char** data, unsigned int* len);
 int get_enabled_ciphers(connection* conn, char** data, unsigned int* len);
 
 /* setsockopt */
-int set_connection_client(connection* conn, daemon_context* daemon);
-int set_connection_server(connection* conn, daemon_context* daemon);
-int set_trusted_CA_certificates(connection* conn, char* path);
-int disable_cipher(connection* conn, char* cipher);
-int set_certificate_chain(connection* conn, char* path);
-int set_private_key(connection* conn, char* path);
+int set_connection_client(connection* conn, daemon_ctx* daemon);
+int set_connection_server(connection* conn, daemon_ctx* daemon);
+int set_trusted_CA_certificates(socket_ctx *sock_ctx, char* path);
+int disable_cipher(socket_ctx* sock_ctx, char* cipher);
+int set_certificate_chain(socket_ctx* sock_ctx, char* path);
+int set_private_key(socket_ctx* sock_ctx, char* path);
 
 

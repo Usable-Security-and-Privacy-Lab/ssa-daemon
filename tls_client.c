@@ -20,163 +20,6 @@
 #include "daemon_structs.h"
 
 
-#define DEFAULT_CIPHER_LIST "ECDHE-ECDSA-AES256-GCM-SHA384:"  \
-							"ECDHE-RSA-AES256-GCM-SHA384:"    \
-							"ECDHE-ECDSA-CHACHA20-POLY1305:"  \
-							"ECDHE-RSA-CHACHA20-POLY1305:"    \
-							"ECDHE-ECDSA-AES128-GCM-SHA256:"  \
-							"ECDHE-RSA-AES128-GCM-SHA256"
-
-#define DEFAULT_CIPHERSUITES "TLS_AES_256_GCM_SHA384:"       \
-                             "TLS_AES_128_GCM_SHA256:"       \
-							 "TLS_CHACHA20_POLY1305_SHA256:" \
-							 "TLS_AES_128_CCM_SHA256:"       \
-							 "TLS_AES_128_CCM_8_SHA256"
-
-
-
-
-SSL_CTX* client_ctx_init_default();
-
-
-
-/**
- * Allocates a new SSL_CTX struct and loads the settings found in config into
- * it. If config is NULL, then secure default settings are loaded using
- * client_ctx_init_default().
- * @param config The configuration settings to have applied to the given
- * client SSL_CTX.
- * @returns A pointer to a newly allocated and set SSL_CTX, or NULL on error.
- */
-SSL_CTX* client_ctx_init(client_settings* config) {
-
-	SSL_CTX* ctx = NULL;
-	long tls_version;
-	int ret;
-
-	if (config == NULL)
-		return client_ctx_init_default();
-
-	ctx = SSL_CTX_new(TLS_client_method());
-	if (ctx == NULL)
-		goto err;
-
-
-	SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
-
-	if (!config->tls_compression)
-		SSL_CTX_set_options(ctx, SSL_OP_NO_COMPRESSION);
-
-	tls_version = get_tls_version(config->min_tls_version);
-	if (SSL_CTX_set_min_proto_version(ctx, tls_version) != 1) 
-		goto err;
-
-	tls_version = get_tls_version(config->max_tls_version);
-	if (SSL_CTX_set_max_proto_version(ctx, tls_version) != 1)
-		goto err;
-
-
-	if (config->cipher_list_cnt > 0) {
-		ret = load_cipher_list(ctx, 
-				config->cipher_list, config->cipher_list_cnt);
-	} else {
-		ret = SSL_CTX_set_cipher_list(ctx, DEFAULT_CIPHER_LIST);
-	}
-	if (ret != 1)
-		goto err;
-	
-
-	if (config->ciphersuite_cnt > 0) {
-		ret = load_ciphersuites(ctx, 
-				config->ciphersuites, config->ciphersuite_cnt);
-	} else {
-		ret = SSL_CTX_set_ciphersuites(ctx, DEFAULT_CIPHERSUITES);
-	}
-	if (ret != 1)
-		goto err;
-
-	ret = load_certificate_authority(ctx, config->ca_path);
-	if (ret != 1)
-		goto err;
-
-    /* TODO: if (!config->no_ocsp_stapling) */
-	SSL_CTX_set_tlsext_status_type(ctx, TLSEXT_STATUSTYPE_ocsp);
-
-
-
-	SSL_CTX_set_timeout(ctx, config->session_timeout);
-	SSL_CTX_set_verify_depth(ctx, config->max_cert_chain_depth);
-
-	if(config->verify_cert_transparency){
-		ret = SSL_CTX_enable_ct(ctx, SSL_CT_VALIDATION_STRICT);
-		if (ret != 1)
-			goto err;
-
-		ret = SSL_CTX_set_ctlog_list_file(ctx, "ct_log_list.cnf");
-		if(ret != 1)
-			goto err;
-	}
-
-	return ctx;
- err:
-	if (ERR_peek_error())
-		log_printf(LOG_ERROR, "OpenSSL error initializing client SSL_CTX: %s\n",
-				ERR_error_string(ERR_get_error(), NULL));
-	
-	if (ctx != NULL)
-		SSL_CTX_free(ctx);
-    return NULL;
-}
-
-/**
- * Creates a new client SSL_CTX with secure default settings applied to it.
- * @returns A pointer to a newly allocated SSL_CTX set with secure settings, or
- * NULL on failure.
- */
-SSL_CTX* client_ctx_init_default() {
-
-	int ret;
-
-	SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
-	if (ctx == NULL)
-		goto err;
-
-	SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
-	SSL_CTX_set_options(ctx, SSL_OP_NO_COMPRESSION 
-			| SSL_OP_NO_TICKET);
-
-	ret = SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
-	if (ret != 1)
-		goto err;
-	
-	ret = SSL_CTX_set_max_proto_version(ctx, TLS_MAX_VERSION);
-	if (ret != 1)
-		goto err;
-	
-	ret = SSL_CTX_set_ciphersuites(ctx, DEFAULT_CIPHERSUITES);
-	if (ret != 1)
-		goto err;
-	
-	ret = SSL_CTX_set_cipher_list(ctx, DEFAULT_CIPHER_LIST);
-	if (ret != 1)
-		goto err;
-
-	ret = load_certificate_authority(ctx, NULL);
-	if (ret != 1)
-		goto err;
-
-	SSL_CTX_set_tlsext_status_type(ctx, TLSEXT_STATUSTYPE_ocsp);
-
-	return ctx;
- err:
-	if (ctx != NULL)
-		SSL_CTX_free(ctx);
-
-	if (ERR_peek_error() != 0)
-		log_printf(LOG_ERROR, "OpenSSL error initializing client SSL_CTX: %s\n",
-				ERR_error_string(ERR_get_error(), NULL));
-	return NULL;
-}
 
 
 /**
@@ -186,17 +29,32 @@ SSL_CTX* client_ctx_init_default() {
  * @param conn The connection to assign a new client SSL struct to.
  * @returns 0 on success; -errno otherwise.
  */
-int client_SSL_new(connection* conn, daemon_context* daemon) {
+int client_SSL_new(socket_ctx* sock_ctx) {
 
-	SSL* new_ssl = SSL_new(daemon->client_ctx);
-	if (new_ssl == NULL)
-		return ssl_malloc_err(conn);
+    connection* conn = sock_ctx->conn;
+    char* hostname = sock_ctx->rem_hostname;
+    int ret;
 
-	if (conn->tls != NULL)
-		SSL_free(conn->tls);
-	conn->tls = new_ssl;
+	conn->ssl = SSL_new(sock_ctx->ssl_ctx);
+	if (conn->ssl == NULL)
+		return ssl_malloc_err(sock_ctx->conn);
+
+    if (hostname != NULL) {
+		log_printf(LOG_INFO, "Hostname passed in is: %s\n", hostname);
+		SSL_set_tlsext_host_name(conn->ssl, hostname);
+		ret = SSL_set1_host(conn->ssl, hostname);
+		if (ret != 1) {
+			set_err_string(conn, "Connection setup error: "
+					"couldn't assign hostname associated with the connection");
+			ret = -ECONNABORTED; /* TODO: set SSL error here */
+			goto err;
+		}
+	}
 
 	return 0;
+ err:
+    SSL_free(conn->ssl);
+    return ret;
 }
 
 /**
@@ -207,24 +65,40 @@ int client_SSL_new(connection* conn, daemon_context* daemon) {
  * @returns 0 on success; -errno on failure. In the event of a failure, it is
  * left to the calling function to clean up sock_ctx and set its error state.
  */
-int client_connection_setup(sock_context* sock_ctx) {
+int client_connection_setup(socket_ctx* sock_ctx) {
 
-	daemon_context* daemon = sock_ctx->daemon;
+	daemon_ctx* daemon = sock_ctx->daemon;
 	connection* conn = sock_ctx->conn;
-	char* hostname = sock_ctx->rem_hostname;
 	int ret;
 
-	if (hostname != NULL) {
-		log_printf(LOG_INFO, "Hostname passed in is: %s\n", hostname);
-		SSL_set_tlsext_host_name(conn->tls, hostname);
-		ret = SSL_set1_host(conn->tls, hostname);
-		if (ret != 1) {
-			set_err_string(conn, "Connection setup error: "
-					"couldn't assign hostname associated with the connection");
-			ret = -ECONNABORTED; /* TODO: set SSL error here */
-			goto err;
-		}
-	}
+    struct timeval read_timeout = {
+			.tv_sec = EXT_CONN_TIMEOUT,
+			.tv_usec = 0,
+	};
+
+    if (!(sock_ctx->revocation.checks & NO_REVOCATION_CHECKS)) {
+        ret = SSL_CTX_set_tlsext_status_type(sock_ctx->ssl_ctx, 
+                    TLSEXT_STATUSTYPE_ocsp);
+        if (ret != 1)
+            goto err;
+
+        ret = SSL_CTX_set_tlsext_status_arg(sock_ctx->ssl_ctx, (void*) sock_ctx);
+        if (ret != 1)
+            goto err;
+
+        ret = SSL_CTX_set_tlsext_status_cb(sock_ctx->ssl_ctx, revocation_cb);
+        if (ret != 1)
+            goto err;
+    }
+
+
+    ret = client_SSL_new(sock_ctx);
+    if (conn->ssl == NULL) {
+        set_err_string(conn, "Connection setup error: "
+                "failed to allocate internals for the daemon connection");
+        goto err;
+    }
+
 
 	/* socket set to -1 because we set it later */
 	conn->plain.bev = bufferevent_socket_new(daemon->ev_base,
@@ -237,7 +111,7 @@ int client_connection_setup(sock_context* sock_ctx) {
 	}
 
 	conn->secure.bev = bufferevent_openssl_socket_new(daemon->ev_base,
-			sock_ctx->fd, conn->tls, BUFFEREVENT_SSL_CONNECTING, 0);
+			sock_ctx->fd, conn->ssl, BUFFEREVENT_SSL_CONNECTING, 0);
 	if (conn->secure.bev == NULL) {
 		ret = -EVUTIL_SOCKET_ERROR();
 		set_err_string(conn, "Connection setup error: "
@@ -256,10 +130,6 @@ int client_connection_setup(sock_context* sock_ctx) {
 	bufferevent_setcb(conn->plain.bev, common_bev_read_cb,
 			common_bev_write_cb, client_bev_event_cb, sock_ctx);
 
-	struct timeval read_timeout = {
-			.tv_sec = EXT_CONN_TIMEOUT,
-			.tv_usec = 0,
-	};
 
 	ret = bufferevent_set_timeouts(conn->secure.bev, &read_timeout, NULL);
 	if (ret < 0) {
@@ -282,4 +152,20 @@ int client_connection_setup(sock_context* sock_ctx) {
 	log_printf(LOG_ERROR, "Failed to set up client/server bev [direct mode]\n");
 	/* NOTE: intentionally left to the calling function to clean up errors */
 	return ret;
+}
+
+
+/**
+ *
+ * 
+ */
+int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, long len) {
+
+    if (len > MAX_HOSTNAME || len <= 0)
+        return -EINVAL;
+
+    memcpy(sock_ctx->rem_hostname, hostname, len);
+    
+
+	return 0;
 }

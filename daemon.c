@@ -74,12 +74,6 @@ static void listener_accept_error_cb(struct evconnlistener *listener, void *ctx)
 static void listener_accept_cb(struct evconnlistener *listener,
 		evutil_socket_t fd, struct sockaddr *address, int socklen, void *arg);
 
-/* special */
-static evutil_socket_t create_upgrade_socket(int port);
-static void upgrade_recv(evutil_socket_t fd, short events, void *arg);
-ssize_t recv_fd_from(int fd, void *ptr, size_t nbytes,
-		int *recvfd, struct sockaddr_un* addr, int addr_len);
-
 
 
 /**
@@ -98,12 +92,10 @@ ssize_t recv_fd_from(int fd, void *ptr, size_t nbytes,
 int run_daemon(int port, char* config_path) {
 
 	struct evconnlistener* listener = NULL;
-	daemon_context* daemon = NULL;
+	daemon_ctx* daemon = NULL;
 
-	evutil_socket_t upgrade_sock;
 	evutil_socket_t server_sock;
 	
-	struct event* upgrade_ev = NULL;
 	struct event* sev_pipe = NULL;
 	struct event* sev_int = NULL;
 	struct event* nl_ev = NULL;
@@ -149,14 +141,6 @@ int run_daemon(int port, char* config_path) {
 	if (event_add(nl_ev, NULL) != 0)
 		goto err;
 
-	/* Set up upgrade notification socket with event base */
-	upgrade_sock = create_upgrade_socket(port);
-	upgrade_ev = event_new(daemon->ev_base, upgrade_sock,
-			EV_READ | EV_PERSIST, upgrade_recv, daemon);
-	if (event_add(upgrade_ev, NULL) == -1)
-		goto err;
-
-
 
 	/* Main event loop */
 	if (event_base_dispatch(daemon->ev_base) != 0)
@@ -172,7 +156,6 @@ int run_daemon(int port, char* config_path) {
 #endif
 	evconnlistener_free(listener); /* This also closes the socket */
 	event_free(nl_ev);
-	event_free(upgrade_ev);
 	event_free(sev_pipe);
 	event_free(sev_int);
 
@@ -189,8 +172,6 @@ int run_daemon(int port, char* config_path) {
 		evconnlistener_free(listener); /* This also closes the socket */
 	if (nl_ev != NULL)
 		event_free(nl_ev);
-	if (upgrade_ev != NULL)
-		event_free(upgrade_ev);
 	if (sev_pipe != NULL)
 		event_free(sev_pipe);
 	if (sev_int != NULL)
@@ -201,42 +182,6 @@ int run_daemon(int port, char* config_path) {
 	return EXIT_FAILURE;
 }
 
-
-
-evutil_socket_t create_upgrade_socket(int port) {
-
-	evutil_socket_t sock;
-	int ret;
-	struct sockaddr_un addr;
-	unsigned long addrlen;
-	char name[MAX_UPGRADE_SOCKET];
-	int namelen = snprintf(name, MAX_UPGRADE_SOCKET, "%ctls_upgrade%d", '\0', port);
-
-	addr.sun_family = AF_UNIX;
-	memcpy(addr.sun_path, name, namelen);
-	addrlen = namelen + sizeof(sa_family_t);
-
-	sock = socket(PF_UNIX, SOCK_DGRAM, 0);
-	if (sock == -1) {
-		log_printf(LOG_ERROR, "socket: %s\n", strerror(errno));
-		exit(EXIT_FAILURE);
-	}
-	ret = evutil_make_socket_nonblocking(sock);
-	if (ret == -1) {
-		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
-			 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-		EVUTIL_CLOSESOCKET(sock);
-		exit(EXIT_FAILURE);
-	}
-
-	ret = bind(sock, (struct sockaddr*)&addr, addrlen);
-	if (ret == -1) {
-		log_printf(LOG_ERROR, "bind: %s\n", strerror(errno));
-		EVUTIL_CLOSESOCKET(sock);
-		exit(EXIT_FAILURE);
-	}
-	return sock;
-}
 
 /**
  * Creates a listening socket that binds to local IPv4 and IPv6 interfaces.
@@ -373,25 +318,25 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
  * @param address The internal program's address/port combo, encapsulated 
  * within a sockaddr struct.
  * @param addrlen The length of address.
- * @param arg A void pointer referencing the daemon_context of the daemon.
+ * @param arg A void pointer referencing the daemon_ctx of the daemon.
  * 
  * WARNING: This is NOT the callback for a listening socket to receive
  * a new connection. The function for that is listener_accept_cb.
  */
 void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 		struct sockaddr *address, int addrlen, void *arg) {
-	daemon_context* daemon = (daemon_context*)arg;
-	sock_context* sock_ctx;
+	daemon_ctx* daemon = (daemon_ctx*)arg;
+	socket_ctx* sock_ctx;
 	int port, ret;
 	
 	port = get_port(address);
-	sock_ctx = (sock_context*)hashmap_get(daemon->sock_map_port, port);
+	sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map_port, port);
 	if (sock_ctx == NULL) {
 		log_printf(LOG_ERROR, "Unauthorized connection on port %d\n", port);
-		return; /* Should not notify the kernel */
+		return;
 	}
 
-	if (sock_ctx->conn->state != CLIENT_CONNECTING) {
+	if (sock_ctx->state != SOCKET_REV_CHECKING) {
 		log_printf(LOG_ERROR, "accept_cb() called on bad connection\n");
 		goto err;
 	}
@@ -400,7 +345,6 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	if (evutil_make_socket_nonblocking(fd) == -1) {
 		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
 			 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-		ret = -ECONNABORTED; /* could be EVUTIL_SOCKET_ERROR() maybe */
 		goto err;
 	}
 
@@ -411,14 +355,14 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 		goto err;
 
 	hashmap_del(daemon->sock_map_port, port);
-	sock_ctx->conn->state = CLIENT_CONNECTED;
+	sock_ctx->state = SOCKET_CONNECTED;
 
 	return;
  err:
 	if (sock_ctx != NULL) {
 		hashmap_del(daemon->sock_map_port, port);
-		connection_shutdown(sock_ctx);
-		sock_ctx->conn->state = CONN_ERROR;
+		socket_shutdown(sock_ctx);
+		sock_ctx->state = SOCKET_ERROR;
 	}
 
 	EVUTIL_CLOSESOCKET(fd);
@@ -434,7 +378,7 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
  * Lastly, it ignores EINTR as that error simply means that a signal
  * interrupted the system call before a connection came in.
  * @param listener The SSA daemon's main listener for client connections.
- * @param ctx A void pointer to the daemon_context.
+ * @param ctx A void pointer to the daemon_ctx.
  * @returns No return, but exits the event base loop if the error is fatal.
  */
 void accept_error_cb(struct evconnlistener *listener, void *ctx) {
@@ -484,61 +428,35 @@ void accept_error_cb(struct evconnlistener *listener, void *ctx) {
 void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	struct sockaddr *address, int addrlen, void *arg) {
 
-	struct sockaddr_in int_addr = {
+    struct sockaddr_in int_addr = {
 		.sin_family = AF_INET,
 		.sin_port = 0, /* allow kernel to give us a random port */
 		.sin_addr.s_addr = htonl(INADDR_LOOPBACK)
 	};
-
-	sock_context* listening_sock_ctx = (sock_context*)arg;
-	daemon_context* daemon = listening_sock_ctx->daemon;
-	sock_context* accepting_sock_ctx = NULL;
+	socket_ctx* listening_ctx = (socket_ctx*)arg;
+	daemon_ctx* daemon = listening_ctx->daemon;
+	socket_ctx* accepting_ctx = NULL;
 	socklen_t intaddr_len = sizeof(int_addr);
 	evutil_socket_t ifd = -1;
-	int ret = 0, port;
+	int ret = 0;
 
 	log_printf(LOG_INFO, "New connection incoming for server\n");
 
 	ret = evutil_make_socket_nonblocking(efd);
-	if (ret != 0) {
-		log_printf(LOG_ERROR, "Failed to set external socket non-blocking: %s\n",
-				   evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-		goto err;
-	}
-
-	ret = sock_context_new(&accepting_sock_ctx, daemon, ID_NOT_SET);
 	if (ret != 0)
 		goto err;
 
-	accepting_sock_ctx->fd = efd;
-	/* NOTE: the id is TEMPORARY, to notify the kernel correctly upon a
-	 * successful connection. MAKE SURE not to free the sock_ctx associated 
-	 * with this id from the hashmap!! It's the id of the listener!! */
-	accepting_sock_ctx->id = listening_sock_ctx->id;
-
-	ret = connection_new(&(accepting_sock_ctx->conn));
+	accepting_ctx = accepting_socket_ctx_new(listening_ctx, efd);
 	if (ret != 0)
 		goto err;
 
-	accepting_sock_ctx->conn->state = SERVER_CONNECTING;
-
-	ret = accept_SSL_new(accepting_sock_ctx->conn, listening_sock_ctx->conn);
-	if (ret != 0)
+    ifd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (ifd == -1)
 		goto err;
-
-	ifd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if (ifd == -1) {
-		log_printf(LOG_ERROR, "Failed to create a new socket: %s\n",
-				   evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-		goto err;
-	}
 
 	ret = evutil_make_socket_nonblocking(ifd);
-	if (ret != 0) {
-		log_printf(LOG_ERROR, "Failed to set internal socket non-blocking: %s\n",
-			 	   evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
+	if (ret != 0)
 		goto err;
-	}
 
 	if (bind(ifd, (struct sockaddr*)&int_addr, sizeof(int_addr)) == -1)
 		goto err;
@@ -547,20 +465,23 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	if (getsockname(ifd, (struct sockaddr*)&int_addr, &intaddr_len) == -1)
 		goto err;
 
-	ret = accept_connection_setup(accepting_sock_ctx, listening_sock_ctx, ifd);
+	ret = accept_connection_setup(accepting_ctx, listening_ctx, ifd);
 	if (ret != 0)
 		goto err;
 
 	/* now convert the random port the kernel had assigned us */
-	port = (int)ntohs((&int_addr)->sin_port);
-	hashmap_add(daemon->sock_map_port, port, (void*)accepting_sock_ctx);
-	return;
+	int port = get_port((struct sockaddr*) &int_addr);
+    ret = hashmap_add(daemon->sock_map_port, port, (void*)accepting_ctx);
+    if (ret != 0)
+        goto err;
+    
+    return;
  err:
 	log_printf(LOG_ERROR, "Failed to receive remote client connection: "
 			"closing connection.\n");
 
-	if (accepting_sock_ctx != NULL)
-		sock_context_free(accepting_sock_ctx);
+	if (accepting_ctx != NULL)
+		socket_context_free(accepting_ctx);
 
 	if (ifd != -1)
 		EVUTIL_CLOSESOCKET(ifd);
@@ -570,7 +491,7 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 
 void listener_accept_error_cb(struct evconnlistener *listener, void *arg) {
 
-	sock_context* sock_ctx = (sock_context*) arg;
+	socket_ctx* sock_ctx = (socket_ctx*) arg;
 	connection* conn = sock_ctx->conn;
 	int err = EVUTIL_SOCKET_ERROR();
 
@@ -593,10 +514,10 @@ void listener_accept_error_cb(struct evconnlistener *listener, void *arg) {
 		log_printf(LOG_ERROR, "Fatal error %d (%s) on a server listener\n",
 				err, evutil_socket_error_to_string(err));
 
-		SSL_free(conn->tls);
+		SSL_free(conn->ssl);
 		evconnlistener_free(listener);
 		sock_ctx->fd = -1;
-		conn->state = CONN_ERROR;
+		sock_ctx->state = SOCKET_ERROR;
 
 		set_err_string(conn, "External listener failed with error %i: %s",
 				err, strerror(err));
@@ -630,20 +551,20 @@ void signal_cb(evutil_socket_t fd, short event, void* arg) {
  * that mirrors any settings or functionality set by the internal program.
  * That socket is added to a hashmap (sock_map), and is used to establish
  * encrypted connections with the external peer via TLS protocols.
- * @param daemon A pointer to the program's daemon_context.
+ * @param daemon A pointer to the program's daemon_ctx.
  * @param id A uniquely generated ID for the given socket; corresponds with
  * (though is not equal to) the internal program's file descriptor of that
  * socket.
  * @param comm The address path of the calling program.
  * @returns (via netlink) a notification of 0 on success, or -errno on failure.
  */
-void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
+void socket_cb(daemon_ctx* daemon, unsigned long id, char* comm) {
 
-	sock_context* sock_ctx;
+	socket_ctx* sock_ctx;
 	evutil_socket_t fd = -1;
-	int response = 0;
+	int response;
 
-	sock_ctx = (sock_context*)hashmap_get(daemon->sock_map, id);
+	sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);
 	if (sock_ctx != NULL) {
 		log_printf(LOG_ERROR,
 				"We have created a socket with this ID already: %lu\n", id);
@@ -652,37 +573,21 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 		goto err;
 	}
 
-	fd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+    /* TODO: what if AF_INET6 is what the user intents to connect to? */
+	fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (fd == -1) {
 		response = -errno;
 		goto err;
 	}
 
-	/* whether server or client, we need non blocking sockets for bufferevent */
-	
 	if (evutil_make_socket_nonblocking(fd) != 0) {
-		response = -EVUTIL_SOCKET_ERROR();
-		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
-			 evutil_socket_error_to_string(-response));
+		response = EVUTIL_SOCKET_ERROR();
 		goto err;
 	}
 	
-	response = sock_context_new(&sock_ctx, daemon, id);
+	response = socket_context_new(&sock_ctx, fd, daemon, id);
 	if (response != 0)
 		goto err;
-
-	response = connection_new(&(sock_ctx->conn));
-	if (response != 0)
-		goto err;
-
-	response = client_SSL_new(sock_ctx->conn, daemon);
-	if (response != 0)
-		goto err;
-
-	sock_ctx->fd = fd;
-	sock_ctx->conn->state = CLIENT_NEW;
-
-	hashmap_add(daemon->sock_map, id, (void*)sock_ctx);
 
 	log_printf(LOG_INFO, "Socket created on behalf of application %s\n", comm);
 	netlink_notify_kernel(daemon, id, NOTIFY_SUCCESS);
@@ -691,7 +596,7 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 	if (fd != -1)
 		close(fd);
 	if (sock_ctx != NULL)
-		sock_context_free(sock_ctx);
+		socket_context_free(sock_ctx);
 
 	log_printf(LOG_ERROR, "Socket failed to be created: %i\n", response);
 
@@ -699,14 +604,14 @@ void socket_cb(daemon_context* daemon, unsigned long id, char* comm) {
 	return;
 }
 
-void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
+void setsockopt_cb(daemon_ctx* ctx, unsigned long id, int level,
 		int option, void* value, socklen_t len) {
 
-	sock_context* sock_ctx;
+	socket_ctx* sock_ctx;
 	connection* conn;
 	int response = 0; /* Default is success */
 
-	sock_ctx = (sock_context*)hashmap_get(ctx->sock_map, id);
+	sock_ctx = (socket_ctx*)hashmap_get(ctx->sock_map, id);
 	if (sock_ctx == NULL) {
 		netlink_notify_kernel(ctx, id, -EBADF);
 		return;
@@ -717,50 +622,33 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 
 	switch (option) {
 	case TLS_REMOTE_HOSTNAME:
-		if ((response = check_conn_state(conn, 1, CLIENT_NEW)) != 0)
+		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
 			break;
-
-		memcpy(sock_ctx->rem_hostname, value, len); /* kernel validated this */
-		log_printf(LOG_INFO,
-				"Assigning %s to socket %lu\n", sock_ctx->rem_hostname, id);
-
-		response = set_remote_hostname(sock_ctx->conn, value);
+		response = set_remote_hostname(sock_ctx, (char*) value, len);
 		break;
 
 	case TLS_DISABLE_CIPHER:
-		if ((response = check_conn_state(conn, 2, CLIENT_NEW, SERVER_NEW)) != 0)
+		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
 			break;
-		response = disable_cipher(sock_ctx->conn, (char*) value);
+		response = disable_cipher(sock_ctx, (char*) value);
 		break;
 
 	case TLS_TRUSTED_PEER_CERTIFICATES:
-		if ((response = check_conn_state(conn, 2, CLIENT_NEW, SERVER_NEW)) != 0)
+		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
 			break;
-		response = set_trusted_CA_certificates(sock_ctx->conn, (char*) value);
-		break;
-
-	case TLS_CLIENT_CONNECTION:
-		if ((response = check_conn_state(conn, 1, SERVER_NEW)) != 0)
-			break;
-		response = set_connection_client(sock_ctx->conn, ctx);
-		break;
-
-	case TLS_SERVER_CONNECTION:
-		if ((response = check_conn_state(conn, 1, CLIENT_NEW)) != 0)
-			break;
-		response = set_connection_server(sock_ctx->conn, ctx);
+		response = set_trusted_CA_certificates(sock_ctx, (char*) value);
 		break;
 
 	case TLS_CERTIFICATE_CHAIN:
-		if ((response = check_conn_state(conn, 1, SERVER_NEW)) != 0)
+		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
 			break;
-		response = set_certificate_chain(sock_ctx->conn, (char*) value);
+		response = set_certificate_chain(sock_ctx, (char*) value);
 		break;
 
 	case TLS_PRIVATE_KEY:
-		if ((response = check_conn_state(conn, 1, SERVER_NEW)) != 0)
+		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
 			break;
-		response = set_private_key(sock_ctx->conn, value);
+		response = set_private_key(sock_ctx, value);
 		break;
 
 	case TLS_ERROR:
@@ -781,10 +669,10 @@ void setsockopt_cb(daemon_context* ctx, unsigned long id, int level,
 	return;
 }
 
-void getsockopt_cb(daemon_context* daemon, 
+void getsockopt_cb(daemon_ctx* daemon, 
 		unsigned long id, int level, int option) {
 
-	sock_context* sock_ctx;
+	socket_ctx* sock_ctx;
 	connection* conn;
 	/* long value; */
 	int response = 0;
@@ -792,7 +680,7 @@ void getsockopt_cb(daemon_context* daemon,
 	unsigned int len = 0;
 	int need_free = 0;
 
-	sock_ctx = (sock_context*)hashmap_get(daemon->sock_map, id);
+	sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);
 	if (sock_ctx == NULL) {
 		netlink_notify_kernel(daemon, id, -EBADF);
 		return;
@@ -801,7 +689,6 @@ void getsockopt_cb(daemon_context* daemon,
 
 	switch (option) {
 	case TLS_ERROR:
-		//Can be checked in any connection state
 		if (!has_err_string(conn)) {
 			response = -EINVAL;
 			break;
@@ -812,8 +699,8 @@ void getsockopt_cb(daemon_context* daemon,
 		break;
 
 	case TLS_REMOTE_HOSTNAME:
-		if ((response = check_conn_state(conn,
-				2, CLIENT_NEW, CLIENT_CONNECTED)) != 0)
+		if ((response = check_socket_state(sock_ctx,
+				2, SOCKET_NEW, SOCKET_CONNECTED)) != 0)
 			break;
 
 		if (strlen(sock_ctx->rem_hostname) > 0) {
@@ -823,8 +710,8 @@ void getsockopt_cb(daemon_context* daemon,
 		break;
 
 	case TLS_HOSTNAME:
-		if ((response = check_conn_state(conn, 
-				3, SERVER_NEW, SERVER_LISTENING, SERVER_CONNECTED)) != 0)
+		if ((response = check_socket_state(sock_ctx, 
+				1, SOCKET_ACCEPTED)) != 0)
 			break;
 
 		if(get_hostname(conn, &data, &len) == 0) {
@@ -833,8 +720,8 @@ void getsockopt_cb(daemon_context* daemon,
 		break;
 
 	case TLS_PEER_IDENTITY:
-		if ((response = check_conn_state(conn, 2, 
-				CLIENT_CONNECTED, SERVER_CONNECTED)) != 0)
+		if ((response = check_socket_state(sock_ctx, 2, 
+				SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
 			break;
 
 		response = get_peer_identity(conn, &data, &len);
@@ -843,7 +730,7 @@ void getsockopt_cb(daemon_context* daemon,
 		break;
 
 	case TLS_PEER_CERTIFICATE_CHAIN:
-		if ((response = check_conn_state(conn, 1, CLIENT_CONNECTED)) != 0)
+		if ((response = check_socket_state(sock_ctx, 1, SOCKET_CONNECTED)) != 0)
 			break;
 		response = get_peer_certificate(conn, &data, &len);
 		if (response == 0)
@@ -851,9 +738,6 @@ void getsockopt_cb(daemon_context* daemon,
 		break;
 
 	case TLS_TRUSTED_CIPHERS:
-		if ((response = check_conn_state(conn, 5, CLIENT_NEW, SERVER_NEW, 
-				CLIENT_CONNECTED, SERVER_CONNECTED, SERVER_LISTENING)) != 0)
-			break;
 		response = get_enabled_ciphers(conn, &data, &len);
 		if (response == 0)
 			need_free = 1;
@@ -893,15 +777,15 @@ void getsockopt_cb(daemon_context* daemon,
 	return;
 }
 
-void bind_cb(daemon_context* daemon, unsigned long id,
+void bind_cb(daemon_ctx* daemon, unsigned long id,
 			 struct sockaddr* int_addr, int int_addrlen,
 			 struct sockaddr* ext_addr, int ext_addrlen) {
 
-	sock_context* sock_ctx = NULL;
+	socket_ctx* sock_ctx = NULL;
 	connection* conn;
 	int response = 0;
 
-	sock_ctx = (sock_context*)hashmap_get(daemon->sock_map, id);
+	sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);
 	if (sock_ctx == NULL) {
 		response = -EBADF;
 		goto err;
@@ -909,16 +793,13 @@ void bind_cb(daemon_context* daemon, unsigned long id,
 
 	conn = sock_ctx->conn;
 
-	response = check_conn_state(conn, 2, CLIENT_NEW, SERVER_NEW);
+	response = check_socket_state(sock_ctx, 1, SOCKET_NEW);
 	if (response != 0) {
 		netlink_notify_kernel(daemon, id, response);
 		return;
 	}
 
 	if (evutil_make_listen_socket_reuseable(sock_ctx->fd) != 0) {
-		log_printf(LOG_ERROR,
-				"Failed in evutil_make_listen_socket_reusable: %s\n",
-				evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
 		response = -EVUTIL_SOCKET_ERROR();
 		set_err_string(conn, "Bind error: "
 				"SSA daemon's internal socket couldn't be made reusable");
@@ -944,10 +825,8 @@ void bind_cb(daemon_context* daemon, unsigned long id,
 	if (sock_ctx != NULL) {
 		EVUTIL_CLOSESOCKET(sock_ctx->fd);
 		sock_ctx->fd = -1;
-		SSL_free(sock_ctx->conn->tls);
-		sock_ctx->conn->tls = NULL;
 
-		sock_ctx->conn->state = CONN_ERROR;
+		sock_ctx->state = SOCKET_ERROR;
 	}
 
 	netlink_notify_kernel(daemon, id, response);
@@ -975,15 +854,15 @@ void bind_cb(daemon_context* daemon, unsigned long id,
  * @return No return value--meant to send a netlink message if something is
  * to be returned.
  */
-void connect_cb(daemon_context* daemon, unsigned long id,
+void connect_cb(daemon_ctx* daemon, unsigned long id,
 		struct sockaddr* int_addr, int int_addrlen,
 		struct sockaddr* rem_addr, int rem_addrlen, int blocking) {
 
-	sock_context* sock_ctx;
+	socket_ctx* sock_ctx;
 	connection* conn;
 	int response = 0, ret;
 
-	sock_ctx = (sock_context*)hashmap_get(daemon->sock_map, id);
+	sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);
 	if (sock_ctx == NULL) {
 		response = -EBADF;
 		goto err;
@@ -993,22 +872,23 @@ void connect_cb(daemon_context* daemon, unsigned long id,
 
 	clear_err_string(conn);
 
-	response = check_conn_state(conn, 
-			3, CLIENT_NEW, CLIENT_CONNECTING, CLIENT_CONNECTED);
+	response = check_socket_state(sock_ctx, 4, 
+            SOCKET_NEW, SOCKET_CONNECTING, 
+            SOCKET_REV_CHECKING, SOCKET_CONNECTED);
 	if (response != 0) {
 		netlink_notify_kernel(daemon, id, response);
 		return;
 	}
 
-	if (conn->state == CLIENT_CONNECTING) {
+	if (sock_ctx->state == SOCKET_CONNECTING 
+            || sock_ctx->state == SOCKET_REV_CHECKING) {
 		netlink_notify_kernel(daemon, id, -EALREADY);
 		return;
-	} else if (conn->state == CLIENT_CONNECTED) {
+
+	} else if (sock_ctx->state == SOCKET_CONNECTED) {
 		netlink_notify_kernel(daemon, id, -EISCONN);
 		return;
 	}
-
-	// state == CLIENT_NEW - we need to initiate the connection
 
 	sock_ctx->int_addr = *int_addr;
 	sock_ctx->int_addrlen = int_addrlen;
@@ -1028,7 +908,7 @@ void connect_cb(daemon_context* daemon, unsigned long id,
 	}
 
 	hashmap_add(daemon->sock_map_port, get_port(int_addr), sock_ctx);
-	conn->state = CLIENT_CONNECTING;
+    sock_ctx->state = SOCKET_CONNECTING;
 
 	if (!blocking) {
 		log_printf(LOG_INFO, "Nonblocking connect requested\n");
@@ -1039,53 +919,37 @@ void connect_cb(daemon_context* daemon, unsigned long id,
  err:
 	
 	if (sock_ctx != NULL) {
-		connection_shutdown(sock_ctx);
-		conn->state = CONN_ERROR;
+		socket_shutdown(sock_ctx);
+		sock_ctx->state = SOCKET_ERROR;
 	}
 
 	netlink_notify_kernel(daemon, id, response);
 	return;
 }
 
-void listen_cb(daemon_context* daemon, unsigned long id,
+void listen_cb(daemon_ctx* daemon, unsigned long id,
 			   struct sockaddr* int_addr, int int_addrlen,
 			   struct sockaddr* ext_addr, int ext_addrlen) {
 
-	sock_context* sock_ctx = NULL;
-	connection* conn;
+	socket_ctx* sock_ctx = NULL;
 	int response = 0;
 
-	sock_ctx = (sock_context*)hashmap_get(daemon->sock_map, id);
+	sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);
 	if (sock_ctx == NULL) {
-		response = -EBADF;
-		goto err;
+        netlink_notify_kernel(daemon, id, -EBADF);
+        return;
 	}
 
-	conn = sock_ctx->conn;
-	clear_err_string(conn);
-
-	/* convert a CLIENT_NEW connection into a SERVER_NEW automatically */
-	if (conn->state == CLIENT_NEW) {
-		response = server_SSL_new(conn, daemon);
-		if (response != 0) {
-			set_err_string(conn, "Listener setup error: "
-					"SSA daemon buffer allocation failed");
-			goto err;
-		}
-		conn->state = SERVER_NEW;
-	}
-
-	response = check_conn_state(conn, 1, SERVER_NEW);
+	response = check_socket_state(sock_ctx, 1, SOCKET_NEW);
 	if (response != 0) {
 		netlink_notify_kernel(daemon, id, response);
 		return;
 	}
 
-
 	/* set external-facing socket to listen */
 	if (listen(sock_ctx->fd, SOMAXCONN) == -1) {
 		response = -errno;
-		set_err_string(conn, "Listener setup error: "
+		set_err_string(sock_ctx->conn, "Listener setup error: "
 				"SSA daemon's external socket returned error on `listen()`");
 		goto err;
 	}
@@ -1095,27 +959,24 @@ void listen_cb(daemon_context* daemon, unsigned long id,
 			LEV_OPT_CLOSE_ON_FREE | LEV_OPT_THREADSAFE, 0, sock_ctx->fd);
 	if (sock_ctx->listener == NULL) {
 		response = -errno;
-		set_err_string(conn, "Listener setup error: "
+		set_err_string(sock_ctx->conn, "Listener setup error: "
 				"failed to allocate buffers within the SSA daemon");
 		goto err;
 	}
 	evconnlistener_set_error_cb(sock_ctx->listener, listener_accept_error_cb);
 
-	conn->state = SERVER_LISTENING;
+	sock_ctx->state = SOCKET_LISTENING;
 
 	netlink_notify_kernel(daemon, id, NOTIFY_SUCCESS);
-
-	log_printf(LOG_DEBUG, "port now listening for incoming connections\n");
 	return;
  err:
-	log_printf(LOG_ERROR, "listen_cb failed: %i.\n", response);
+	log_printf(LOG_ERROR, "listen_cb failed: %s\n", strerror(-response));
 	netlink_notify_kernel(daemon, id, response);
 
 	/* listener is the last failable thing set; no need to check it */
-	SSL_free(sock_ctx->conn->tls);
-	EVUTIL_CLOSESOCKET(sock_ctx->fd);
+    EVUTIL_CLOSESOCKET(sock_ctx->id);
 
-	sock_ctx->conn->state = CONN_ERROR;
+	sock_ctx->state = SOCKET_ERROR;
 	return;
 }
 
@@ -1128,10 +989,10 @@ void listen_cb(daemon_context* daemon, unsigned long id,
  * so that the internal user can begin to communicate via the daemon to the
  * client.
  */
-void associate_cb(daemon_context* daemon, unsigned long id,
+void associate_cb(daemon_ctx* daemon, unsigned long id,
 		struct sockaddr* int_addr, int int_addrlen) {
 
-	sock_context* sock_ctx;
+	socket_ctx* sock_ctx;
 	int port = get_port(int_addr);
 
 	sock_ctx = hashmap_get(daemon->sock_map_port, port);
@@ -1141,19 +1002,20 @@ void associate_cb(daemon_context* daemon, unsigned long id,
 		return;
 	}
 
-	if (sock_ctx->conn->state != SERVER_CONNECTING) {
-		// Tear down this connection--nobody has access to it anyways */
-		netlink_notify_kernel(daemon, id, -ECONNABORTED);
-		connection_shutdown(sock_ctx);
+	if (sock_ctx->state != SOCKET_CONNECTING) {
+		/* Tear down this connection--nobody has access to it anyways */
+		socket_shutdown(sock_ctx);
 		hashmap_del(daemon->sock_map_port, port);
-		sock_context_free(sock_ctx);
+		socket_context_free(sock_ctx);
+
+		netlink_notify_kernel(daemon, id, -ECONNABORTED);
 		return;
 	}
 
 	hashmap_del(daemon->sock_map_port, port);
 
 	sock_ctx->id = id;
-	sock_ctx->conn->state = SERVER_CONNECTED;
+	sock_ctx->state = SOCKET_ACCEPTED;
 
 	hashmap_add(daemon->sock_map, id, (void*)sock_ctx);
 
@@ -1166,142 +1028,26 @@ void associate_cb(daemon_context* daemon, unsigned long id,
  * with a socket.
  * @param id The id of the socket to be closed.
  */
-void close_cb(daemon_context* daemon_ctx, unsigned long id) {
-	sock_context* sock_ctx;
+void close_cb(daemon_ctx* daemon_ctx, unsigned long id) {
+	socket_ctx* sock_ctx;
 
-	sock_ctx = (sock_context*)hashmap_get(daemon_ctx->sock_map, id);
+	sock_ctx = (socket_ctx*)hashmap_get(daemon_ctx->sock_map, id);
 	if (sock_ctx == NULL) {
 		log_printf(LOG_ERROR, "Close called on non-existent socket\n");
 		return;
 	}
 
-	switch (sock_ctx->conn->state) {
-	case CLIENT_CONNECTING:
-	case SERVER_CONNECTING:
-	case CLIENT_CONNECTED:
-	case SERVER_CONNECTED:
-		connection_shutdown(sock_ctx);
+	switch (sock_ctx->state) {
+	case SOCKET_REV_CHECKING:
+	case SOCKET_CONNECTED:
+	case SOCKET_ACCEPTED:
+		socket_shutdown(sock_ctx);
 		break;
 	default:
 		break;
 	}
 
-	sock_context_free(sock_ctx);
+	socket_context_free(sock_ctx);
 	hashmap_del(daemon_ctx->sock_map, id);
 	return;
-}
-
-void upgrade_cb(daemon_context* daemon_ctx, unsigned long id,
-		struct sockaddr* int_addr, int int_addrlen) {
-	/* This was implemented in the kernel directly. */
-	return;
-}
-
-void upgrade_recv(evutil_socket_t fd, short events, void *arg) {
-	sock_context* sock_ctx;
-	daemon_context* daemon_ctx = (daemon_context*)arg;
-	char msg_buffer[256];
-	int new_fd;
-	int bytes_read;
-	unsigned long id;
-	int is_accepting;
-	struct sockaddr_un addr = {};
-	/* Why the 5? Because that's what linux uses for autobinds */
-	/* Why the 1? Because of the null byte in front of abstract names */
-	int addr_len = sizeof(sa_family_t) + 5 + 1;
-	log_printf(LOG_INFO, "Someone wants an upgrade!\n");
-	memset(msg_buffer, 0, 256);
-	bytes_read = recv_fd_from(fd, msg_buffer, 255, &new_fd, &addr, addr_len);
-	if (bytes_read == -1) {
-		log_printf(LOG_ERROR, "recv_fd: %s\n", strerror(errno));
-		return;
-	}
-
-	sscanf(msg_buffer, "%d:%lu", &is_accepting, &id);
-	log_printf(LOG_INFO, "Got a new %s descriptor %d,"
-			" to be associated with %lu from addr %s\n",
-			is_accepting == 1 ? "accepting" : "connecting",
-			new_fd, id, addr.sun_path+1, addr_len);
-	sock_ctx = (sock_context*)hashmap_get(daemon_ctx->sock_map, id);
-	if (sock_ctx == NULL) {
-		return;
-	}
-	EVUTIL_CLOSESOCKET(sock_ctx->fd);
-	sock_ctx->fd = new_fd;
-	/* set_connected(sock_ctx->state); */
-
-	if (is_accepting == 1) {
-		/* TODO: Eventually clean up this whole section--ripped from tls_opts_server_setup()... */
-		SSL_CTX* server_settings = daemon_ctx->server_ctx;
-		SSL_CTX_set_options(server_settings, SSL_OP_ALL);
-		/* There's a billion options we can/should set here by admin config XXX
-		* See SSL_CTX_set_options and SSL_CTX_set_cipher_list for details */
-
-		/* XXX We can do all sorts of caching modes and define our own callbacks
-		* if desired */
-		SSL_CTX_set_session_cache_mode(server_settings, SSL_SESS_CACHE_SERVER);
-		SSL_CTX_use_certificate_chain_file(server_settings, "test_files/localhost_cert.pem");
-		SSL_CTX_use_PrivateKey_file(server_settings, "test_files/localhost_key.pem", SSL_FILETYPE_PEM);
-		/* Thus concludes the TODO. */
-
-		/* set_accepting(sock_ctx->state); */
-	}
-	else {
-		/* used to have tls_opts_client_setup(sock_ctx->tls_opts); */
-		/*set_not_accepting(sock_ctx->state);*/
-	}
-
-	if (sendto(fd, "GOT IT", sizeof("GOT IT"), 0, (struct sockaddr*)&addr, addr_len) == -1) {
-		perror("sendto");
-	}
-	return;
-}
-
-/* Modified read_fd taken from various online sources. Found without copyright or
- * attribution. Examples also in manpages so we could use that if needed */
-ssize_t recv_fd_from(int fd, void *ptr, size_t nbytes, int *recvfd, struct sockaddr_un* addr, int addr_len) {
-	struct msghdr msg;
-	struct iovec iov[1];
-	ssize_t	n;
-
-	union {
-		struct cmsghdr cm;
-		char control[CMSG_SPACE(sizeof(int))];
-	} control_un;
-	struct cmsghdr* cmptr;
-
-	msg.msg_control = control_un.control;
-	msg.msg_controllen = sizeof(control_un.control);
-	msg.msg_name = addr;
-	msg.msg_namelen = addr_len;
-
-	iov[0].iov_base = ptr;
-	iov[0].iov_len = nbytes;
-	msg.msg_iov = iov;
-	msg.msg_iovlen = 1;
-
-	if ((n = recvmsg(fd, &msg, 0)) <= 0) {
-		// message length of error or 0
-		*recvfd = -1;
-		return n;
-	}
-
-	if ((cmptr = CMSG_FIRSTHDR(&msg)) != NULL &&
-	    cmptr->cmsg_len == CMSG_LEN(sizeof(int))) {
-		if (cmptr->cmsg_level != SOL_SOCKET) {
-			log_printf(LOG_ERROR, "control level != SOL_SOCKET\n");
-			*recvfd = -1;
-			return -1;
-		}
-		if (cmptr->cmsg_type != SCM_RIGHTS) {
-			log_printf(LOG_ERROR, "control type != SCM_RIGHTS\n");
-			*recvfd = -1;
-			return -1;
-		}
-		*recvfd = *((int *) CMSG_DATA(cmptr));
-	}
-	else {
-		*recvfd = -1; /* descriptor was not passed */
-	}
-	return n;
 }
