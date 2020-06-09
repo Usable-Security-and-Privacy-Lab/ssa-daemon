@@ -2,131 +2,95 @@
 # The following are the loadable configurations for the SSA Daemon.
 # If a configuration is not set in this YAML file, the default will be use
 # (as listed to the right/bottom of each setting)
-client:
-  # TLS Protocols include TLS-1.0, TLS-1.1, TLS-1.2 and TLS-1.3. Note that 
-  # SSLv2 and SSLv3 cannot be enabled (due to considerable security flaws).
-  # protocols lower than TLS-1.2 are considered deprecated and insecure by most browsers.
-  min-tls-version: 1.2 # Default: 1.3
-  max-tls-version: 1.3 # Default: 1.3
+  
+  
+# TLS Protocols include TLS-1.0, TLS-1.1, TLS-1.2 and TLS-1.3. Note that 
+# SSLv2 and SSLv3 cannot be enabled (due to considerable security flaws).
+# protocols lower than TLS-1.2 are considered deprecated and insecure by most browsers.
+min-tls-version: 1.2 # Default: 1.3
+max-tls-version: 1.3 # Default: 1.3
 
-  # The following is commented out since the SSA Daemon does a decent job at finding
-  # the correct CA path based on what Linux distro is being run (particularly for Fedora & Ubuntu).
+# The following is commented out since the SSA Daemon does a decent job at finding
+# the correct CA path based on what Linux distro is being run (particularly for Fedora & Ubuntu).
 #  CA-path: /etc/ssl/certs
 #  CA-path: test_files/certs/rootCA.pem # use this for testing our server
 
-  # The CRIME attack targets TLS Compression; an attacker can gain information 
-  # about authorization tokens, secret web cookies or other sensitive information 
-  # passed in HTTP requests/responses since message lengths are not hidden by encryption.
-  # It should be kept disabled unless other mitigations are put in place.
-  tls-compression: disabled # Default: disabled
+# The CRIME attack targets TLS Compression; an attacker can gain information 
+# about authorization tokens, secret web cookies or other sensitive information 
+# passed in HTTP requests/responses since message lengths are not hidden by encryption.
+# It should be kept disabled unless other mitigations are put in place.
+tls-compression: disabled # Default: disabled
 
-  # Default ciphers in this list (and added by the SSA Daemon in the event of no configuration
-  # file found) all maintain Forward Secrecy (the second 'E' in ECDHE is for Ephemeral).
-  # NULL, RC4, MD4 and MD5 ciphers SHOULD NOT be allowed in this list, and SHA128 is
-  # also considered insecure. Make sure to research your cipher before adding it to this list.
-  cipher-list: 
-    - ECDHE-ECDSA-AES256-GCM-SHA384
-    - ECDHE-RSA-AES256-GCM-SHA384
-    - ECDHE-ECDSA-CHACHA20-POLY1305
-    - ECDHE-RSA-CHACHA20-POLY1305
-    - ECDHE-ECDSA-AES128-GCM-SHA256
-    - ECDHE-RSA-AES128-GCM-SHA256
+# Session Tickets posess a vulnerability in them for TLS 1.2 and lower.
+# For more info, see here: https://blog.filippo.io/we-need-to-talk-about-session-tickets/
+# Realistically, they should be kept disabled unless TLS-1.3 is your minimum TLS version.
+session-tickets: disabled  # Default: disabled
 
-    # Defaults: - ECDHE-ECDSA-AES256-GCM-SHA384
-    #           - ECDHE-RSA-AES256-GCM-SHA384
-    #           - ECDHE-ECDSA-CHACHA20-POLY1305
-    #           - ECDHE-RSA-CHACHA20-POLY1305
-    #           - ECDHE-ECDSA-AES128-GCM-SHA256
-    #           - ECDHE-RSA-AES128-GCM-SHA256
+# Default ciphers in this list (and added by the SSA Daemon in the event of no configuration
+# file found) all maintain Forward Secrecy (the second 'E' in ECDHE is for Ephemeral).
+# NULL, RC4, MD4 and MD5 ciphers SHOULD NOT be allowed in this list, and SHA128 is
+# also considered insecure. Make sure to research your cipher before adding it to this list.
+cipher-list: 
+  - ECDHE-ECDSA-AES256-GCM-SHA384
+  - ECDHE-RSA-AES256-GCM-SHA384
+  - ECDHE-ECDSA-CHACHA20-POLY1305
+  - ECDHE-RSA-CHACHA20-POLY1305
+  - ECDHE-ECDSA-AES128-GCM-SHA256
+  - ECDHE-RSA-AES128-GCM-SHA256
 
-  # These are the only ciphersuites accepted by TLS 1.3; they're all very safe.
-  ciphersuites:
-    - TLS_AES_256_GCM_SHA384
-    - TLS_AES_128_GCM_SHA256
-    - TLS_CHACHA20_POLY1305_SHA256
-    - TLS_AES_128_CCM_SHA256
-    - TLS_AES_128_CCM_8_SHA256
+  # Defaults: - ECDHE-ECDSA-AES256-GCM-SHA384
+  #           - ECDHE-RSA-AES256-GCM-SHA384
+  #           - ECDHE-ECDSA-CHACHA20-POLY1305
+  #           - ECDHE-RSA-CHACHA20-POLY1305
+  #           - ECDHE-ECDSA-AES128-GCM-SHA256
+  #           - ECDHE-RSA-AES128-GCM-SHA256
 
-  # Defaults: - TLS_AES_256_GCM_SHA384
-  #           - TLS_AES_128_GCM_SHA256
-  #           - TLS_CHACHA20_POLY1305_SHA256
-  #           - TLS_AES_128_CCM_SHA256
-  #           - TLS_AES_128_CCM_8_SHA256
+# These are the only ciphersuites accepted by TLS 1.3; they're all very safe.
+ciphersuites:
+  - TLS_AES_256_GCM_SHA384
+  - TLS_AES_128_GCM_SHA256
+  - TLS_CHACHA20_POLY1305_SHA256
+  - TLS_AES_128_CCM_SHA256
+  - TLS_AES_128_CCM_8_SHA256
 
-  # Sessions older than the session timeout are not reused.  Value is in seconds.
-  session-timeout: 300 # Default: 300 seconds
-  
-  # Set the maximum number of certificates that can be traversed before certification fails. 
-  # To allow for unlimited certificates to be traversed, set the value to 0.
-  cert-verification-depth: 100
-  # Default: 100. This allows for the peer certificate, at most 100 intermediate CA certificates and a final trust anchor certificate.
+# Defaults: - TLS_AES_256_GCM_SHA384
+#           - TLS_AES_128_GCM_SHA256
+#           - TLS_CHACHA20_POLY1305_SHA256
+#           - TLS_AES_128_CCM_SHA256
+#           - TLS_AES_128_CCM_8_SHA256
 
-  # Enable certificate transparency verification. Servers that do not provide a valid SCT will not be connected with.
-  # Provides greater security by guarding against several types of certificate-based threats.
-  # See http://www.certificate-transparency.org/what-is-ct for more information.
-  verify-cert-transparency: enabled
-  # Default: enabled
+# Sessions older than the session timeout are not reused.  Value is in seconds.
+session-timeout: 300 # Default: 300 seconds
 
-  # FOR TESTING ONLY: uncomment this line if you want to test the https_server.
-  # ca-path: test_files/certs/rootCA.pem
+# Set the maximum number of certificates that can be traversed before certification fails. 
+# To allow for unlimited certificates to be traversed, set the value to 0.
+cert-verification-depth: 100
+# Default: 100. This allows for the peer certificate, at most 100 intermediate CA certificates and a final trust anchor certificate.
+
+# Enable certificate transparency verification. Servers that do not provide a valid SCT will not be connected with.
+# Provides greater security by guarding against several types of certificate-based threats.
+# See http://www.certificate-transparency.org/what-is-ct for more information.
+verify-cert-transparency: enabled
+# Default: enabled
+
+# Certificate Revocation checks are important in determining the authenticity of a webiste.
+revocation-checks: off
 
 
-# The same settings that applied to clients should really be applied to servers as well.
-# While servers are generally not at risk of compromise based on these settings, the 
-# clients that they accept connections from are. Allowing only strict settings ensures
-# that such clients will not be vulnerable to Man-in-the-Middle attacks while connected
-# to your site, even if their browser is generally susceptible to such.
-server:
+# Set the path to the certificate chain to be provided to clients.
+# There are two options for this:
+# 1. Give the path to a file in PEM format containing the entire certificate chain.
+#    The certificates should be in the correct order from server certificate to root certificate.
+# 2. Give the path to a directory containing files that hold one certificate each. The files
+#    may be in PEM format or DER (ASN1).  The files should be named such that the file with 
+#    the first certificate in the chain ends with a '0'. The following certificates should have
+#    names ending in '1', '2', etc. with the files in order from server certificate to intermediate
+#    certificates to root certificate.
+cert-path: test_files/certs/server_chain.pem
 
-  # Note that these settings have the same defaults as that of client settings (for now)
-  min-tls-version: 1.2
-  max-tls-version: 1.3
-  tls-compression: disabled  
+# Set the path to the file containing the private key. The file may be in PEM or DER (ASN1) format.
+key-path: test_files/certs/server_key.pem
 
-  # Session Tickets posess a vulnerability in them for TLS 1.2 and lower.
-  # For more info, see here: https://blog.filippo.io/we-need-to-talk-about-session-tickets/
-  # Realistically, they should be kept disabled unless TLS-1.3 is your minimum TLS version.
-  session-tickets: disabled  # Default: disabled
-
-  CA-path: test_files/certs/rootCA.pem
-
-  cipher-list: 
-    - ECDHE-ECDSA-AES256-GCM-SHA384
-    - ECDHE-RSA-AES256-GCM-SHA384
-    - ECDHE-ECDSA-CHACHA20-POLY1305
-    - ECDHE-RSA-CHACHA20-POLY1305
-    - ECDHE-ECDSA-AES128-GCM-SHA256
-    - ECDHE-RSA-AES128-GCM-SHA256
-  
-  ciphersuites:
-    - TLS_AES_256_GCM_SHA384
-    - TLS_AES_128_GCM_SHA256
-    - TLS_CHACHA20_POLY1305_SHA256
-    - TLS_AES_128_CCM_SHA256
-    - TLS_AES_128_CCM_8_SHA256
-
-  session-timeout: 300
-
-  # Client certificates are not currently supported, so certificate verification depth is 
-  # not necessary in server settings.
-
-  # Set the path to the certificate chain to be provided to clients.
-  # There are two options for this:
-  # 1. Give the path to a file in PEM format containing the entire certificate chain.
-  #    The certificates should be in the correct order from server certificate to root certificate.
-  # 2. Give the path to a directory containing files that hold one certificate each. The files
-  #    may be in PEM format or DER (ASN1).  The files should be named such that the file with 
-  #    the first certificate in the chain ends with a '0'. The following certificates should have
-  #    names ending in '1', '2', etc. with the files in order from server certificate to intermediate
-  #    certificates to root certificate.
-  cert-path: test_files/certs/server_chain.pem
-
-  # Set the path to the file containing the private key. The file may be in PEM or DER (ASN1) format.
-  key-path: test_files/certs/server_key.pem
-
-  #Multiple certificate chain / key pairs can be provided if desired (One for RSA and one for DSA certificates).
-  # cert-path: test_files/certs/server_chain2.pem
-  # key-path: test_files/certs/server_key2.pem
-
-# Only 'client:' and 'server:' should be in this document, and only once. Consult the SSA
-# Daemon's logs if it fails to load this file--there are usually helpful log error reports.
+#Multiple certificate chain / key pairs can be provided if desired (One for RSA and one for DSA certificates).
+# cert-path: test_files/certs/server_chain2.pem
+# key-path: test_files/certs/server_key2.pem
