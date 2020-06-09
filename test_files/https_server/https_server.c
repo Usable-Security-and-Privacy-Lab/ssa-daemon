@@ -40,6 +40,10 @@ int main() {
 		int c_fd = accept(fd, (struct sockaddr*)&addr, &addr_len);
         printf("Connection received!\n");
 		int num_received = recv(c_fd, request, BUFFER_SIZE, 0);
+        if (num_received < 0) {
+            close(c_fd);
+            return 0;
+        }
 		printf("Received %i bytes from client.\n", num_received);
 		handle_req(request, response, num_received);
 		int num_sent = send(c_fd, response, num_received+1, 0); /* +1 for EOF */
