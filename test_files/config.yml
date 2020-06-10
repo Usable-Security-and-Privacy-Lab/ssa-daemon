@@ -13,7 +13,7 @@ max-tls-version: 1.3 # Default: 1.3
 # The following is commented out since the SSA Daemon does a decent job at finding
 # the correct CA path based on what Linux distro is being run (particularly for Fedora & Ubuntu).
 #  CA-path: /etc/ssl/certs
-#  CA-path: test_files/certs/rootCA.pem # use this for testing our server
+CA-path: test_files/certs/rootCA.pem # use this for testing our server
 
 # The CRIME attack targets TLS Compression; an attacker can gain information 
 # about authorization tokens, secret web cookies or other sensitive information 
@@ -64,17 +64,18 @@ session-timeout: 300 # Default: 300 seconds
 
 # Set the maximum number of certificates that can be traversed before certification fails. 
 # To allow for unlimited certificates to be traversed, set the value to 0.
-cert-verification-depth: 100
-# Default: 100. This allows for the peer certificate, at most 100 intermediate CA certificates and a final trust anchor certificate.
+cert-verification-depth: 10
+# Default: 10. This allows for the peer certificate, at most 10 intermediate CA certificates and a final trust anchor certificate.
 
 # Enable certificate transparency verification. Servers that do not provide a valid SCT will not be connected with.
 # Provides greater security by guarding against several types of certificate-based threats.
 # See http://www.certificate-transparency.org/what-is-ct for more information.
-verify-cert-transparency: enabled
+verify-cert-transparency: disabled
 # Default: enabled
 
 # Certificate Revocation checks are important in determining the authenticity of a webiste.
-revocation-checks: off
+revocation-checks: on
+# Default: enabled
 
 
 # Set the path to the certificate chain to be provided to clients.

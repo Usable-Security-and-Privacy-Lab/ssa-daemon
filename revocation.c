@@ -16,7 +16,7 @@ void set_revocation_state(socket_ctx* sock_ctx, enum revocation_state state) {
 
     sock_ctx->revocation.state = state;
 
-    if (sock_ctx->state == SOCKET_REV_CHECKING) {
+    if (sock_ctx->state == SOCKET_FINISHING_CONN) {
         switch (state) {
         case REV_S_PASS:
             response = NOTIFY_SUCCESS;
@@ -249,7 +249,7 @@ int parse_url(char* url, char** host_out, int* port_out, char** path_out) {
  */
 int check_stapled_response(socket_ctx* sock_ctx) {
 
-    SSL* ssl = sock_ctx->conn->ssl;
+    SSL* ssl = sock_ctx->ssl;
 	unsigned char* stapled_resp;
 	int resp_len, ret;
 
@@ -281,7 +281,7 @@ int do_ocsp_response_checks(unsigned char* resp_bytes,
 		 int resp_len, socket_ctx* sock_ctx) {
 
 	OCSP_BASICRESP* basicresp = NULL;
-	SSL* ssl = sock_ctx->conn->ssl;
+	SSL* ssl = sock_ctx->ssl;
 	STACK_OF(X509)* chain = NULL;
 	X509_STORE* store = NULL;
 	OCSP_CERTID* id = NULL;
@@ -464,12 +464,12 @@ int check_cached_response(socket_ctx* sock_ctx) {
 	char* id_string = NULL;
 	int ret;
 
-	store = SSL_CTX_get_cert_store(SSL_get_SSL_CTX(sock_ctx->conn->ssl));
-	chain = SSL_get_peer_cert_chain(sock_ctx->conn->ssl);
+	store = SSL_CTX_get_cert_store(SSL_get_SSL_CTX(sock_ctx->ssl));
+	chain = SSL_get_peer_cert_chain(sock_ctx->ssl);
 	if (store == NULL || chain == NULL)
 		goto err;
 
-	id = get_ocsp_certid(sock_ctx->conn->ssl);
+	id = get_ocsp_certid(sock_ctx->ssl);
 	if (id == NULL)
 		goto err;
 

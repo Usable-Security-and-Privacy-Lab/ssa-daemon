@@ -34,7 +34,6 @@
 
 
 int client_SSL_new(socket_ctx* sock_ctx);
-int client_connection_setup(socket_ctx* sock_ctx);
 
 int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, long len);
 

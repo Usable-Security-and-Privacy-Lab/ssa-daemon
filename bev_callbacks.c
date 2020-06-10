@@ -25,9 +25,9 @@
 void handle_client_event_connected(socket_ctx* sock_ctx, 
 		daemon_ctx* daemon,	unsigned long id, channel* startpoint);
 void handle_server_event_connected(socket_ctx* sock_ctx, channel* startpoint);
-void handle_event_error(connection* conn, 
+void handle_event_error(socket_ctx* sock_ctx, 
 		int error, channel* startpoint, channel* endpoint);
-void handle_event_eof(connection* conn, channel* startpoint, channel* endpoint);
+void handle_event_eof(socket_ctx* sock_ctx, channel* startpoint, channel* endpoint);
 void handle_event_timeout(socket_ctx* sock_ctx);
 
 
@@ -88,11 +88,11 @@ void fail_revocation_checks(socket_ctx* sock_ctx);
  */
 void common_bev_write_cb(struct bufferevent *bev, void *arg) {
 
-	connection* conn = ((socket_ctx*)arg)->conn;
-	channel* endpoint = (bev == conn->secure.bev) ? &conn->plain : &conn->secure;
+	socket_ctx* sock_ctx = (socket_ctx*) arg;
+	channel* endpoint = (bev == sock_ctx->secure.bev) ? &sock_ctx->plain : &sock_ctx->secure;
 	
 	log_printf(LOG_DEBUG, "write event on bev %p (%s)\n", bev, 
-			(bev == conn->secure.bev) ? "secure" : "plain");
+			(bev == sock_ctx->secure.bev) ? "secure" : "plain");
 
 	if (endpoint->bev && !(bufferevent_get_enabled(endpoint->bev) & EV_READ)) {
 		bufferevent_setwatermark(bev, EV_WRITE, 0, 0);
@@ -113,15 +113,15 @@ void common_bev_write_cb(struct bufferevent *bev, void *arg) {
 void common_bev_read_cb(struct bufferevent* bev, void* arg) {
 	/* TODO: set read high-water mark?? */
 	
-	connection* conn = ((socket_ctx*)arg)->conn;
-	channel* endpoint = (bev == conn->secure.bev) 
-			? &conn->plain : &conn->secure;
+	socket_ctx* sock_ctx = (socket_ctx*) arg;
+	channel* endpoint = (bev == sock_ctx->secure.bev) 
+			? &sock_ctx->plain : &sock_ctx->secure;
 	struct evbuffer* in_buf;
 	struct evbuffer* out_buf;
 	size_t in_len;
 
 	log_printf(LOG_DEBUG, "read event on bev %p (%s)\n", bev, 
-			(bev == conn->secure.bev) ? "secure" : "plain");
+			(bev == sock_ctx->secure.bev) ? "secure" : "plain");
 
 	in_buf = bufferevent_get_input(bev);
 	in_len = evbuffer_get_length(in_buf);
@@ -152,24 +152,23 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 
 	socket_ctx* sock_ctx = (socket_ctx*) arg;
 	daemon_ctx* daemon = sock_ctx->daemon;
-	connection* conn = sock_ctx->conn;
 	unsigned long id = sock_ctx->id;
 	int bev_error = EVUTIL_SOCKET_ERROR();
 
-	channel* endpoint = (bev == conn->secure.bev)
-			? &conn->plain : &conn->secure;
-	channel* startpoint = (bev == conn->secure.bev)
-			? &conn->secure : &conn->plain;
+	channel* endpoint = (bev == sock_ctx->secure.bev)
+			? &sock_ctx->plain : &sock_ctx->secure;
+	channel* startpoint = (bev == sock_ctx->secure.bev)
+			? &sock_ctx->secure : &sock_ctx->plain;
 
 
 	if (events & BEV_EVENT_CONNECTED)
 		handle_client_event_connected(sock_ctx, daemon, id, startpoint);
 	
 	if (events & BEV_EVENT_ERROR)
-		handle_event_error(conn, bev_error, startpoint, endpoint);
+		handle_event_error(sock_ctx, bev_error, startpoint, endpoint);
 	
 	if (events & BEV_EVENT_EOF)
-		handle_event_eof(conn, startpoint, endpoint);
+		handle_event_eof(sock_ctx, startpoint, endpoint);
 	
 	if (events & BEV_EVENT_TIMEOUT) 
 		handle_event_timeout(sock_ctx);
@@ -183,13 +182,14 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 			ssl_err = bufferevent_get_openssl_error(bev);
 
             if (ssl_err != 0)
-			    set_verification_err_string(conn, ssl_err);
+			    set_verification_err_string(sock_ctx, ssl_err);
 			
 			socket_shutdown(sock_ctx);
 			sock_ctx->state = SOCKET_ERROR;
 
 			netlink_handshake_notify_kernel(daemon, id, -EPROTO);
 			break;
+
 		case SOCKET_CONNECTED:
 			socket_shutdown(sock_ctx);
 			if (events & BEV_EVENT_ERROR)
@@ -197,6 +197,7 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 			else
 				sock_ctx->state = SOCKET_DISCONNECTED;
 			break;
+
 		default:
 			socket_shutdown(sock_ctx);
 			sock_ctx->state = SOCKET_ERROR;
@@ -210,36 +211,26 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 
 	socket_ctx* sock_ctx = (socket_ctx*) arg;
-	connection* conn = sock_ctx->conn;
-    int is_secure_channel = (bev == conn->secure.bev) ? 1 : 0;
+    int is_secure_channel = (bev == sock_ctx->secure.bev) ? 1 : 0;
 	int bev_error = EVUTIL_SOCKET_ERROR();
 	
-	channel* endpoint = (is_secure_channel) ? &conn->plain : &conn->secure;
-	channel* startpoint = (is_secure_channel) ? &conn->secure : &conn->plain;
+	channel* endpoint = (is_secure_channel) ? &sock_ctx->plain : &sock_ctx->secure;
+	channel* startpoint = (is_secure_channel) ? &sock_ctx->secure : &sock_ctx->plain;
 
 	if (events & BEV_EVENT_CONNECTED)
 		handle_server_event_connected(sock_ctx, startpoint);
     
     if (events & BEV_EVENT_ERROR)
-		handle_event_error(conn, bev_error, startpoint, endpoint);
+		handle_event_error(sock_ctx, bev_error, startpoint, endpoint);
 	
 	if (events & BEV_EVENT_EOF)
-		handle_event_eof(conn, startpoint, endpoint);
+		handle_event_eof(sock_ctx, startpoint, endpoint);
 
 
 
 	if (endpoint->closed == 1 && startpoint->closed == 1) {
 
-		if (sock_ctx->state == SOCKET_CONNECTING) {
-			long ssl_err = SSL_get_verify_result(conn->ssl);
-			if (ssl_err != X509_V_OK)
-				log_printf(LOG_ERROR, 
-                        "TLS handshake error %li on incoming connection: %s",
-						ssl_err, X509_verify_cert_error_string(ssl_err));
-
-			sock_ctx->state = SOCKET_ERROR;
-        
-        } else {
+        if (sock_ctx->state == SOCKET_ACCEPTED) {
 
             /* don't free connection--user has fd reference to it still. */
             socket_shutdown(sock_ctx);
@@ -247,6 +238,15 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
                 sock_ctx->state = SOCKET_ERROR;
             else 
                 sock_ctx->state = SOCKET_DISCONNECTED;
+
+        } else {
+			long ssl_err = SSL_get_verify_result(sock_ctx->ssl);
+			if (ssl_err != X509_V_OK)
+				log_printf(LOG_ERROR, 
+                        "TLS handshake error %li on incoming connection: %s",
+						ssl_err, X509_verify_cert_error_string(ssl_err));
+
+			socket_context_free(sock_ctx);
         }
 	}
     return;
@@ -272,20 +272,18 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 void handle_client_event_connected(socket_ctx* sock_ctx, 
 		daemon_ctx* daemon,	unsigned long id, channel* startpoint) {
 
-	connection* conn = sock_ctx->conn;
-	
-	if (startpoint->bev != conn->secure.bev) {
+	if (startpoint->bev != sock_ctx->secure.bev) {
 		log_printf(LOG_WARNING, "Unexpected connect event happened.\n");
 		return;
 	}
 
 	log_printf(LOG_INFO, "Encrypted endpoint connection negotiated with %s\n", 
-			SSL_get_version(conn->ssl));
+			SSL_get_version(sock_ctx->ssl));
 
 	/* BUG: return value of this function never checked */
-	bufferevent_set_timeouts(conn->secure.bev, NULL, NULL);
+	bufferevent_set_timeouts(sock_ctx->secure.bev, NULL, NULL);
 
-    sock_ctx->state = SOCKET_REV_CHECKING;
+    sock_ctx->state = SOCKET_FINISHING_CONN;
 
 
 	if (sock_ctx->revocation.checks & NO_REVOCATION_CHECKS
@@ -311,20 +309,18 @@ void handle_client_event_connected(socket_ctx* sock_ctx,
  */
 void handle_server_event_connected(socket_ctx* sock_ctx, channel* startpoint) {
 
-    connection* conn = sock_ctx->conn;
-
 	log_printf(LOG_DEBUG, "%s server endpoint connected\n",
-		startpoint->bev == conn->secure.bev ? "Encrypted" : "Plaintext");		
+		startpoint->bev == sock_ctx->secure.bev ? "Encrypted" : "Plaintext");		
 
-	if (startpoint->bev == conn->secure.bev) {
+	if (startpoint->bev == sock_ctx->secure.bev) {
 		log_printf(LOG_DEBUG, "Now negotiating plaintext connection\n");
 
-		int ret = bufferevent_enable(conn->plain.bev, EV_READ | EV_WRITE);
+		int ret = bufferevent_enable(sock_ctx->plain.bev, EV_READ | EV_WRITE);
 		if (ret != 0) 
 			goto err;
 
-		ret = bufferevent_socket_connect(conn->plain.bev, 
-				conn->addr, conn->addrlen);
+		ret = bufferevent_socket_connect(sock_ctx->plain.bev, 
+				sock_ctx->addr, sock_ctx->addrlen);
 		if (ret != 0)
 			goto err;
 	}
@@ -343,16 +339,17 @@ void handle_server_event_connected(socket_ctx* sock_ctx, channel* startpoint) {
  * endpoint->closed=1) or recover from the error.
  * 
  */
-void handle_event_error(connection* conn, 
+void handle_event_error(socket_ctx* sock_ctx, 
 		int error, channel* startpoint, channel* endpoint) {
 
 	log_printf(LOG_DEBUG, "%s endpoint encountered an error\n", 
-			startpoint->bev == conn->secure.bev 
+			startpoint->bev == sock_ctx->secure.bev 
 			? "encrypted" : "plaintext");
 	
 	if (error == ECONNRESET || error == EPIPE) {
 		log_printf(LOG_INFO, "Connection closed by local user\n");
-	} else if (error != 0){
+
+	} else if (error != 0) {
 		log_printf(LOG_WARNING, "Unhandled error %i has occurred: %s\n", 
 				error, evutil_socket_error_to_string(error));
 	}
@@ -369,11 +366,11 @@ void handle_event_error(connection* conn,
 	return;
 }
 
-void handle_event_eof(connection* conn, 
+void handle_event_eof(socket_ctx* sock_ctx, 
 		channel* startpoint, channel* endpoint) {
 
 	log_printf(LOG_DEBUG, "%s endpoint got EOF\n", 
-				startpoint->bev == conn->secure.bev ? "encrypted":"plaintext");
+				startpoint->bev == sock_ctx->secure.bev ? "encrypted":"plaintext");
 
 	// BUG: when the remote server closes first, this prematurely terminates connections
 	// try msn.com and see
@@ -384,7 +381,7 @@ void handle_event_eof(connection* conn,
 		log_printf(LOG_DEBUG, "Other endpoint not yet closed.\n");
 		if (evbuffer_get_length(bufferevent_get_input(startpoint->bev)) > 0) {
 			log_printf(LOG_DEBUG, "Startpoint buffer size greater than 0.\n");
-			common_bev_read_cb(endpoint->bev, conn);
+			common_bev_read_cb(endpoint->bev, sock_ctx);
 		}
 		if (evbuffer_get_length(bufferevent_get_output(endpoint->bev)) == 0) {
 			log_printf(LOG_DEBUG, "Startpoint buffer now is 0 size.\n");
@@ -399,17 +396,16 @@ void handle_event_eof(connection* conn,
 void handle_event_timeout(socket_ctx* sock_ctx) {
 
     daemon_ctx* daemon = sock_ctx->daemon;
-    connection* conn = sock_ctx->conn;
     int id = sock_ctx->id;
 
     log_printf(LOG_ERROR, "Connecting bufferevent timed out\n");
 
-    bufferevent_set_timeouts(conn->secure.bev, NULL, NULL);
+    bufferevent_set_timeouts(sock_ctx->secure.bev, NULL, NULL);
 
-    conn->plain.closed = 1;
-    conn->secure.closed = 1;
+    sock_ctx->plain.closed = 1;
+    sock_ctx->secure.closed = 1;
 
-    set_err_string(conn, "TLS handshake error: connection timed out");
+    set_err_string(sock_ctx, "TLS handshake error: connection timed out");
     netlink_handshake_notify_kernel(daemon, id, -ENETUNREACH);
 
     return;
@@ -465,7 +461,7 @@ void ocsp_responder_read_cb(struct bufferevent* bev, void* arg) {
 			break;
 
 		case V_OCSP_CERTSTATUS_REVOKED:
-			set_err_string(sock_ctx->conn, "TLS handshake error: "
+			set_err_string(sock_ctx, "TLS handshake error: "
 					"certificate revoked (OCSP remote response)");
 			
 			fail_revocation_checks(sock_ctx);
@@ -478,7 +474,7 @@ void ocsp_responder_read_cb(struct bufferevent* bev, void* arg) {
 	responder_cleanup(resp_ctx);
 
 	if (rev_ctx->num_rev_checks-- == 0) {
-		set_err_string(sock_ctx->conn, "TLS handshake failure: "
+		set_err_string(sock_ctx, "TLS handshake failure: "
 				"the certficate's revocation status could not be determined");
 
 		fail_revocation_checks(sock_ctx);
@@ -490,7 +486,7 @@ void ocsp_responder_event_cb(struct bufferevent* bev, short events, void* arg) {
 
     responder_ctx* resp_ctx = (responder_ctx*) arg;
 	socket_ctx* sock_ctx = resp_ctx->sock_ctx;
-	SSL* ssl = sock_ctx->conn->ssl;
+	SSL* ssl = sock_ctx->ssl;
 	OCSP_REQUEST* request = NULL;
 	int ret;
 
@@ -523,7 +519,7 @@ void ocsp_responder_event_cb(struct bufferevent* bev, short events, void* arg) {
 	responder_cleanup(resp_ctx);
 
 	if (sock_ctx->revocation.num_rev_checks-- == 0) {
-		set_err_string(sock_ctx->conn, "TLS handshake failure: "
+		set_err_string(sock_ctx, "TLS handshake failure: "
 				"the certificate's revocation status could not be determined");
 
 		fail_revocation_checks(sock_ctx);
@@ -538,7 +534,7 @@ void ocsp_responder_event_cb(struct bufferevent* bev, short events, void* arg) {
 
 /**
  * Performs the desired revocation checks on a given connection
- * @param conn The connection to perform checks on.
+ * @param sock_ctx The connection to perform checks on.
  * @returns 0 if the checks were successfully started, -1 if no distribution 
  * points were found (and/or if the responder revocation methods are disabled),
  * or -2 if an unrecoverable error occurred.
@@ -561,7 +557,7 @@ int revocation_cb(SSL* ssl, void* arg) {
 		return 1;
 
 	} else if (ret == V_OCSP_CERTSTATUS_REVOKED) {
-		set_err_string(sock_ctx->conn, "TLS handshake error: "
+		set_err_string(sock_ctx, "TLS handshake error: "
 				"certificate revoked (cached OCSP response)");
         set_revocation_state(sock_ctx, REV_S_FAIL);
         return 1;
@@ -578,14 +574,14 @@ int revocation_cb(SSL* ssl, void* arg) {
 			return 1;
 
 		} else if (ret == V_OCSP_CERTSTATUS_REVOKED) {
-			set_err_string(sock_ctx->conn, "TLS handshake error: "
+			set_err_string(sock_ctx, "TLS handshake error: "
 					"certificate revoked (OCSP stapled response)");
             set_revocation_state(sock_ctx, REV_S_FAIL);
 			return 1;
 		}
 	}
 
-    cert = SSL_get_peer_certificate(sock_ctx->conn->ssl);
+    cert = SSL_get_peer_certificate(sock_ctx->ssl);
     if (cert == NULL)
         goto err;
 
@@ -623,7 +619,7 @@ int revocation_cb(SSL* ssl, void* arg) {
     if (crl_urls != NULL)
         free(crl_urls);
 
-    set_err_string(sock_ctx->conn, "TLS handshake error: "
+    set_err_string(sock_ctx, "TLS handshake error: "
             "no revocation responders could be queried");
     set_revocation_state(sock_ctx, REV_S_FAIL);
     return 1;
@@ -731,7 +727,7 @@ void fail_revocation_checks(socket_ctx* sock_ctx) {
     sock_ctx->revocation.state = REV_S_FAIL;
 	revocation_context_cleanup(&sock_ctx->revocation);
 
-    if (sock_ctx->state == SOCKET_REV_CHECKING) {
+    if (sock_ctx->state != SOCKET_CONNECTING) {
 	    socket_shutdown(sock_ctx);
         sock_ctx->state = SOCKET_ERROR;
         netlink_handshake_notify_kernel(sock_ctx->daemon, sock_ctx->id, -EPROTO);
@@ -932,6 +928,7 @@ int start_reading_body(responder_ctx* client) {
 }
 
 int done_reading_body(responder_ctx* resp_ctx) {
+
 	return resp_ctx->reading_body && (resp_ctx->tot_read == resp_ctx->buf_size);
 }
 

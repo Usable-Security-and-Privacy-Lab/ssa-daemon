@@ -131,7 +131,6 @@ void daemon_context_free(daemon_ctx* daemon) {
 }
 
 
-
 /**
  * Allocates a new socket_ctx and assigns it the given id.
  * @param sock_ctx A memory address to be populated with the socket_ctx
@@ -156,10 +155,6 @@ int socket_context_new(socket_ctx** new_sock_ctx, int fd,
         response = -ENOMEM;
         goto err;
     }
-
-    response = connection_new(&(sock_ctx->conn));
-	if (response != 0)
-		goto err;
 
 	sock_ctx->daemon = daemon;
 	sock_ctx->id = id;
@@ -191,28 +186,27 @@ socket_ctx* accepting_socket_ctx_new(socket_ctx* listener_ctx, int fd) {
     
     daemon_ctx* daemon = listener_ctx->daemon;
     socket_ctx* sock_ctx = NULL;
-    int response = 0;
+    int ret;
 
     sock_ctx = (socket_ctx*)calloc(1, sizeof(socket_ctx));
 	if (sock_ctx == NULL)
 		return NULL;
 
-    response = connection_new(&(sock_ctx->conn));
-	if (response != 0)
-		goto err;
-
 	sock_ctx->daemon = daemon;
 	sock_ctx->fd = fd; /* standard to show not connected */
     sock_ctx->state = SOCKET_CONNECTING;
 
-    sock_ctx->conn->ssl = SSL_new(listener_ctx->ssl_ctx);
-    if (sock_ctx->conn->ssl == NULL)
+    ret = SSL_CTX_up_ref(listener_ctx->ssl_ctx);
+    if (ret != 1)
         goto err;
+    sock_ctx->ssl_ctx = listener_ctx->ssl_ctx;
 
     return sock_ctx;
  err:
     if (sock_ctx != NULL)
-        socket_context_free(sock_ctx);
+        free(sock_ctx);
+
+    close(fd);
 
     return NULL;  
 }
@@ -225,36 +219,37 @@ socket_ctx* accepting_socket_ctx_new(socket_ctx* listener_ctx, int fd) {
  * @param sock_ctx The given socket_ctx to shut down.
  */
 void socket_shutdown(socket_ctx* sock_ctx) {
-	
-	connection* conn = sock_ctx->conn;
 
-	if (conn->ssl != NULL) {
+    revocation_context_cleanup(&sock_ctx->revocation);
+
+	if (sock_ctx->ssl != NULL) {
 		switch (sock_ctx->state) {
-        case SOCKET_REV_CHECKING:
+        case SOCKET_FINISHING_CONN:
 		case SOCKET_CONNECTED:
         case SOCKET_ACCEPTED:
-			SSL_shutdown(conn->ssl);
+			SSL_shutdown(sock_ctx->ssl);
 			break;
 		default:
 			break;
 		}
-		SSL_free(conn->ssl);
+		SSL_free(sock_ctx->ssl);
 	}
-	
-	conn->ssl = NULL;
+
+	sock_ctx->ssl = NULL;
 
 	if (sock_ctx->listener != NULL) 
 		evconnlistener_free(sock_ctx->listener);
+    sock_ctx->listener = NULL;
 
-	if (conn->secure.bev != NULL)
-		bufferevent_free(conn->secure.bev);
-	conn->secure.bev = NULL;
-	conn->secure.closed = 1;
+	if (sock_ctx->secure.bev != NULL)
+		bufferevent_free(sock_ctx->secure.bev);
+	sock_ctx->secure.bev = NULL;
+	sock_ctx->secure.closed = 1;
 	
-	if (conn->plain.bev != NULL)
-		bufferevent_free(conn->plain.bev);
-	conn->plain.bev = NULL;
-	conn->plain.closed = 1;
+	if (sock_ctx->plain.bev != NULL)
+		bufferevent_free(sock_ctx->plain.bev);
+	sock_ctx->plain.bev = NULL;
+	sock_ctx->plain.closed = 1;
 
 	if (sock_ctx->fd != -1)
 		close(sock_ctx->fd);
@@ -284,11 +279,15 @@ void socket_context_free(socket_ctx* sock_ctx) {
 
 	revocation_context_cleanup(&sock_ctx->revocation);
 	
-	if (sock_ctx->conn != NULL)
-		connection_free(sock_ctx->conn);
-
     if (sock_ctx->ssl_ctx != NULL)
         SSL_CTX_free(sock_ctx->ssl_ctx);
+
+    if (sock_ctx->ssl != NULL)
+	    SSL_free(sock_ctx->ssl);
+	if (sock_ctx->secure.bev != NULL)
+		bufferevent_free(sock_ctx->secure.bev);
+	if (sock_ctx->plain.bev != NULL)
+		bufferevent_free(sock_ctx->plain.bev);
 
     free(sock_ctx);
 	return;
@@ -346,55 +345,14 @@ void responder_cleanup(responder_ctx* resp) {
 }
 
 
-/**
- * Creates a new connection struct and assigns it to conn.
- * @param conn The address to be assigned a new connection.
- * @returns 0 on success, or -errno if an error occurred.
- */
-int connection_new(connection** conn) {
-
-	(*conn) = (connection*)calloc(1, sizeof(connection));
-	if (*conn == NULL)
-		return -errno;
-
-	(*conn)->err_string = calloc(1, MAX_ERR_STRING+1); /* +1 for '\0' */
-	if ((*conn)->err_string == NULL)
-		return -errno;
-	
-	return 0;
-}
-
 
 /**
- * Frees a given connection and all of its internal structures.
- * @param conn The connection to free.
- */ 
-void connection_free(connection* conn) {
-
-	if (conn == NULL) {
-		log_printf(LOG_WARNING, "Tried to free a NULL connection.\n");
-		return;
-	}
-
-	if (conn->ssl != NULL)
-	    SSL_free(conn->ssl);
-	if (conn->secure.bev != NULL)
-		bufferevent_free(conn->secure.bev);
-	if (conn->plain.bev != NULL)
-		bufferevent_free(conn->plain.bev);
-
-	free(conn->err_string);
-	free(conn);
-	return;
-}
-
-/**
- * Checks the given connection to see if it matches any of the corresponding
+ * Checks the given socket to see if it matches any of the corresponding
  * states passed into the function. If not, the error string of the connection 
  * is set and a negative error code is returned. Any state or combination of 
  * states may be checked using this function (even CONN_ERROR), provided the
  * number of states to check are accurately reported in num.
- * @param conn The connection to verify.
+ * @param sock_ctx The context of the socket to verify.
  * @param num The number of connection states listed in the function arguments.
  * @param ... The variadic list of connection states to check.
  * @returns 0 if the state was one of the acceptable states listed, -EBADFD if 
@@ -415,10 +373,10 @@ int check_socket_state(socket_ctx* sock_ctx, int num, ...) {
 
 	switch(sock_ctx->state) {
 	case SOCKET_ERROR:
-		set_badfd_err_string(sock_ctx->conn);
+		set_badfd_err_string(sock_ctx);
 		return -EBADFD;
 	default:
-		set_wrong_state_err_string(sock_ctx->conn);
+		set_wrong_state_err_string(sock_ctx);
 		return -EOPNOTSUPP;
 	}
 }
@@ -453,61 +411,61 @@ int ssl_err_to_errno() {
  * memory issues were not the cause of the problem, then the cause of the 
  * problem is most likely a bug internal to the daemon (such as passing in a 
  * NULL reference), and it will print out the error information to the logs.
- * @param conn The connection for which to associate the error string with.
+ * @param sock_ctx The socket for which to associate the error string with.
  * @returns -ENOMEM when insufficient memory is available, or -ENOTRECOVERABLE 
  * when an unknown failure occurred.
  */
-int ssl_malloc_err(connection* conn) {
+int ssl_malloc_err(socket_ctx* sock_ctx) {
 	
 	unsigned long ssl_err = ERR_get_error();
 	ERR_clear_error();
 
-	set_err_string(conn, "Daemon failed to allocate sufficient buffers: %s", 
+	set_err_string(sock_ctx, "Daemon failed to allocate sufficient buffers: %s", 
 			ERR_reason_error_string(ERR_GET_REASON(ssl_err)));
 
 	if (ERR_GET_REASON(ssl_err) == ERR_R_MALLOC_FAILURE) {
 		log_printf(LOG_ERROR, "OpenSSL malloc failure caught\n");
-		set_err_string(conn, "Insufficient alloc memory for the SSA daemon");
+		set_err_string(sock_ctx, "Insufficient alloc memory for the SSA daemon");
 		return -ENOMEM;
 	} else { 
 		log_printf(LOG_ERROR, "Internal OpenSSL error on malloc attempt: %s\n",
 				ERR_error_string(ssl_err, NULL));
-		set_err_string(conn, "Internal failure; please reset daemon & report");
+		set_err_string(sock_ctx, "Internal failure; please reset daemon & report");
 		return -ENOTRECOVERABLE;
 	}
 }
 
 
 /**
- * Checks to see if the given connection has an active error string.
- * @param conn The connection to check.
+ * Checks to see if the given socket has an active error string.
+ * @param sock_ctx The context of the socket to check.
  * @returns 1 if an error string was found, or 0 otherwise.
  */
-int has_err_string(connection* conn) {
-	if (strlen(conn->err_string) > 0)
+int has_err_string(socket_ctx* sock_ctx) {
+	if (strlen(sock_ctx->err_string) > 0)
 		return 1;
 	else
 		return 0;
 }
 
 /**
- * Sets the error string of a given connection to reflect the reason for
+ * Sets the error string of a given socket to reflect the reason for
  * a TLS handshake failure. Note that this may return "ok" if the handshake
  * actually passed, so the verify result should be checked to ensure that 
  * it is not equal to X509_V_OK if no error string is desired on success.
- * @param conn The connection to set the error sttring for.
+ * @param sock_ctx The context of the socket to set the error string for.
  * @param ssl_err The error code returned by SSL_get_verify_result().
  */
-void set_verification_err_string(connection* conn, unsigned long openssl_err) {
+void set_verification_err_string(socket_ctx* sock_ctx, unsigned long openssl_err) {
 
 	const char* err_description;
-	long cert_err = SSL_get_verify_result(conn->ssl);
+	long cert_err = SSL_get_verify_result(sock_ctx->ssl);
 	
 
 	if (cert_err != X509_V_OK) {
 		err_description = X509_verify_cert_error_string(cert_err);
 
-		set_err_string(conn, 
+		set_err_string(sock_ctx, 
 				"TLS handshake error %li: %s\n", cert_err, err_description);
 
 		log_printf(LOG_ERROR,
@@ -518,17 +476,17 @@ void set_verification_err_string(connection* conn, unsigned long openssl_err) {
 		
 		switch (ERR_GET_REASON(openssl_err)) {
 		case SSL_R_SSLV3_ALERT_HANDSHAKE_FAILURE:
-			strncpy(conn->err_string, "TLS handshake error: server supports"
+			strncpy(sock_ctx->err_string, "TLS handshake error: server supports"
 					" none of the allowed ciphers\n", MAX_ERR_STRING);
 			break;
 
 		case SSL_R_TLSV1_ALERT_PROTOCOL_VERSION:
-			strncpy(conn->err_string, "TLS handshake error: server supports"
+			strncpy(sock_ctx->err_string, "TLS handshake error: server supports"
 					" none of the allowed TLS versions\n", MAX_ERR_STRING);
 			break;
 
 		case SSL_R_UNSUPPORTED_PROTOCOL: 
-			strncpy(conn->err_string, "TLS handshake error: server supports"
+			strncpy(sock_ctx->err_string, "TLS handshake error: server supports"
 					" none of the allowed TLS versions\n", MAX_ERR_STRING);
 			break;
 
@@ -541,47 +499,47 @@ void set_verification_err_string(connection* conn, unsigned long openssl_err) {
 }
 
 /**
- * Sets the error string for a given connection to string (plus the additional
+ * Sets the error string for a given socket to string (plus the additional
  * arguments added in a printf-style way).
- * @param conn The connection to set an error string for.
- * @param string The printf-style string to set conn's error string to.
+ * @param sock_ctx The context of the socket to set an error string for.
+ * @param string The printf-style string to set sock_ctx's error string to.
  */
-void set_err_string(connection* conn, char* string, ...) {
+void set_err_string(socket_ctx* sock_ctx, char* string, ...) {
 
-	if (conn == NULL)
+	if (sock_ctx == NULL)
 		return;
 
 	va_list args;
-	clear_err_string(conn);
+	clear_err_string(sock_ctx);
 
 	va_start(args, string);
-	vsnprintf(conn->err_string, MAX_ERR_STRING, string, args);
+	vsnprintf(sock_ctx->err_string, MAX_ERR_STRING, string, args);
 	va_end(args);
 }
 
 /**
- * Clears the error string found in conn.
- * @param conn The connection to clear an error string from.
+ * Clears the error string found in sock_ctx.
+ * @param sock_ctx The conetext of the socket to clear an error string from.
  */
-void clear_err_string(connection* conn) {
-	memset(conn->err_string, '\0', MAX_ERR_STRING + 1);
+void clear_err_string(socket_ctx* sock_ctx) {
+	memset(sock_ctx->err_string, '\0', MAX_ERR_STRING + 1);
 }
 
-void set_badfd_err_string(connection* conn) {
-	if (conn == NULL)
+void set_badfd_err_string(socket_ctx* sock_ctx) {
+	if (sock_ctx == NULL)
 		return;
 
-	clear_err_string(conn);
-	strncpy(conn->err_string, "SSA daemon socket error: given socket previously"
+	clear_err_string(sock_ctx);
+	strncpy(sock_ctx->err_string, "SSA daemon socket error: given socket previously"
 			" failed an operation in an unrecoverable way", MAX_ERR_STRING);
 }
 
-void set_wrong_state_err_string(connection* conn) {
-	if (conn == NULL)
+void set_wrong_state_err_string(socket_ctx* sock_ctx) {
+	if (sock_ctx == NULL)
 		return;
 
-	clear_err_string(conn);
-	strncpy(conn->err_string, "SSA daemon error: given socket is not in the right "
+	clear_err_string(sock_ctx);
+	strncpy(sock_ctx->err_string, "SSA daemon error: given socket is not in the right "
 			"state to perform the requested operation", MAX_ERR_STRING);
 }
 
@@ -589,19 +547,19 @@ void set_wrong_state_err_string(connection* conn) {
 /**
  * Associates the given file descriptor with the given connection and 
  * enables its bufferevent to read and write freely.
- * @param conn The connection to have the file descriptor associated with.
+ * @param sock_ctx The connection to have the file descriptor associated with.
  * @param ifd The file descriptor of an internal program that will
  * communicate to the daemon through plaintext.
  * @returns 0 on success, or -ECONNABORTED on failure.
  */
-int associate_fd(connection* conn, evutil_socket_t ifd) {
+int associate_fd(socket_ctx* sock_ctx, evutil_socket_t ifd) {
 
 	/* Possibility of failure is acutally none in current libevent code */
-	if (bufferevent_setfd(conn->plain.bev, ifd) != 0)
+	if (bufferevent_setfd(sock_ctx->plain.bev, ifd) != 0)
 		goto err;
 
 	/* This function *unlikely* to fail, but if we want to be really robust...*/
-	if (bufferevent_enable(conn->plain.bev, EV_READ | EV_WRITE) != 0)
+	if (bufferevent_enable(sock_ctx->plain.bev, EV_READ | EV_WRITE) != 0)
 		goto err;
 
 	log_printf(LOG_INFO, "plaintext channel bev enabled\n");

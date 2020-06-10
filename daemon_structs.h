@@ -11,18 +11,30 @@
 #define MAX_ERR_STRING 128
 #define MAX_HOSTNAME 255
 #define MAX_CERTKEY_PAIRS 5
-#define NOT_CONN_BEV -1 /** Designation for bufferevent with no set fd */
+#define NO_FD -1 /** Designation for bufferevent with no set fd */
+
+#ifndef TRUE
+#define TRUE 1
+#endif
+
+#ifndef FALSE
+#define FALSE 0
+#endif
 
 #define NO_REVOCATION_CHECKS     (1 << 0)
 #define NO_OCSP_STAPLED_CHECKS   (1 << 1)
 #define NO_OCSP_RESPONDER_CHECKS (1 << 2)
 #define NO_CRL_RESPONDER_CHECKS  (1 << 3)
 
+#define DO_REVOCATION_CHECKS(checks) !(checks & NO_REVOCATION_CHECKS)
+#define DO_OCSP_STAPLED_CHECKS(checks) !(checks & NO_OCSP_STAPLED_CHECKS)
+#define DO_OCSP_RESPONDER_CHECKS(checks) !(checks & NO_OCSP_RESPONDER_CHECKS)
+#define DO_CRL_RESPONDER_CHECKS(checks) !(checks & NO_CRL_RESPONDER_CHECKS)
+
 struct channel_st;
 struct daemon_ctx_st;
 struct responder_ctx_st;
 struct revocation_ctx_st;
-struct connection_st;
 struct socket_ctx_st;
 struct global_config_st;
 
@@ -30,7 +42,6 @@ typedef struct channel_st channel;
 typedef struct daemon_ctx_st daemon_ctx;
 typedef struct responder_ctx_st responder_ctx;
 typedef struct revocation_ctx_st revocation_ctx;
-typedef struct connection_st connection;
 typedef struct socket_ctx_st socket_ctx;
 typedef struct global_config_st global_config;
 
@@ -39,7 +50,7 @@ enum socket_state {
 	SOCKET_ERROR = 0,
     SOCKET_NEW,
     SOCKET_CONNECTING,
-    SOCKET_REV_CHECKING,
+    SOCKET_FINISHING_CONN, /* revocation checks, connecting internally */
     SOCKET_CONNECTED,
     SOCKET_LISTENING,
     SOCKET_ACCEPTED,
@@ -143,11 +154,16 @@ struct responder_ctx_st {
 struct socket_ctx_st {
     enum socket_state state;
 
+	channel plain;
+	channel secure;
+	SSL* ssl;
+	struct sockaddr* addr; /* TODO: Used only for server-side connections?? */
+	int addrlen;
+
 	unsigned long id;
 	evutil_socket_t fd;
     SSL_CTX* ssl_ctx;
 
-	connection* conn;
 	revocation_ctx revocation;
 
 	struct sockaddr int_addr; /** Internal address--the program using SSA */
@@ -168,15 +184,6 @@ struct socket_ctx_st {
 	daemon_ctx* daemon;
 };
 
-struct connection_st {
-	channel plain;
-	channel secure;
-	SSL* ssl;
-	struct sockaddr* addr; /* TODO: Used only for server-side connections?? */
-	int addrlen;
-
-	char* err_string;
-};
 
 
 daemon_ctx *daemon_context_new(char* config_path, int port);
@@ -192,21 +199,18 @@ void socket_context_erase(socket_ctx* sock_ctx, int port);
 void revocation_context_cleanup(revocation_ctx* ctx);
 void responder_cleanup(responder_ctx* resp);
 
-int connection_new(connection** conn);
-void connection_free(connection* conn);
-
 int check_socket_state(socket_ctx* sock_ctx, int num, ...);
 
-int has_err_string(connection* conn);
-void set_err_string(connection* conn, char* string, ...);
-void set_verification_err_string(connection* conn, unsigned long ssl_err);
-void set_badfd_err_string(connection* conn);
-void set_wrong_state_err_string(connection* conn);
-void clear_err_string(connection* conn);
+int has_err_string(socket_ctx* sock_ctx);
+void set_err_string(socket_ctx* sock_ctx, char* string, ...);
+void set_verification_err_string(socket_ctx* sock_ctx, unsigned long ssl_err);
+void set_badfd_err_string(socket_ctx* sock_ctx);
+void set_wrong_state_err_string(socket_ctx* sock_ctx);
+void clear_err_string(socket_ctx* sock_ctx);
 
-int ssl_malloc_err(connection* conn);
+int ssl_malloc_err(socket_ctx* sock_ctx);
 
-int associate_fd(connection* conn, evutil_socket_t ifd);
+int associate_fd(socket_ctx* sock_ctx, evutil_socket_t ifd);
 int get_port(struct sockaddr* addr);
 
 
