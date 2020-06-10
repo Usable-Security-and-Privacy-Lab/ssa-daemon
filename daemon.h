@@ -24,10 +24,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef DAEMON_H
-#define DAEMON_H
+#ifndef SSA_DAEMON_H
+#define SSA_DAEMON_H
 
-#include <netinet/in.h>
 #include <sys/socket.h>
 
 #include "daemon_structs.h"
