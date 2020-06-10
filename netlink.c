@@ -25,13 +25,14 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <netlink/genl/ctrl.h>
+#include <netlink/genl/genl.h>
+
 #include <event2/util.h>
 
-#include <netlink/genl/genl.h>
-#include <netlink/genl/ctrl.h>
-#include "netlink.h"
 #include "daemon.h"
 #include "log.h"
+#include "netlink.h"
 
 
 // Attributes
