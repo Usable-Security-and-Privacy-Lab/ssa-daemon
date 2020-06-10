@@ -1,5 +1,5 @@
-#ifndef REVOCATION_H
-#define REVOCATION_H
+#ifndef SSA_REVOCATION_H
+#define SSA_REVOCATION_H
 
 #include <openssl/ocsp.h>
 #include <openssl/ssl.h>
