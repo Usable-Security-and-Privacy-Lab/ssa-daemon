@@ -60,10 +60,7 @@
 
 global_config* default_settings_new();
 
-/*
-int parse_next_client_setting(yaml_parser_t* parser, client_settings* client);
-int parse_next_server_setting(yaml_parser_t* parser, server_settings* server);
-*/
+int parse_next_setting(yaml_parser_t* parser, global_config* settings);
 
 int parse_string(yaml_parser_t* parser, char** string);
 int parse_string_list(yaml_parser_t* parser, char** strings[], int* num);
@@ -75,12 +72,6 @@ int parse_tls_version(yaml_parser_t* parser, enum tls_version* version);
 int parse_stream(yaml_parser_t* parser, global_config* settings);
 int parse_document(yaml_parser_t* parser, global_config* settings);
 int parse_settings(yaml_parser_t* parser, global_config* settings);
-int parse_next_setting(yaml_parser_t* parser, global_config* settings);
-
-/*
-int parse_client(yaml_parser_t* parser, global_config* settings);
-int parse_server(yaml_parser_t* parser, global_config* settings);
-*/
 
 int check_label_to_parse(yaml_parser_t* parser, char* label);
 yaml_event_type_t parse_next_event(yaml_parser_t* parser);
@@ -88,10 +79,6 @@ char* parse_next_scalar(yaml_parser_t* parser);
 
 char* utf8_to_ascii(unsigned char* src, ssize_t len);
 void str_tolower(char* string);
-/*
-int is_server(char* label);
-int is_client(char* label);
-*/
 int is_enabled(char* label);
 
 void log_parser_error(yaml_parser_t parser);
@@ -193,7 +180,6 @@ global_config* default_settings_new() {
 }
 
 
-
 /*******************************************************************************
  *    THE IMPORTANT STUFF (WHERE TO ADD ADDITIONAL CONFIG SETTINGS EASILY)
  ******************************************************************************/
@@ -291,173 +277,9 @@ int parse_next_setting(yaml_parser_t* parser, global_config* config) {
 }
 
 
-
-
-/**
- * Parses the next key:value pair in parser, and adds it to the daemon's client
- * settings.
- * @returns 0 on success, 1 if no more key:value or key:list pairs are left to 
- * be parsed, or -1 on error.
- */
-/*
-int parse_next_client_setting(yaml_parser_t* parser, client_settings* client) {
-
-    yaml_event_t event;
-    char* label;
-    int ret;
-    
-    if (yaml_parser_parse(parser, &event) != 1)
-        return -1;
-
-    if (event.type == YAML_MAPPING_END_EVENT) {
-        yaml_event_delete(&event);
-        return 1;
-    }
-
-    if (event.type != YAML_SCALAR_EVENT) {
-        yaml_event_delete(&event);
-        return -1;
-    }
-
-    label = utf8_to_ascii(event.data.scalar.value, event.data.scalar.length);
-    if (label == NULL)
-        return -1;
-    
-    yaml_event_delete(&event);
-    str_tolower(label);
-
-    if (strcmp(label, CA_PATH) == 0) {
-        ret = parse_string(parser, &client->ca_path);
-
-    } else if (strcmp(label, CIPHER_LIST) == 0) {
-        ret = parse_string_list(parser, 
-                &client->cipher_list, &client->cipher_list_cnt);
-
-    } else if (strcmp(label, CIPHERSUITES) == 0) {
-        ret = parse_string_list(parser,
-                &client->ciphersuites, &client->ciphersuite_cnt);
-
-    } else if (strcmp(label, TLS_COMPRESSION) == 0) {
-        ret = parse_boolean(parser, &client->tls_compression);
-
-    } else if (strcmp(label, MIN_TLS_VERSION) == 0) {
-        ret = parse_tls_version(parser, &client->min_tls_version);
-
-    } else if (strcmp(label, MAX_TLS_VERSION) == 0) {
-        ret = parse_tls_version(parser, &client->max_tls_version);
-
-    } else if (strcmp(label, SESSION_TIMEOUT) == 0) {
-        ret = parse_integer(parser, &client->session_timeout);
-
-    } else if (strcmp(label, CERT_V_DEPTH) == 0) {
-        ret = parse_integer(parser, &client->max_cert_chain_depth);
-
-    } else if (strcmp(label, VERIFY_CT) == 0) {
-        ret = parse_boolean(parser, &client->verify_cert_transparency);
-
-    } else {
-        log_printf(LOG_ERROR, "Config: Undefined label %s\n", label);
-        ret = -1;
-    }
-    
-    free(label);
-    return ret;
-}
-*/
-
-/**
- * Parses the next key:value pair in parser, and adds it to the daemon's server
- * settings. Note that the settings don't need to be parsed in any particular
- * order; but if a string setting is read twice, it should fail the parsing.
- * @returns 0 on success, 1 if no more key:value or key:list pairs are left to 
- * be parsed, or -1 on error.
- */
-/*
-int parse_next_server_setting(yaml_parser_t* parser, server_settings* server) {
-
-    yaml_event_t event;
-    char* label; 
-    int ret;
-    
-    if (yaml_parser_parse(parser, &event) != 1)
-        return -1;
-
-    if (event.type == YAML_MAPPING_END_EVENT) {
-        yaml_event_delete(&event);
-        return 1;
-    }
-
-    if (event.type != YAML_SCALAR_EVENT) {
-        yaml_event_delete(&event);
-        return -1;
-    }
-
-    label = utf8_to_ascii(event.data.scalar.value, event.data.scalar.length);
-    if (label == NULL)
-        return -1;
-    
-    yaml_event_delete(&event);
-    str_tolower(label);
-
-    if (strcmp(label, CA_PATH) == 0) {
-        ret = parse_string(parser, &server->ca_path);
-
-    } else if (strcmp(label, CIPHER_LIST) == 0) {
-        ret = parse_string_list(parser, 
-                &server->cipher_list, &server->cipher_list_cnt);
-
-    } else if (strcmp(label, CIPHERSUITES) == 0) {
-        ret = parse_string_list(parser,
-                &server->ciphersuites, &server->ciphersuite_cnt);
-
-    } else if (strcmp(label, TLS_COMPRESSION) == 0) {
-        ret = parse_boolean(parser, &server->tls_compression);
-
-    } else if (strcmp(label, SESSION_TICKETS) == 0) {
-        ret = parse_boolean(parser, &server->session_tickets);
-
-    } else if (strcmp(label, MIN_TLS_VERSION) == 0) {
-        ret = parse_tls_version(parser, &server->min_tls_version);
-
-    } else if (strcmp(label, MAX_TLS_VERSION) == 0) {
-        ret = parse_tls_version(parser, &server->max_tls_version);
-
-    } else if (strcmp(label, SESSION_TIMEOUT) == 0) {
-        ret = parse_integer(parser, &server->session_timeout);
-    
-    } else if (strcmp(label, CERT_PATH) == 0) {
-        if (server->cert_cnt >= MAX_CERTKEY_PAIRS) {
-            log_printf(LOG_ERROR, "Config: Maximum keys (%i) exceeded\n", 
-                    MAX_CERTKEY_PAIRS);
-            ret = -1;
-        } else {
-            ret = parse_string(parser, &server->certificates[server->cert_cnt]);
-            server->cert_cnt++;
-        }
-
-    } else if (strcmp(label, KEY_PATH) == 0) {
-        if (server->key_cnt >= MAX_CERTKEY_PAIRS) {
-            log_printf(LOG_ERROR, "Config: Maximum keys (%i) exceeded\n", 
-                    MAX_CERTKEY_PAIRS);
-            ret = -1;
-        } else {
-            ret = parse_string(parser, &server->private_keys[server->key_cnt]);
-            server->key_cnt++;
-        }
-    
-    } else {
-        log_printf(LOG_ERROR, "Config: Undefined label %s\n", label);
-        ret = -1;
-    }
-
-    free(label);
-    return ret;
-}
-*/
-
 /*
  *******************************************************************************
- *      USE THESE FUNCTIONS TO PARSE INFO INTO THE GLOBAL_SETTINGS STRUCT
+ *      USE THESE FUNCTIONS TO PARSE INFO INTO THE GLOBAL_CONFIG STRUCT
  *******************************************************************************
  */ 
 
@@ -824,90 +646,6 @@ int parse_settings(yaml_parser_t* parser, global_config* settings) {
     return 0;
 }
 
-/**
- * Parses all events within a given 'client:' label and assigns the
- * information contained to the appropriate settings.
- * @param parser The parser to extract events from.
- * @param settings The struct to fill with the information parsed from parser.
- * @returns 0 on success, -1 on error.
- */
-/*
-int parse_client(yaml_parser_t* parser, global_config* settings) {
-
-    int done = 0;
-    int ret;
-
-    if (settings->server != NULL) {
-        log_printf(LOG_ERROR, "Config: Multiple 'client:' labels\n");
-        return -1;
-    }
-
-    if (parse_next_event(parser) != YAML_MAPPING_START_EVENT) {
-        log_printf(LOG_ERROR, "Config: Bad syntax after 'client:'\n");
-        return -1;
-    }
-
-
-    settings->client = calloc(1, sizeof(client_settings));
-    if (settings->client == NULL)
-        return -1;
-
-    while (!done)
-        done = parse_next_client_setting(parser, settings->client);
-    if (done == -1) 
-        return -1;
-
-    ret = check_label_to_parse(parser, "server");
-    if (ret == 1)
-        return parse_server(parser, settings);
-
-    return ret; 
-}
-*/
-
-/**
- * Parses all events within a given 'server:' label and assigns the
- * information contained to the appropriate settings.
- * @param parser The parser to extract events from.
- * @param settings The struct to fill with the information parsed from parser.
- * @returns 0 on success, -1 on error.
- */
-/*
-int parse_server(yaml_parser_t* parser, global_config* settings) {
-
-    int done = 0;
-    int ret;
-
-    if (settings->server != NULL) {
-        log_printf(LOG_ERROR, "Config: Multiple 'server:' labels\n");
-        return -1;
-    }
-
-    if (parse_next_event(parser) != YAML_MAPPING_START_EVENT) {
-        log_printf(LOG_ERROR, "Config: Bad syntax after 'server'\n");
-        return -1;
-    }
-
-    settings->server = calloc(1, sizeof(server_settings));
-    if (settings->server == NULL) {
-        log_printf(LOG_ERROR, "Parser: malloc failure--%s\n", strerror(errno));
-        return -1;
-    }
-
-    while (!done)
-        done = parse_next_server_setting(parser, settings->server);
-    if (done == -1) 
-        return -1;
-
-    ret = check_label_to_parse(parser, "client");
-
-    if (ret == 1)
-        return parse_client(parser, settings);
-
-    return ret;
-}
-*/
-
 
 /**
  *******************************************************************************
@@ -939,7 +677,8 @@ int check_label_to_parse(yaml_parser_t* parser, char* label) {
         return 0;
     
     case YAML_SCALAR_EVENT:
-        ev_label = utf8_to_ascii(event.data.scalar.value, event.data.scalar.length);
+        ev_label = utf8_to_ascii(event.data.scalar.value,  
+                event.data.scalar.length);
         str_tolower(ev_label);
         yaml_event_delete(&event);
         
@@ -1040,36 +779,6 @@ int is_enabled(char* label) {
     return -1;
 }
 
-
-/**
- * Checks to see if the given string is 'client'
- * @param label A null-terminated string (can be NULL).
- * @returns 1 if the given string is 'client'; 0 otherwise.
- */
-/*
-int is_client(char* label) {
-    if (label == NULL)
-        return 0;
-    if (strcmp(label, "client") == 0)
-        return 1;
-    return 0;
-}
-*/
-
-/**
- * Checks to see if the given string is 'server'
- * @param label A null-terminated string (can be NULL).
- * @returns 1 if the given string is 'server'; 0 otherwise.
- */
-/*
-int is_server(char* label) {
-    if (label == NULL)
-        return 0;
-    if (strcmp(label, "server") == 0)
-        return 1;
-    return 0;
-}
-*/
 
 /**
  * Allocates a new char array the length of src and fills it with an ASCII 
