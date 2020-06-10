@@ -54,8 +54,7 @@ int get_peer_certificate(socket_ctx* sock_ctx, char** data, unsigned int* len) {
 
 	if (PEM_write_bio_X509(bio, cert) == 0) {
 		/* TODO: get specific error from OpenSSL */
-		set_err_string(sock_ctx, "Daemon error: couldn't convert cert to ASCII");
-		ret = -ENOTSUP;
+		ret = determine_and_set_error(sock_ctx);
 		goto end;
 	}
 
@@ -156,10 +155,10 @@ int get_hostname(socket_ctx* sock_ctx, char** data, unsigned int* len) {
  */
 int get_enabled_ciphers(socket_ctx* sock_ctx, char** data, unsigned int* len) {
 	
-	char* ciphers_str;
+	char* ciphers_str = NULL;
 
 	STACK_OF(SSL_CIPHER)* ciphers = SSL_get_ciphers(sock_ctx->ssl);
-	/* TODO: replace this with SSL_get1_supported_ciphers? Maybe... */
+	/* TODO: FEATURE: use SSL_get1_supported_ciphers if connected */
 	if (ciphers == NULL)
 		goto end; /* no ciphers available; just return NULL. */
 
@@ -201,13 +200,13 @@ int get_enabled_ciphers(socket_ctx* sock_ctx, char** data, unsigned int* len) {
 int set_certificate_chain(socket_ctx* sock_ctx, char* path) {
 
 	struct stat file_stats;
-	int ret, ssl_err;
+	int ret, response, ssl_err;
 
-	ERR_clear_error();
+    clear_global_and_socket_errors(sock_ctx);
 
 	ret = stat(path, &file_stats);
 	if (ret != 0) {
-		ret = -errno;
+		response = -errno;
 		goto err;
 	}
 
@@ -215,9 +214,7 @@ int set_certificate_chain(socket_ctx* sock_ctx, char* path) {
 		/* is a file */
 		ret = SSL_CTX_use_certificate_chain_file(sock_ctx->ssl_ctx, path);
 		if (ret != 1) {
-			log_printf(LOG_ERROR, "Failed to load cert chain\n");
-			/* TODO: set errno to SSL error */
-			ret = -EBADF;
+			response = -EBADF;
 			goto err;
 		}
 
@@ -227,21 +224,24 @@ int set_certificate_chain(socket_ctx* sock_ctx, char* path) {
 		 * See man fts for functions needed to do this */
 
 		/* stub */
-		ret = -EBADF;
+		response = -EBADF;
 		goto err;
 	} else {
 		/* could be a link, a socket, etc */
-		ret = -EBADF;
+		response = -EBADF;
 		goto err;
 	}
 
 	return 0;
  err:
-	ssl_err = ERR_GET_REASON(ERR_get_error());
+    ssl_err = ERR_get_error();
+
+    log_printf(LOG_ERROR, "Failed to load certificate chain: %s\n", 
+            ssl_err ? ERR_error_string(ssl_err, NULL) : "not a file or folder");
 
 	set_err_string(sock_ctx, "TLS error: couldn't set certificate chain - %s",
 			ssl_err ? ERR_reason_error_string(ssl_err) : strerror(-ret));
-	return ret;
+	return response;
 }
 
 
@@ -272,23 +272,25 @@ int set_private_key(socket_ctx* sock_ctx, char* path) {
 		goto err;
 	}
 
+    clear_global_and_socket_errors(sock_ctx);
+
 	ret = SSL_CTX_use_PrivateKey_file(sock_ctx->ssl_ctx, path, SSL_FILETYPE_PEM);
 	if (ret == 1) /* pem key loaded */
 		return check_key_cert_pair(sock_ctx); 
 	else
-		ERR_clear_error();
+		clear_global_errors();
 
 	ret = SSL_CTX_use_PrivateKey_file(sock_ctx->ssl_ctx, path, SSL_FILETYPE_ASN1);
 	if (ret == 1) /* ASN.1 key loaded */
 		return check_key_cert_pair(sock_ctx);  
 	else
-		ERR_clear_error();
+		clear_global_errors();
 
 	ret = SSL_CTX_use_PrivateKey_file(sock_ctx->ssl_ctx, path, SSL_FILETYPE_PEM);
 	if (ret == 1) /* pem RSA key loaded */
 		return check_key_cert_pair(sock_ctx); 
 	else
-		ERR_clear_error();
+		clear_global_errors();
 
 	ret = SSL_CTX_use_RSAPrivateKey_file(sock_ctx->ssl_ctx, path, SSL_FILETYPE_ASN1);
 	if (ret == 1) /* ASN.1 RSA key loaded */
@@ -361,7 +363,6 @@ int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, long len) {
         return -EINVAL;
 
     memcpy(sock_ctx->rem_hostname, hostname, len);
-    
 
 	return 0;
 }

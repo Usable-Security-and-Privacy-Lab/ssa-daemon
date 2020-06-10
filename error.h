@@ -10,6 +10,7 @@
 
 int has_error_string(socket_ctx* sock_ctx);
 
+int determine_errno_error();
 int determine_and_set_error(socket_ctx* sock_ctx);
 int set_socket_error(socket_ctx* sock_ctx, unsigned long ssl_err);
 

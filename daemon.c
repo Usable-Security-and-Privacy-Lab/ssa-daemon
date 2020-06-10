@@ -325,6 +325,8 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 		return;
 	}
 
+    /* Don't clear the socket's error string here */
+
 	if (sock_ctx->state != SOCKET_FINISHING_CONN) {
 		log_printf(LOG_ERROR, "accept_cb() called on bad connection\n");
 		goto err;
@@ -552,6 +554,8 @@ void socket_cb(daemon_ctx* daemon, unsigned long id, char* comm) {
 	evutil_socket_t fd = -1;
 	int response;
 
+    clear_global_errors();
+
 	sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);
 	if (sock_ctx != NULL) {
 		log_printf(LOG_ERROR,
@@ -569,7 +573,9 @@ void socket_cb(daemon_ctx* daemon, unsigned long id, char* comm) {
 	}
 
 	if (evutil_make_socket_nonblocking(fd) != 0) {
-		response = EVUTIL_SOCKET_ERROR();
+        log_printf(LOG_ERROR, "Failed to make socket nonblocking (errno %i): %s",
+                    EVUTIL_SOCKET_ERROR(), strerror(EVUTIL_SOCKET_ERROR()));
+		response = -ECANCELED;
 		goto err;
 	}
 	
@@ -580,6 +586,7 @@ void socket_cb(daemon_ctx* daemon, unsigned long id, char* comm) {
 	log_printf(LOG_INFO, "Socket created on behalf of application %s\n", comm);
 	netlink_notify_kernel(daemon, id, NOTIFY_SUCCESS);
 	return;
+
  err:
 	if (fd != -1)
 		close(fd);
@@ -604,7 +611,7 @@ void setsockopt_cb(daemon_ctx* ctx, unsigned long id, int level,
 		return;
 	}
 
-	clear_socket_error(sock_ctx);
+	clear_global_and_socket_errors(sock_ctx);
 
 	switch (option) {
 	case TLS_REMOTE_HOSTNAME:
@@ -670,7 +677,10 @@ void getsockopt_cb(daemon_ctx* daemon,
 		return;
 	}
 
-	switch (option) {
+    if (option != TLS_ERROR)
+        clear_global_and_socket_errors(sock_ctx);
+
+    switch (option) {
 	case TLS_ERROR:
 		if (!has_error_string(sock_ctx)) {
 			response = -EINVAL;
@@ -697,9 +707,7 @@ void getsockopt_cb(daemon_ctx* daemon,
 				1, SOCKET_ACCEPTED)) != 0)
 			break;
 
-		if(get_hostname(sock_ctx, &data, &len) == 0) {
-			response = -EINVAL;
-		}
+		response = get_hostname(sock_ctx, &data, &len);
 		break;
 
 	case TLS_PEER_IDENTITY:
@@ -731,7 +739,6 @@ void getsockopt_cb(daemon_ctx* daemon,
 	case TLS_DISABLE_CIPHER:
 	case TLS_REQUEST_PEER_AUTH:
 		response = -ENOPROTOOPT; /* all set only */
-		clear_socket_error(sock_ctx);
 		break;
 
 	case TLS_ID:
@@ -744,9 +751,9 @@ void getsockopt_cb(daemon_ctx* daemon,
 		log_printf(LOG_ERROR,
 				"Default case for getsockopt hit: should never happen\n");
 		response = -EBADF;
-		clear_socket_error(sock_ctx);
 		break;
 	}
+
 	if (response != 0) {
 		netlink_notify_kernel(daemon, id, response);
 		return;
@@ -756,7 +763,6 @@ void getsockopt_cb(daemon_ctx* daemon,
 	if (need_free == 1)
 		free(data);
 	
-	clear_socket_error(sock_ctx);
 	return;
 }
 
@@ -773,6 +779,8 @@ void bind_cb(daemon_ctx* daemon, unsigned long id,
 		goto err;
 	}
 
+    clear_global_and_socket_errors(sock_ctx);
+
 	response = check_socket_state(sock_ctx, 1, SOCKET_NEW);
 	if (response != 0) {
 		netlink_notify_kernel(daemon, id, response);
@@ -780,9 +788,9 @@ void bind_cb(daemon_ctx* daemon, unsigned long id,
 	}
 
 	if (evutil_make_listen_socket_reuseable(sock_ctx->fd) != 0) {
-		response = -EVUTIL_SOCKET_ERROR();
-		set_err_string(sock_ctx, "Bind error: "
-				"SSA daemon's internal socket couldn't be made reusable");
+        log_printf(LOG_ERROR, "Failed to make socket nonblocking (errno %i): %s",
+                    EVUTIL_SOCKET_ERROR(), strerror(EVUTIL_SOCKET_ERROR()));
+		response = -ECANCELED;
 		goto err;
 	}
 
@@ -843,9 +851,11 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
 
 	sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);
 	if (sock_ctx == NULL) {
-		response = -EBADF;
-		goto err;
+		netlink_notify_kernel(daemon, id, -EBADF);
+        return;
 	}
+
+    clear_global_and_socket_errors(sock_ctx);
 
 	response = check_socket_state(sock_ctx, 4, 
             SOCKET_NEW, SOCKET_CONNECTING, 
@@ -896,16 +906,9 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
 
 	return;
  err:
-	
-    if (!has_error_string(sock_ctx))
-        set_err_string(sock_ctx, "Internal daemon error: "
-                "socket failed while setting up for TLS connection");
 
-
-    if (sock_ctx != NULL) {
-		socket_shutdown(sock_ctx);
-		sock_ctx->state = SOCKET_ERROR;
-	}
+    socket_shutdown(sock_ctx);
+    sock_ctx->state = SOCKET_ERROR;
 
 	netlink_notify_kernel(daemon, id, response);
 	return;
@@ -924,13 +927,14 @@ void listen_cb(daemon_ctx* daemon, unsigned long id,
         return;
 	}
 
+    clear_global_and_socket_errors(sock_ctx);
+
 	response = check_socket_state(sock_ctx, 1, SOCKET_NEW);
 	if (response != 0) {
 		netlink_notify_kernel(daemon, id, response);
 		return;
 	}
 
-	/* set external-facing socket to listen */
 	if (listen(sock_ctx->fd, SOMAXCONN) == -1) {
 		response = -errno;
 		set_err_string(sock_ctx, "Listener setup error: "
@@ -947,6 +951,7 @@ void listen_cb(daemon_ctx* daemon, unsigned long id,
 				"failed to allocate buffers within the SSA daemon");
 		goto err;
 	}
+
 	evconnlistener_set_error_cb(sock_ctx->listener, listener_accept_error_cb);
 
 	sock_ctx->state = SOCKET_LISTENING;
@@ -984,6 +989,9 @@ void associate_cb(daemon_ctx* daemon, unsigned long id,
 		netlink_notify_kernel(daemon, id, -EBADF);
 		return;
 	}
+
+    clear_global_errors();
+    /* don't clear the socket's error string here */
 
 	if (sock_ctx->state != SOCKET_CONNECTING) {
 		/* Tear down this connection--nobody has access to it anyways */

@@ -188,7 +188,7 @@ int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
     bufferevent_event_cb event_cb = (plain_fd == NO_FD)
             ? client_bev_event_cb : server_bev_event_cb;
 
-    clear_socket_error(sock_ctx);
+    clear_global_and_socket_errors(sock_ctx);
 
     sock_ctx->secure.bev = bufferevent_openssl_socket_new(daemon->ev_base,
             sock_ctx->fd, sock_ctx->ssl, state, 0);
@@ -208,7 +208,7 @@ int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
         log_printf(LOG_ERROR, "Enabling bufferevent failed: %i %s\n",
                 EVUTIL_SOCKET_ERROR(), strerror(EVUTIL_SOCKET_ERROR()));
 
-        response = -ECONNABORTED;
+        response = -ECANCELED;
 		goto err;
 	}
 
@@ -257,10 +257,10 @@ int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
 
 int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
 
-    int response = -ECONNABORTED;
+    int response;
     int ret;
 
-    clear_socket_error(sock_ctx);
+    clear_global_and_socket_errors(sock_ctx);
 
     if (is_client && DO_REVOCATION_CHECKS(sock_ctx->revocation.checks)) {
 
@@ -308,6 +308,9 @@ int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
 
     return 0;
  err:
+    if (!has_error_string(sock_ctx))
+        response = determine_and_set_error(sock_ctx);
+
     if (sock_ctx->ssl != NULL)
         SSL_free(sock_ctx->ssl);
 

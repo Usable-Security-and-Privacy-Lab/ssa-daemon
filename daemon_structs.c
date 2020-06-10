@@ -149,7 +149,7 @@ int socket_context_new(socket_ctx** new_sock_ctx, int fd,
     sock_ctx->ssl_ctx = SSL_CTX_create(daemon->settings);
     if (sock_ctx->ssl_ctx == NULL) {
         /* TODO: also should return -EINVAL if settings failed to load?? */
-        response = -ENOMEM;
+        response = determine_errno_error();
         goto err;
     }
 

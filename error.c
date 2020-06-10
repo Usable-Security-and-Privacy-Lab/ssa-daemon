@@ -26,6 +26,25 @@ int has_error_string(socket_ctx* sock_ctx) {
 
 
 /**
+ * Checks the OpenSSL error queue and converts the error into an errno code.
+ * @returns A negative errno code.
+ */
+int determine_errno_error() {
+
+    unsigned long ssl_err = ERR_peek_error();
+    const char* err_string = ERR_error_string(ssl_err, NULL);
+
+    if (ERR_GET_REASON(ssl_err) == ERR_R_MALLOC_FAILURE) {
+        return -ENOMEM;
+
+    } else {
+        log_printf(LOG_ERROR, "Internal daemon error: %s\n", err_string);
+        return -ECANCELED;
+    }
+}
+
+
+/**
  * Determines the nature of the error that has occured on the socket, and 
  * then sets that socket's error string (and optionally error code).
  * @param sock_ctx The context of the socket to set an error for.
@@ -75,7 +94,7 @@ int set_socket_error(socket_ctx* sock_ctx, unsigned long ssl_err) {
 
     int error_library = ERR_GET_LIB(ssl_err);
     int error_reason = ERR_GET_REASON(ssl_err);
-    const char* reason_str = ERR_reason_error_string(ssl_err); 
+    const char* reason_str = ERR_reason_error_string(ssl_err);
 
     if (error_reason == ERR_R_MALLOC_FAILURE)
         return -ENOMEM;
