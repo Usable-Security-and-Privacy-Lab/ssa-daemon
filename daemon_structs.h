@@ -1,8 +1,7 @@
-#ifndef DAEMON_STRUCTS_H
-#define DAEMON_STRUCTS_H
+#ifndef SSA_DAEMON_STRUCTS_H
+#define SSA_DAEMON_STRUCTS_H
 
 #include <event2/util.h>
-
 #include <openssl/ssl.h>
 
 #include "hashmap.h"
@@ -210,7 +209,7 @@ void clear_err_string(socket_ctx* sock_ctx);
 
 int ssl_malloc_err(socket_ctx* sock_ctx);
 
-int associate_fd(socket_ctx* sock_ctx, evutil_socket_t ifd);
+
 int get_port(struct sockaddr* addr);
 
 

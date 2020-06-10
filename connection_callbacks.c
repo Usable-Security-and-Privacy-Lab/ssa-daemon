@@ -1,15 +1,9 @@
-#include <sys/socket.h>
-#include <limits.h>
-#include <unistd.h>
-
 #include <event2/buffer.h>
 #include <event2/bufferevent_ssl.h>
 #include <event2/event.h>
-#include <event2/dns.h>
-#include <openssl/err.h>
 #include <openssl/ocsp.h>
 
-#include "bev_callbacks.h"
+#include "connection_callbacks.h"
 #include "daemon_structs.h"
 #include "log.h"
 #include "netlink.h"
@@ -31,6 +25,8 @@ void handle_event_eof(socket_ctx* sock_ctx, channel* startpoint, channel* endpoi
 void handle_event_timeout(socket_ctx* sock_ctx);
 
 
+void ocsp_responder_read_cb(struct bufferevent* bev, void* arg);
+void ocsp_responder_event_cb(struct bufferevent* bev, short events, void* arg);
 
 // Revocation-specific helper functions
 
@@ -388,6 +384,7 @@ void handle_event_eof(socket_ctx* sock_ctx,
 			endpoint->closed = 1;
 		}
 	}
+
 	startpoint->closed = 1;
 
 	return;

@@ -1,22 +1,18 @@
 
 #include <sys/un.h>
-#include <stdarg.h>
-#include <string.h>
 #include <unistd.h>
 
 #include <event2/bufferevent.h>
 #include <event2/dns.h>
 #include <event2/listener.h>
-#include <event2/bufferevent_ssl.h>
+#include <openssl/ocsp.h>
 #include <openssl/err.h>
 
 #include "config.h"
 #include "daemon_structs.h"
 #include "log.h"
 #include "netlink.h"
-#include "tls_client.h"
-#include "tls_server.h"
-
+#include "socket_setup.h"
 
 #define HASHMAP_NUM_BUCKETS	100
 #define CACHE_NUM_BUCKETS 20
@@ -199,6 +195,7 @@ socket_ctx* accepting_socket_ctx_new(socket_ctx* listener_ctx, int fd) {
     ret = SSL_CTX_up_ref(listener_ctx->ssl_ctx);
     if (ret != 1)
         goto err;
+
     sock_ctx->ssl_ctx = listener_ctx->ssl_ctx;
 
     return sock_ctx;
@@ -544,30 +541,6 @@ void set_wrong_state_err_string(socket_ctx* sock_ctx) {
 }
 
 
-/**
- * Associates the given file descriptor with the given connection and 
- * enables its bufferevent to read and write freely.
- * @param sock_ctx The connection to have the file descriptor associated with.
- * @param ifd The file descriptor of an internal program that will
- * communicate to the daemon through plaintext.
- * @returns 0 on success, or -ECONNABORTED on failure.
- */
-int associate_fd(socket_ctx* sock_ctx, evutil_socket_t ifd) {
-
-	/* Possibility of failure is acutally none in current libevent code */
-	if (bufferevent_setfd(sock_ctx->plain.bev, ifd) != 0)
-		goto err;
-
-	/* This function *unlikely* to fail, but if we want to be really robust...*/
-	if (bufferevent_enable(sock_ctx->plain.bev, EV_READ | EV_WRITE) != 0)
-		goto err;
-
-	log_printf(LOG_INFO, "plaintext channel bev enabled\n");
-	return 0;
- err:
-	log_printf(LOG_ERROR, "associate_fd failed.\n");
-	return -ECONNABORTED; /* Only happens while client is connecting */
-}
 
 /**
  * Retrieves an integer port number from a given sockaddr struct.

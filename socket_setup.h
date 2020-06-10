@@ -20,34 +20,19 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <event2/util.h>
+#ifndef SSA_SOCKET_SETUP_H
+#define SSA_SOCKET_SETUP_H
+
 #include "daemon_structs.h"
 
 /* Initialization of a new SSL_CTX */
 SSL_CTX* SSL_CTX_create(global_config* settings);
-
-/* SSL_CTX loading */
-long get_tls_version(enum tls_version version);
-int load_certificate_authority(SSL_CTX* ctx, char* CA_path);
-int load_cipher_list(SSL_CTX* ctx, char** list, int num);
-int load_ciphersuites(SSL_CTX* ctx, char** list, int num);
-
-
-/* setsockopt */
-int get_peer_certificate(socket_ctx* conn, char** data, unsigned int* len);
-int get_peer_identity(socket_ctx* conn_ctx, char** data, unsigned int* len);
-int get_hostname(socket_ctx* conn_ctx, char** data, unsigned int* len);
-int get_enabled_ciphers(socket_ctx* conn, char** data, unsigned int* len);
-
-/* setsockopt */
-int set_connection_client(socket_ctx* conn, daemon_ctx* daemon);
-int set_connection_server(socket_ctx* conn, daemon_ctx* daemon);
-int set_trusted_CA_certificates(socket_ctx *sock_ctx, char* path);
-int disable_cipher(socket_ctx* sock_ctx, char* cipher);
-int set_certificate_chain(socket_ctx* sock_ctx, char* path);
-int set_private_key(socket_ctx* sock_ctx, char* path);
+int client_SSL_new(socket_ctx* sock_ctx);
 
 int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client);
 int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd);
 
+int associate_fd(socket_ctx* sock_ctx, evutil_socket_t ifd);
 
+
+#endif
