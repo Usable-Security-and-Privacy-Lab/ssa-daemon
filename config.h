@@ -1,7 +1,5 @@
-#ifndef CONFIG_H
-#define CONFIG_H
-
-#include <openssl/ssl.h>
+#ifndef SSA_CONFIG_H
+#define SSA_CONFIG_H
 
 #include "daemon_structs.h"
 
