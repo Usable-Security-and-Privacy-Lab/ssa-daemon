@@ -25,37 +25,25 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <errno.h>
 #include <netdb.h>
 #include <signal.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
 #include <unistd.h>
 
 #include <event2/bufferevent.h>
-#include <event2/event.h>
 #include <event2/listener.h>
 #include <event2/util.h>
-#include <netlink/genl/genl.h>
-#include <openssl/bio.h>
-#include <openssl/engine.h>
-#include <openssl/rand.h>
-#include <openssl/ssl.h>
 
 #include "daemon.h"
 #include "daemon_structs.h"
-#include "hashmap.h"
 #include "in_tls.h"
 #include "log.h"
 #include "netlink.h"
-#include "tls_client.h"
-#include "tls_common.h"
-#include "tls_server.h"
+#include "socket_setup.h"
+#include "sockopt_functions.h"
 
 
 #define MAX_UPGRADE_SOCKET  18
