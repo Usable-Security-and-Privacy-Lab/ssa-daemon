@@ -1,18 +1,18 @@
-#include "config.h"
-#include "connection_callbacks.h"
-#include "log.h"
-
-#include <event2/bufferevent.h>
-#include <event2/bufferevent_ssl.h>
-#include <event2/event.h>
-
 #include <fcntl.h> /* for S_IFDIR/S_IFREG constants */
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <event2/bufferevent.h>
+#include <event2/bufferevent_ssl.h>
+#include <event2/event.h>
 #include <openssl/err.h>
+
+#include "config.h"
+#include "connection_callbacks.h"
+#include "error.h"
+#include "log.h"
 
 #define UBUNTU_DEFAULT_CA "/etc/ssl/certs/ca-certificates.crt"
 #define FEDORA_DEFAULT_CA "/etc/pki/tls/certs/ca-bundle.crt"
@@ -168,7 +168,7 @@ int client_SSL_new(socket_ctx* sock_ctx) {
 
 	sock_ctx->ssl = SSL_new(sock_ctx->ssl_ctx);
 	if (sock_ctx->ssl == NULL)
-		return ssl_malloc_err(sock_ctx);
+		return determine_and_set_error(sock_ctx);
 
     SSL_set_verify(sock_ctx->ssl, SSL_VERIFY_PEER, NULL);
 
@@ -188,7 +188,7 @@ int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
     bufferevent_event_cb event_cb = (plain_fd == NO_FD)
             ? client_bev_event_cb : server_bev_event_cb;
 
-    clear_err_string(sock_ctx);
+    clear_socket_error(sock_ctx);
 
     sock_ctx->secure.bev = bufferevent_openssl_socket_new(daemon->ev_base,
             sock_ctx->fd, sock_ctx->ssl, state, 0);
@@ -260,7 +260,7 @@ int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
     int response = -ECONNABORTED;
     int ret;
 
-    clear_err_string(sock_ctx);
+    clear_socket_error(sock_ctx);
 
     if (is_client && DO_REVOCATION_CHECKS(sock_ctx->revocation.checks)) {
 

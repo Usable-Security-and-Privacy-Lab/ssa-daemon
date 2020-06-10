@@ -151,17 +151,22 @@ struct responder_ctx_st {
  
 
 struct socket_ctx_st {
+
+	daemon_ctx* daemon;
+	unsigned long id;
+
     enum socket_state state;
+
+    SSL_CTX* ssl_ctx;
+	SSL* ssl;
+	evutil_socket_t fd;
 
 	channel plain;
 	channel secure;
-	SSL* ssl;
+	struct evconnlistener* listener;
+
 	struct sockaddr* addr; /* TODO: Used only for server-side connections?? */
 	int addrlen;
-
-	unsigned long id;
-	evutil_socket_t fd;
-    SSL_CTX* ssl_ctx;
 
 	revocation_ctx revocation;
 
@@ -176,11 +181,11 @@ struct socket_ctx_st {
 		int rem_addrlen;
 	};
 
-	struct evconnlistener* listener;
 
 	char rem_hostname[MAX_HOSTNAME+1];
+
     char err_string[MAX_ERR_STRING+1];
-	daemon_ctx* daemon;
+    unsigned int handshake_err_code;
 };
 
 
@@ -199,16 +204,6 @@ void revocation_context_cleanup(revocation_ctx* ctx);
 void responder_cleanup(responder_ctx* resp);
 
 int check_socket_state(socket_ctx* sock_ctx, int num, ...);
-
-int has_err_string(socket_ctx* sock_ctx);
-void set_err_string(socket_ctx* sock_ctx, char* string, ...);
-void set_verification_err_string(socket_ctx* sock_ctx, unsigned long ssl_err);
-void set_badfd_err_string(socket_ctx* sock_ctx);
-void set_wrong_state_err_string(socket_ctx* sock_ctx);
-void clear_err_string(socket_ctx* sock_ctx);
-
-int ssl_malloc_err(socket_ctx* sock_ctx);
-
 
 int get_port(struct sockaddr* addr);
 

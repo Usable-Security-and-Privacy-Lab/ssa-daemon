@@ -10,6 +10,7 @@
 
 #include "config.h"
 #include "daemon_structs.h"
+#include "error.h"
 #include "log.h"
 #include "netlink.h"
 #include "socket_setup.h"
@@ -341,8 +342,6 @@ void responder_cleanup(responder_ctx* resp) {
 	}
 }
 
-
-
 /**
  * Checks the given socket to see if it matches any of the corresponding
  * states passed into the function. If not, the error string of the connection 
@@ -377,170 +376,6 @@ int check_socket_state(socket_ctx* sock_ctx, int num, ...) {
 		return -EOPNOTSUPP;
 	}
 }
-
-
-/**
- * Converts the current OpenSSL ERR error code into an appropriate errno code.
- * @returns 0 if no ERR was in the queue; -1 if the error could not be converted
- * into an error code; or a positive errno code.
- */
-int ssl_err_to_errno() {
-
-	unsigned long ssl_err = ERR_peek_error();
-
-	/* TODO: stub */
-	log_printf(LOG_ERROR, "OpenSSL error occurred:\n");
-
-	switch (ERR_GET_REASON(ssl_err)) {
-	case ERR_R_MALLOC_FAILURE:
-		return ENOMEM;
-	case ERR_R_PASSED_NULL_PARAMETER:
-	case ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED:
-	case ERR_R_PASSED_INVALID_ARGUMENT:
-		return EINVAL;
-	default:
-		return ENETDOWN; /* some unrecoverable error internal to the Daemon */
-	}
-}
-
-/**
- * Verifies that a given OpenSSL operation failed because of memory issues. If 
- * memory issues were not the cause of the problem, then the cause of the 
- * problem is most likely a bug internal to the daemon (such as passing in a 
- * NULL reference), and it will print out the error information to the logs.
- * @param sock_ctx The socket for which to associate the error string with.
- * @returns -ENOMEM when insufficient memory is available, or -ENOTRECOVERABLE 
- * when an unknown failure occurred.
- */
-int ssl_malloc_err(socket_ctx* sock_ctx) {
-	
-	unsigned long ssl_err = ERR_get_error();
-	ERR_clear_error();
-
-	set_err_string(sock_ctx, "Daemon failed to allocate sufficient buffers: %s", 
-			ERR_reason_error_string(ERR_GET_REASON(ssl_err)));
-
-	if (ERR_GET_REASON(ssl_err) == ERR_R_MALLOC_FAILURE) {
-		log_printf(LOG_ERROR, "OpenSSL malloc failure caught\n");
-		set_err_string(sock_ctx, "Insufficient alloc memory for the SSA daemon");
-		return -ENOMEM;
-	} else { 
-		log_printf(LOG_ERROR, "Internal OpenSSL error on malloc attempt: %s\n",
-				ERR_error_string(ssl_err, NULL));
-		set_err_string(sock_ctx, "Internal failure; please reset daemon & report");
-		return -ENOTRECOVERABLE;
-	}
-}
-
-
-/**
- * Checks to see if the given socket has an active error string.
- * @param sock_ctx The context of the socket to check.
- * @returns 1 if an error string was found, or 0 otherwise.
- */
-int has_err_string(socket_ctx* sock_ctx) {
-	if (strlen(sock_ctx->err_string) > 0)
-		return 1;
-	else
-		return 0;
-}
-
-/**
- * Sets the error string of a given socket to reflect the reason for
- * a TLS handshake failure. Note that this may return "ok" if the handshake
- * actually passed, so the verify result should be checked to ensure that 
- * it is not equal to X509_V_OK if no error string is desired on success.
- * @param sock_ctx The context of the socket to set the error string for.
- * @param ssl_err The error code returned by SSL_get_verify_result().
- */
-void set_verification_err_string(socket_ctx* sock_ctx, unsigned long openssl_err) {
-
-	const char* err_description;
-	long cert_err = SSL_get_verify_result(sock_ctx->ssl);
-	
-
-	if (cert_err != X509_V_OK) {
-		err_description = X509_verify_cert_error_string(cert_err);
-
-		set_err_string(sock_ctx, 
-				"TLS handshake error %li: %s\n", cert_err, err_description);
-
-		log_printf(LOG_ERROR,
-				"OpenSSL verification error %li: %s\n", 
-				cert_err, err_description);
-    } else {
-		/* an error not to do with the certificate validation */
-		
-		switch (ERR_GET_REASON(openssl_err)) {
-		case SSL_R_SSLV3_ALERT_HANDSHAKE_FAILURE:
-			strncpy(sock_ctx->err_string, "TLS handshake error: server supports"
-					" none of the allowed ciphers\n", MAX_ERR_STRING);
-			break;
-
-		case SSL_R_TLSV1_ALERT_PROTOCOL_VERSION:
-			strncpy(sock_ctx->err_string, "TLS handshake error: server supports"
-					" none of the allowed TLS versions\n", MAX_ERR_STRING);
-			break;
-
-		case SSL_R_UNSUPPORTED_PROTOCOL: 
-			strncpy(sock_ctx->err_string, "TLS handshake error: server supports"
-					" none of the allowed TLS versions\n", MAX_ERR_STRING);
-			break;
-
-		default:
-			/* Add more here as needs be */
-			break;
-		}
-
-	}
-}
-
-/**
- * Sets the error string for a given socket to string (plus the additional
- * arguments added in a printf-style way).
- * @param sock_ctx The context of the socket to set an error string for.
- * @param string The printf-style string to set sock_ctx's error string to.
- */
-void set_err_string(socket_ctx* sock_ctx, char* string, ...) {
-
-	if (sock_ctx == NULL)
-		return;
-
-	va_list args;
-	clear_err_string(sock_ctx);
-
-	va_start(args, string);
-	vsnprintf(sock_ctx->err_string, MAX_ERR_STRING, string, args);
-	va_end(args);
-}
-
-/**
- * Clears the error string found in sock_ctx.
- * @param sock_ctx The conetext of the socket to clear an error string from.
- */
-void clear_err_string(socket_ctx* sock_ctx) {
-	memset(sock_ctx->err_string, '\0', MAX_ERR_STRING + 1);
-}
-
-void set_badfd_err_string(socket_ctx* sock_ctx) {
-	if (sock_ctx == NULL)
-		return;
-
-	clear_err_string(sock_ctx);
-	strncpy(sock_ctx->err_string, "SSA daemon socket error: given socket previously"
-			" failed an operation in an unrecoverable way", MAX_ERR_STRING);
-}
-
-void set_wrong_state_err_string(socket_ctx* sock_ctx) {
-	if (sock_ctx == NULL)
-		return;
-
-	clear_err_string(sock_ctx);
-	strncpy(sock_ctx->err_string, "SSA daemon error: given socket is not in the right "
-			"state to perform the requested operation", MAX_ERR_STRING);
-}
-
-
 
 /**
  * Retrieves an integer port number from a given sockaddr struct.

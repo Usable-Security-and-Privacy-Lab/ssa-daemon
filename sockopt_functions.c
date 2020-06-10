@@ -6,6 +6,7 @@
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 
+#include "error.h"
 #include "log.h"
 #include "sockopt_functions.h"
 
@@ -47,7 +48,7 @@ int get_peer_certificate(socket_ctx* sock_ctx, char** data, unsigned int* len) {
 	bio = BIO_new(BIO_s_mem());
 	if (bio == NULL) {
 		/* TODO: get specific error from OpenSSL */
-		ret = ssl_malloc_err(sock_ctx);
+		ret = determine_and_set_error(sock_ctx);
 		goto end;
 	}
 
@@ -109,7 +110,7 @@ int get_peer_identity(socket_ctx* sock_ctx, char** identity, unsigned int* len) 
 	*identity = X509_NAME_oneline(subject_name, NULL, 0);
 	if (*identity == NULL) {
 		X509_free(cert);
-		return ssl_malloc_err(sock_ctx);
+		return determine_and_set_error(sock_ctx);
 	}
 	*len = strlen(*identity) + 1; /* '\0' character */
 

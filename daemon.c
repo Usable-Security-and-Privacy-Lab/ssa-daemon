@@ -39,6 +39,7 @@
 
 #include "daemon.h"
 #include "daemon_structs.h"
+#include "error.h"
 #include "in_tls.h"
 #include "log.h"
 #include "netlink.h"
@@ -603,7 +604,7 @@ void setsockopt_cb(daemon_ctx* ctx, unsigned long id, int level,
 		return;
 	}
 
-	clear_err_string(sock_ctx);
+	clear_socket_error(sock_ctx);
 
 	switch (option) {
 	case TLS_REMOTE_HOSTNAME:
@@ -671,7 +672,7 @@ void getsockopt_cb(daemon_ctx* daemon,
 
 	switch (option) {
 	case TLS_ERROR:
-		if (!has_err_string(sock_ctx)) {
+		if (!has_error_string(sock_ctx)) {
 			response = -EINVAL;
 			break;
 		}
@@ -730,7 +731,7 @@ void getsockopt_cb(daemon_ctx* daemon,
 	case TLS_DISABLE_CIPHER:
 	case TLS_REQUEST_PEER_AUTH:
 		response = -ENOPROTOOPT; /* all set only */
-		clear_err_string(sock_ctx);
+		clear_socket_error(sock_ctx);
 		break;
 
 	case TLS_ID:
@@ -743,7 +744,7 @@ void getsockopt_cb(daemon_ctx* daemon,
 		log_printf(LOG_ERROR,
 				"Default case for getsockopt hit: should never happen\n");
 		response = -EBADF;
-		clear_err_string(sock_ctx);
+		clear_socket_error(sock_ctx);
 		break;
 	}
 	if (response != 0) {
@@ -755,7 +756,7 @@ void getsockopt_cb(daemon_ctx* daemon,
 	if (need_free == 1)
 		free(data);
 	
-	clear_err_string(sock_ctx);
+	clear_socket_error(sock_ctx);
 	return;
 }
 
@@ -797,7 +798,7 @@ void bind_cb(daemon_ctx* daemon, unsigned long id,
 	sock_ctx->ext_addrlen = ext_addrlen;
 
 	netlink_notify_kernel(daemon, id, NOTIFY_SUCCESS);
-	clear_err_string(sock_ctx);
+	clear_socket_error(sock_ctx);
 	return;
  err:
 
@@ -896,7 +897,7 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
 	return;
  err:
 	
-    if (!has_err_string(sock_ctx))
+    if (!has_error_string(sock_ctx))
         set_err_string(sock_ctx, "Internal daemon error: "
                 "socket failed while setting up for TLS connection");
 

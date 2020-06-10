@@ -5,6 +5,7 @@
 
 #include "connection_callbacks.h"
 #include "daemon_structs.h"
+#include "error.h"
 #include "log.h"
 #include "netlink.h"
 #include "revocation.h"
@@ -178,7 +179,7 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 			ssl_err = bufferevent_get_openssl_error(bev);
 
             if (ssl_err != 0)
-			    set_verification_err_string(sock_ctx, ssl_err);
+			    set_socket_error(sock_ctx, ssl_err);
 			
 			socket_shutdown(sock_ctx);
 			sock_ctx->state = SOCKET_ERROR;
