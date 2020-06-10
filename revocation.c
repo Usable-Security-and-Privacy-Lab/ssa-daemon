@@ -3,8 +3,9 @@
 #include <event2/bufferevent.h>
 
 #include "log.h"
-#include "revocation.h"
 #include "netlink.h"
+#include "revocation.h"
+
 
 
 
