@@ -24,15 +24,15 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef NETLINK_H
-#define NETLINK_H
+#ifndef SSA_NETLINK_H
+#define SSA_NETLINK_H
+
+#include <netlink/genl/ctrl.h>
+#include <netlink/genl/genl.h>
 
 #include <event2/util.h>
 
-#include <netlink/genl/genl.h>
-#include <netlink/genl/ctrl.h>
-
-#include "daemon.h"
+#include "daemon_structs.h"
 
 
 #define NOTIFY_SUCCESS 0
