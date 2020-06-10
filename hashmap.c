@@ -94,8 +94,10 @@ int hashmap_add(hmap_t* map, unsigned long key, void* value) {
 	hnode_t* cur;
 	hnode_t* next;
 	hnode_t* new_node = (hnode_t*)malloc(sizeof(hnode_t));
+    if (new_node == NULL)
+        return -1;
 
-	new_node->key.k_long = key;
+    new_node->key.k_long = key;
 	new_node->value = value;
 	new_node->next = NULL;
 	

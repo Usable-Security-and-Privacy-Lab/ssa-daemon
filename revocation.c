@@ -4,6 +4,31 @@
 
 #include "log.h"
 #include "revocation.h"
+#include "netlink.h"
+
+
+
+void set_revocation_state(socket_ctx* sock_ctx, enum revocation_state state) {
+
+    daemon_ctx* daemon = sock_ctx->daemon;
+    int id = sock_ctx->id;
+    int response;
+
+    sock_ctx->revocation.state = state;
+
+    if (sock_ctx->state == SOCKET_FINISHING_CONN) {
+        switch (state) {
+        case REV_S_PASS:
+            response = NOTIFY_SUCCESS;
+            break;
+        default:
+            response = -EPROTO;
+            break;
+        }
+
+        netlink_handshake_notify_kernel(daemon, id, response);
+    }
+}
 
 
 
@@ -17,7 +42,7 @@
  * @returns A pointer to a fully-formed OCSP_REQUEST struct.
  * @see OCSP_REQUEST_free 
  */
-OCSP_REQUEST* create_ocsp_request(SSL* tls)
+OCSP_REQUEST* create_ocsp_request(SSL* ssl)
 {
     OCSP_REQUEST* request = NULL;
 	OCSP_CERTID* id = NULL;
@@ -26,7 +51,7 @@ OCSP_REQUEST* create_ocsp_request(SSL* tls)
     if (request == NULL)
         goto err;
 
-    id = get_ocsp_certid(tls);
+    id = get_ocsp_certid(ssl);
 	if (id == NULL)
 		goto err;
 
@@ -41,17 +66,17 @@ OCSP_REQUEST* create_ocsp_request(SSL* tls)
 
 
 /**
- * Forms an OCSP certificate ID from the peer's certificate chain found in tls.
- * @param tls The already-connected SSL object to form an OCSP_CERTID from.
+ * Forms an OCSP certificate ID from the peer's certificate chain found in ssl.
+ * @param ssl The already-connected SSL object to form an OCSP_CERTID from.
  * @returns A newly-allocated OCSP_CERTID, or NULL on failure.
  */
-OCSP_CERTID* get_ocsp_certid(SSL* tls) {
+OCSP_CERTID* get_ocsp_certid(SSL* ssl) {
 
 	STACK_OF(X509)* certs;
 	X509* subject;
 	X509* issuer;
 
-	certs = SSL_get_peer_cert_chain(tls);
+	certs = SSL_get_peer_cert_chain(ssl);
 	if (certs == NULL || sk_X509_num(certs) < 2)
 		return NULL;
 
@@ -210,9 +235,9 @@ int parse_url(char* url, char** host_out, int* port_out, char** path_out) {
  ******************************************************************************/
 
 /**
- * Retrieves the OCSP response stapled to the handshake in tls, and checks to 
+ * Retrieves the OCSP response stapled to the handshake in ssl, and checks to 
  * see if the returned response is valid.
- * @param tls The TLS connection to retrieve the stapled response from (a 
+ * @param ssl The TLS connection to retrieve the stapled response from (a 
  * handshake must be performed before calling this function).
  * @returns V_OCSP_CERTSTATUS_GOOD (0) if the stapled response was verified 
  * and it contained a GOOD status for the certificate;
@@ -222,13 +247,13 @@ int parse_url(char* url, char** host_out, int* port_out, char** path_out) {
  * the responder could not return a definitive answer on the certificate's
  * revocation status OR if no response was stapled.
  */
-int check_stapled_response(sock_context* sock_ctx) {
+int check_stapled_response(socket_ctx* sock_ctx) {
 
-    SSL* tls = sock_ctx->conn->tls;
+    SSL* ssl = sock_ctx->ssl;
 	unsigned char* stapled_resp;
 	int resp_len, ret;
 
-	resp_len = SSL_get_tlsext_status_ocsp_resp(tls, &stapled_resp);
+	resp_len = SSL_get_tlsext_status_ocsp_resp(ssl, &stapled_resp);
 	if (resp_len < 0)
 		return V_OCSP_CERTSTATUS_UNKNOWN;
 
@@ -253,17 +278,17 @@ int check_stapled_response(sock_context* sock_ctx) {
  * revocation status.
  */
 int do_ocsp_response_checks(unsigned char* resp_bytes,
-		 int resp_len, sock_context* sock_ctx) {
+		 int resp_len, socket_ctx* sock_ctx) {
 
 	OCSP_BASICRESP* basicresp = NULL;
-	SSL* tls = sock_ctx->conn->tls;
+	SSL* ssl = sock_ctx->ssl;
 	STACK_OF(X509)* chain = NULL;
 	X509_STORE* store = NULL;
 	OCSP_CERTID* id = NULL;
 	int status, ret;
 
-	chain = SSL_get_peer_cert_chain(tls);
-	store = SSL_CTX_get_cert_store(SSL_get_SSL_CTX(tls));
+	chain = SSL_get_peer_cert_chain(ssl);
+	store = SSL_CTX_get_cert_store(SSL_get_SSL_CTX(ssl));
 	if (chain == NULL || store == NULL)
 		goto err;
 
@@ -271,7 +296,7 @@ int do_ocsp_response_checks(unsigned char* resp_bytes,
 	if (ret != 0)
 		goto err;
 
-	id = get_ocsp_certid(tls);
+	id = get_ocsp_certid(ssl);
 	if (id == NULL)
 		goto err;
 
@@ -299,15 +324,15 @@ int do_ocsp_response_checks(unsigned char* resp_bytes,
 /**
  * Verifies the correctness of the signature and timestamps present in the 
  * given CRL list and checks to see if it contains an entry for the certificate 
- * found in tls. If so, the CRL revoked status is returned.
+ * found in ssl. If so, the CRL revoked status is returned.
  * If the response failes to validate, then the UNKNOWN status is returned.
  * @param response The response to verify the correctness of.
- * @param tls The TLS connection to verify the response on.
+ * @param ssl The TLS connection to verify the response on.
  * @returns 1 if a revoked status was found for the certificate in the CRL, or
  * 0 if no such status was found; or -1 if the response's correctness could not 
  * be verified.
  */
-int do_crl_response_checks(X509_CRL* response, SSL* tls) {
+int do_crl_response_checks(X509_CRL* response, SSL* ssl) {
 
 	return -1; //TODO: stub
 }
@@ -318,10 +343,10 @@ int do_crl_response_checks(X509_CRL* response, SSL* tls) {
 /**
  * Verifies the correctness of the signature and timestamps present in 
  * response and checks to make sure it matches the certificate found 
- * in tls. The OCSP response status found in response is then returned.
+ * in ssl. The OCSP response status found in response is then returned.
  * If the response failes to validate, then the UNKNOWN status is returned.
  * @param response The response to verify the correctness of.
- * @param tls The TLS connection to verify the response on.
+ * @param ssl The TLS connection to verify the response on.
  * @returns V_OCSP_CERTSTATUS_GOOD (0) if the response was properly verified 
  * and it contained a GOOD status for the certificate;
  * V_OCSP_CERTSTATUS_REVOKED (1) if the response was properly verified and it
@@ -408,7 +433,7 @@ char* get_ocsp_id_string(OCSP_CERTID* certid) {
  * @param response The response to add to the cache
  */
 int add_to_ocsp_cache(OCSP_CERTID* id, 
-		OCSP_BASICRESP* response, daemon_context* daemon) {
+		OCSP_BASICRESP* response, daemon_ctx* daemon) {
 
 	hmap_t* rev_cache = daemon->revocation_cache;
 	char* id_string = NULL;
@@ -429,7 +454,7 @@ int add_to_ocsp_cache(OCSP_CERTID* id,
 }
 
 
-int check_cached_response(sock_context* sock_ctx) {
+int check_cached_response(socket_ctx* sock_ctx) {
 
 	hmap_t* rev_cache = sock_ctx->daemon->revocation_cache;
 	OCSP_BASICRESP* cached_resp = NULL;
@@ -439,12 +464,12 @@ int check_cached_response(sock_context* sock_ctx) {
 	char* id_string = NULL;
 	int ret;
 
-	store = SSL_CTX_get_cert_store(SSL_get_SSL_CTX(sock_ctx->conn->tls));
-	chain = SSL_get_peer_cert_chain(sock_ctx->conn->tls);
+	store = SSL_CTX_get_cert_store(SSL_get_SSL_CTX(sock_ctx->ssl));
+	chain = SSL_get_peer_cert_chain(sock_ctx->ssl);
 	if (store == NULL || chain == NULL)
 		goto err;
 
-	id = get_ocsp_certid(sock_ctx->conn->tls);
+	id = get_ocsp_certid(sock_ctx->ssl);
 	if (id == NULL)
 		goto err;
 

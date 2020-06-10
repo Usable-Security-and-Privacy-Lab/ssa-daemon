@@ -33,11 +33,8 @@
 #define EXT_CONN_TIMEOUT 15 /* seconds */
 
 
+int client_SSL_new(socket_ctx* sock_ctx);
 
-SSL_CTX* client_ctx_init(client_settings* config);
-
-int client_SSL_new(connection* conn, daemon_context* daemon);
-int client_connection_setup(sock_context* sock_ctx);
-
+int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, long len);
 
 #endif

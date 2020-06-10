@@ -26,8 +26,6 @@
 
 /* added recently--not in kernel */
 #define TLS_TRUSTED_CIPHERS               97
-#define TLS_CLIENT_CONNECTION             98
-#define TLS_SERVER_CONNECTION             99
 #define TLS_ERROR                        100
 
 
