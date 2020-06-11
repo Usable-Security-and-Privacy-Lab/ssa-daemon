@@ -1,6 +1,7 @@
 # Install Documentation
 The SSA has two components - a kernel module and a userspace daemon.
 Both need to be installed and running to provide TLS as an operating system service.
+To install both, one needs to be running a terminal as root user (which can be achieved by executing the command `sudo su`). Simply putting `sudo` before commands will *most likely* return confusing compiler errors.
 
 ## Compatibility
 The SSA is actively developed on Fedora, but may work for other distributions with a few minor changes. We are in process of working out the bugs for running on Ubuntu, and Ubuntu specific documentation will be added as it becomes available.
@@ -25,7 +26,7 @@ insmod ssa.ko
 ```
 
 ### Removal
-To remove the SSA kernel module, shut down the encryption daemon (if running), and then run the following command as a privileged user:
+To remove the SSA kernel module, shut down the encryption daemon (if running), and then run the following command as a privileged user (ie after `sudo su`):
 ```
 rmmod ssa
 ```
