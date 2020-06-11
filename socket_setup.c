@@ -191,7 +191,7 @@ int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
     clear_global_and_socket_errors(sock_ctx);
 
     sock_ctx->secure.bev = bufferevent_openssl_socket_new(daemon->ev_base,
-            sock_ctx->fd, sock_ctx->ssl, state, 0);
+            sock_ctx->sockfd, sock_ctx->ssl, state, 0);
     if (sock_ctx->secure.bev == NULL) {
         log_printf(LOG_ERROR, "Creating OpenSSL bufferevent failed: %i %s\n",
                 EVUTIL_SOCKET_ERROR(), strerror(EVUTIL_SOCKET_ERROR()));
@@ -316,7 +316,6 @@ int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
 
     return response;
 }
-
 
 
 

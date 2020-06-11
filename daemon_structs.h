@@ -159,7 +159,7 @@ struct socket_ctx_st {
 
     SSL_CTX* ssl_ctx;
 	SSL* ssl;
-	evutil_socket_t fd;
+	evutil_socket_t sockfd;
 
 	channel plain;
 	channel secure;

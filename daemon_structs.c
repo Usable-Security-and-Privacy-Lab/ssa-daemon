@@ -155,7 +155,7 @@ int socket_context_new(socket_ctx** new_sock_ctx, int fd,
 
 	sock_ctx->daemon = daemon;
 	sock_ctx->id = id;
-	sock_ctx->fd = fd; /* standard to show not connected */
+	sock_ctx->sockfd = fd; /* standard to show not connected */
     sock_ctx->state = SOCKET_NEW;
 
     if (!daemon->settings->revocation_checks)
@@ -190,7 +190,7 @@ socket_ctx* accepting_socket_ctx_new(socket_ctx* listener_ctx, int fd) {
 		return NULL;
 
 	sock_ctx->daemon = daemon;
-	sock_ctx->fd = fd; /* standard to show not connected */
+	sock_ctx->sockfd = fd; /* standard to show not connected */
     sock_ctx->state = SOCKET_CONNECTING;
 
     ret = SSL_CTX_up_ref(listener_ctx->ssl_ctx);
@@ -249,9 +249,9 @@ void socket_shutdown(socket_ctx* sock_ctx) {
 	sock_ctx->plain.bev = NULL;
 	sock_ctx->plain.closed = 1;
 
-	if (sock_ctx->fd != -1)
-		close(sock_ctx->fd);
-	sock_ctx->fd = -1;
+	if (sock_ctx->sockfd != -1)
+		close(sock_ctx->sockfd);
+	sock_ctx->sockfd = -1;
 
 	return;
 }
@@ -271,8 +271,8 @@ void socket_context_free(socket_ctx* sock_ctx) {
 
 	if (sock_ctx->listener != NULL) {
 		evconnlistener_free(sock_ctx->listener);
-	} else if (sock_ctx->fd != -1) { 
-		EVUTIL_CLOSESOCKET(sock_ctx->fd);
+	} else if (sock_ctx->sockfd != -1) { 
+		EVUTIL_CLOSESOCKET(sock_ctx->sockfd);
 	}
 
 	revocation_context_cleanup(&sock_ctx->revocation);

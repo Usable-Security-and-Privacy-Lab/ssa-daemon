@@ -63,6 +63,7 @@ static void listener_accept_error_cb(struct evconnlistener *listener, void *ctx)
 static void listener_accept_cb(struct evconnlistener *listener,
 		evutil_socket_t fd, struct sockaddr *address, int socklen, void *arg);
 
+int begin_handling_listener_connections(socket_ctx* sock_ctx);
 
 
 /**
@@ -508,7 +509,7 @@ void listener_accept_error_cb(struct evconnlistener *listener, void *arg) {
 
 		SSL_free(sock_ctx->ssl);
 		evconnlistener_free(listener);
-		sock_ctx->fd = -1;
+		sock_ctx->sockfd = -1;
 		sock_ctx->state = SOCKET_ERROR;
 
 		set_err_string(sock_ctx, "External listener failed with error %i: %s",
@@ -560,7 +561,7 @@ void socket_cb(daemon_ctx* daemon, unsigned long id, char* comm) {
 	if (sock_ctx != NULL) {
 		log_printf(LOG_ERROR,
 				"We have created a socket with this ID already: %lu\n", id);
-		response = -EBADF;
+		response = -ECANCELED;
 		sock_ctx = NULL; /* err would try to free sock_ctx otherwise */
 		goto err;
 	}
@@ -651,7 +652,7 @@ void setsockopt_cb(daemon_ctx* ctx, unsigned long id, int level,
 		response = -ENOPROTOOPT; /* all get only */
 		break;
 	default:
-		if (setsockopt(sock_ctx->fd, level, option, value, len) == -1) {
+		if (setsockopt(sock_ctx->sockfd, level, option, value, len) == -1) {
 			response = -errno;
 			set_err_string(sock_ctx, "Daemon error: internal fd setsockopt failed");
 		}
@@ -787,14 +788,14 @@ void bind_cb(daemon_ctx* daemon, unsigned long id,
 		return;
 	}
 
-	if (evutil_make_listen_socket_reuseable(sock_ctx->fd) != 0) {
+	if (evutil_make_listen_socket_reuseable(sock_ctx->sockfd) != 0) {
         log_printf(LOG_ERROR, "Failed to make socket nonblocking (errno %i): %s",
                     EVUTIL_SOCKET_ERROR(), strerror(EVUTIL_SOCKET_ERROR()));
 		response = -ECANCELED;
 		goto err;
 	}
 
-	if (bind(sock_ctx->fd, ext_addr, ext_addrlen) != 0) {
+	if (bind(sock_ctx->sockfd, ext_addr, ext_addrlen) != 0) {
 		response = -errno;
 		set_err_string(sock_ctx, "Bind error: SSA daemon socket failed to bind");
 		goto err;
@@ -811,8 +812,8 @@ void bind_cb(daemon_ctx* daemon, unsigned long id,
  err:
 
 	if (sock_ctx != NULL) {
-		EVUTIL_CLOSESOCKET(sock_ctx->fd);
-		sock_ctx->fd = -1;
+		EVUTIL_CLOSESOCKET(sock_ctx->sockfd);
+		sock_ctx->sockfd = -1;
 
 		sock_ctx->state = SOCKET_ERROR;
 	}
@@ -935,26 +936,16 @@ void listen_cb(daemon_ctx* daemon, unsigned long id,
 		return;
 	}
 
-	if (listen(sock_ctx->fd, SOMAXCONN) == -1) {
+	if (listen(sock_ctx->sockfd, SOMAXCONN) == -1) {
 		response = -errno;
 		set_err_string(sock_ctx, "Listener setup error: "
 				"SSA daemon's external socket returned error on `listen()`");
 		goto err;
 	}
 
-	sock_ctx->listener = evconnlistener_new(daemon->ev_base,
-			listener_accept_cb, (void*) sock_ctx,
-			LEV_OPT_CLOSE_ON_FREE | LEV_OPT_THREADSAFE, 0, sock_ctx->fd);
-	if (sock_ctx->listener == NULL) {
-		response = -errno;
-		set_err_string(sock_ctx, "Listener setup error: "
-				"failed to allocate buffers within the SSA daemon");
-		goto err;
-	}
-
-	evconnlistener_set_error_cb(sock_ctx->listener, listener_accept_error_cb);
-
-	sock_ctx->state = SOCKET_LISTENING;
+    response = begin_handling_listener_connections(sock_ctx);
+    if (response != 0)
+        goto err;
 
 	netlink_notify_kernel(daemon, id, NOTIFY_SUCCESS);
 	return;
@@ -962,7 +953,8 @@ void listen_cb(daemon_ctx* daemon, unsigned long id,
 	log_printf(LOG_ERROR, "listen_cb failed: %s\n", strerror(-response));
 	netlink_notify_kernel(daemon, id, response);
 
-    EVUTIL_CLOSESOCKET(sock_ctx->id);
+    EVUTIL_CLOSESOCKET(sock_ctx->sockfd);
+    sock_ctx->sockfd = -1;
 
 	sock_ctx->state = SOCKET_ERROR;
 	return;
@@ -986,12 +978,12 @@ void associate_cb(daemon_ctx* daemon, unsigned long id,
 	sock_ctx = hashmap_get(daemon->sock_map_port, port);
 	if (sock_ctx == NULL) {
 		log_printf(LOG_ERROR, "Port provided in associate_cb not found\n");
-		netlink_notify_kernel(daemon, id, -EBADF);
+        /* socket_ctx encountered fatal error and was erased before accepted */
+		netlink_notify_kernel(daemon, id, -ECONNABORTED);
 		return;
 	}
 
     clear_global_errors();
-    /* don't clear the socket's error string here */
 
 	if (sock_ctx->state != SOCKET_CONNECTING) {
 		/* Tear down this connection--nobody has access to it anyways */
@@ -1044,4 +1036,23 @@ void close_cb(daemon_ctx* daemon_ctx, unsigned long id) {
 }
 
 
+
+
+int begin_handling_listener_connections(socket_ctx* sock_ctx) {
+
+	sock_ctx->listener = evconnlistener_new(sock_ctx->daemon->ev_base,
+			listener_accept_cb, (void*) sock_ctx,
+			LEV_OPT_CLOSE_ON_FREE | LEV_OPT_THREADSAFE, 0, sock_ctx->sockfd);
+
+	if (sock_ctx->listener == NULL) {
+		set_err_string(sock_ctx, "Listener setup error: "
+				"failed to allocate buffers within the SSA daemon");
+		return errno;
+	}
+
+	evconnlistener_set_error_cb(sock_ctx->listener, listener_accept_error_cb);
+    
+    sock_ctx->state = SOCKET_LISTENING;
+    return 0;
+}
 
