@@ -73,3 +73,4 @@ cmake-build-debug/*
 CMakeLists.txt
 test_files/badssl
 test_files/top500
+test_files/simple_test/epoll_client
