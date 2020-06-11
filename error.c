@@ -136,6 +136,8 @@ int set_socket_error(socket_ctx* sock_ctx, unsigned long ssl_err) {
  */
 void set_err_string(socket_ctx* sock_ctx, char* string, ...) {
 
+    int error = errno;
+
 	if (sock_ctx == NULL)
 		return;
 
@@ -145,6 +147,8 @@ void set_err_string(socket_ctx* sock_ctx, char* string, ...) {
 	va_start(args, string);
 	vsnprintf(sock_ctx->err_string, MAX_ERR_STRING, string, args);
 	va_end(args);
+
+    errno = error;
 }
 
 
