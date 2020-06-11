@@ -45,7 +45,7 @@ int main(int argc, char* argv[]) {
 	int i;
 	int n;
 	int nfds;
-	char host[] = "www.phoenixteam.net";
+	char *host = "www.yahoo.com";
 
 	/* Set up polling */
 	struct epoll_event ev;
@@ -56,6 +56,9 @@ int main(int argc, char* argv[]) {
 		perror("epoll_create1");
 		exit(EXIT_FAILURE);
 	}
+
+    if (argc >= 3)
+        host = argv[2];
 
 	/* Create connections */
 	int num_connections = atoi(argv[1]);
