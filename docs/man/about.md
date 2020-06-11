@@ -11,4 +11,4 @@ be outlined in these man pages as well.
 
 The specification of certain behaviors and return codes is as of yet a work in 
 progress. For the time being, error codes are subject to change and behavior
-additional to the POSIX socket specification is experimental.
+additional to the POSIX socket specification is experimental for the time being.
