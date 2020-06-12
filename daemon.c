@@ -897,7 +897,12 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
 		goto err;
 	}
 
-	hashmap_add(daemon->sock_map_port, get_port(int_addr), sock_ctx);
+    ret = hashmap_add(daemon->sock_map_port, get_port(int_addr), sock_ctx);
+    if (ret != 0) {
+        response = -errno;
+        goto err;
+    }
+
     sock_ctx->state = SOCKET_CONNECTING;
 
 	if (!blocking) {
@@ -916,8 +921,8 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
 }
 
 void listen_cb(daemon_ctx* daemon, unsigned long id,
-			   struct sockaddr* int_addr, int int_addrlen,
-			   struct sockaddr* ext_addr, int ext_addrlen) {
+			struct sockaddr* int_addr, int int_addrlen,
+			struct sockaddr* ext_addr, int ext_addrlen) {
 
 	socket_ctx* sock_ctx = NULL;
 	int response = 0;
@@ -947,7 +952,7 @@ void listen_cb(daemon_ctx* daemon, unsigned long id,
     if (response != 0)
         goto err;
 
-	netlink_notify_kernel(daemon, id, NOTIFY_SUCCESS);
+    netlink_notify_kernel(daemon, id, NOTIFY_SUCCESS);
 	return;
  err:
 	log_printf(LOG_ERROR, "listen_cb failed: %s\n", strerror(-response));
