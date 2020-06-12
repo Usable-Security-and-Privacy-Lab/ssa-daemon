@@ -94,6 +94,7 @@ TEST_F(BadSSLTests, Expired) {
 
     result = run_http_client(EXPIRED_URL.c_str(), HTTPS_PORT.c_str(), &resp, &resp_len);
     EXPECT_EQ(result, (int) E_CONNECT); // ERROR STATE
+    EXPECT_EQ(errno, EPROTO);
 
     TEST_TIMEOUT_FAIL_END(TIMEOUT)
 }
@@ -104,6 +105,7 @@ TEST_F(BadSSLTests, WrongHost) {
 
     result = run_http_client(WRONG_HOST_URL.c_str(), HTTPS_PORT.c_str(), &resp, &resp_len);
     EXPECT_EQ(result, (int) E_CONNECT);
+    EXPECT_EQ(errno, EPROTO);
 
     TEST_TIMEOUT_FAIL_END(TIMEOUT)
 }
@@ -114,6 +116,7 @@ TEST_F(BadSSLTests, SelfSigned) {
 
     result = run_http_client(SELF_SIGNED_URL.c_str(), HTTPS_PORT.c_str(), &resp, &resp_len);
     EXPECT_EQ(result, (int) E_CONNECT);
+    EXPECT_EQ(errno, EPROTO);
 
     TEST_TIMEOUT_FAIL_END(TIMEOUT)
 }
@@ -124,6 +127,7 @@ TEST_F(BadSSLTests, UntrustedRoot) {
 
     result = run_http_client(UNTRUSTED_ROOT_URL.c_str(), HTTPS_PORT.c_str(), &resp, &resp_len);
     EXPECT_EQ(result, (int) E_CONNECT);
+    EXPECT_EQ(errno, EPROTO);
 
     TEST_TIMEOUT_FAIL_END(TIMEOUT)
 }
@@ -134,6 +138,7 @@ TEST_F(BadSSLTests, Revoked) {
 
     result = run_http_client(REVOKED_URL.c_str(), HTTPS_PORT.c_str(), &resp, &resp_len);
     EXPECT_EQ(result, (int) E_CONNECT);
+    EXPECT_EQ(errno, EPROTO);
 
     TEST_TIMEOUT_FAIL_END(TIMEOUT)
 }
@@ -144,6 +149,7 @@ TEST_F(BadSSLTests, BadPinning) {
 
     result = run_http_client(PINNING_URL_BAD.c_str(), HTTPS_PORT.c_str(), &resp, &resp_len);
     EXPECT_EQ(result, (int) E_CONNECT);
+    EXPECT_EQ(errno, EPROTO);
 
     TEST_TIMEOUT_FAIL_END(TIMEOUT)
 }
@@ -154,6 +160,7 @@ TEST_F(BadSSLTests, Sha1IntermediateCert) {
 
     result = run_http_client(SHA1_INTERMEDIATE_URL.c_str(), HTTPS_PORT.c_str(), &resp, &resp_len);
     EXPECT_EQ(result, (int) E_CONNECT);
+    EXPECT_EQ(errno, EPROTO);
 
     TEST_TIMEOUT_FAIL_END(TIMEOUT)
 }
@@ -164,6 +171,7 @@ TEST_F(BadSSLTests, TLSVersion1_0) {
 
     result = run_http_client(TLS1_0_URL.c_str(), TLS1_0_PORT.c_str(), &resp, &resp_len);
     EXPECT_EQ(result, (int) E_CONNECT);
+    EXPECT_EQ(errno, EPROTO);
 
     TEST_TIMEOUT_FAIL_END(TIMEOUT)
 }
@@ -174,7 +182,8 @@ TEST_F(BadSSLTests, TLSVersion1_1) {
 
     result = run_http_client(TLS1_1_URL.c_str(), TLS1_1_PORT.c_str(), &resp, &resp_len);
     EXPECT_EQ(result, (int) E_CONNECT);
-
+    EXPECT_EQ(errno, EPROTO);
+    
     TEST_TIMEOUT_FAIL_END(TIMEOUT)
 }
 
