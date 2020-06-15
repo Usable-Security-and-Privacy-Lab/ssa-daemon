@@ -420,6 +420,8 @@ void accept_error_cb(struct evconnlistener *listener, void *ctx) {
 void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	struct sockaddr *address, int addrlen, void *arg) {
 
+    /* TODO: could assign address and addrlen to rem_addr and rem_addrlen? */
+
     struct sockaddr_in int_addr = {
 		.sin_family = AF_INET,
 		.sin_port = 0, /* allow kernel to give us a random port */
@@ -427,7 +429,7 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	};
 	socket_ctx* listening_ctx = (socket_ctx*)arg;
 	daemon_ctx* daemon = listening_ctx->daemon;
-	socket_ctx* accepting_ctx = NULL;
+	socket_ctx* new_ctx = NULL;
 	socklen_t intaddr_len = sizeof(int_addr);
 	evutil_socket_t ifd = -1;
 	int ret = 0;
@@ -436,12 +438,12 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	if (ret != 0)
 		goto err;
 
-	accepting_ctx = accepting_socket_ctx_new(listening_ctx, efd);
+	new_ctx = accepting_socket_ctx_new(listening_ctx, efd);
 	if (ret != 0)
 		goto err;
 
-	accepting_ctx->addr = &listening_ctx->int_addr;
-	accepting_ctx->addrlen = listening_ctx->int_addrlen;
+	new_ctx->int_addr = listening_ctx->int_addr;
+	new_ctx->int_addrlen = listening_ctx->int_addrlen;
 
     ifd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (ifd == -1)
@@ -458,24 +460,25 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	if (getsockname(ifd, (struct sockaddr*)&int_addr, &intaddr_len) == -1)
 		goto err;
 
-    ret = prepare_SSL_connection(accepting_ctx, FALSE);
+    ret = prepare_SSL_connection(new_ctx, FALSE);
     if (ret != 0)
         goto err;
 
-    ret = prepare_bufferevents(accepting_ctx, ifd);
+    ret = prepare_bufferevents(new_ctx, ifd);
     if (ret != 0)
         goto err;
 
-    int port = get_port((struct sockaddr*) &int_addr);
-    ret = hashmap_add(daemon->sock_map_port, port, (void*)accepting_ctx);
+    new_ctx->accept_port = get_port((struct sockaddr*) &int_addr);
+    ret = hashmap_add(daemon->sock_map_port, 
+                new_ctx->accept_port, (void*) new_ctx);
     if (ret != 0)
         goto err;
-    
+
     return;
  err:
 
-	if (accepting_ctx != NULL)
-		socket_context_free(accepting_ctx);
+	if (new_ctx != NULL)
+		socket_context_free(new_ctx);
 
 	if (ifd != -1)
 		EVUTIL_CLOSESOCKET(ifd);
@@ -980,6 +983,8 @@ void associate_cb(daemon_ctx* daemon, unsigned long id,
 	socket_ctx* sock_ctx;
 	int port = get_port(int_addr);
 
+    clear_global_errors();
+
 	sock_ctx = hashmap_get(daemon->sock_map_port, port);
 	if (sock_ctx == NULL) {
 		log_printf(LOG_ERROR, "Port provided in associate_cb not found\n");
@@ -988,27 +993,26 @@ void associate_cb(daemon_ctx* daemon, unsigned long id,
 		return;
 	}
 
-    clear_global_errors();
-
-	if (sock_ctx->state != SOCKET_CONNECTING) {
-		/* Tear down this connection--nobody has access to it anyways */
-		socket_shutdown(sock_ctx);
-		hashmap_del(daemon->sock_map_port, port);
-		socket_context_free(sock_ctx);
-
-		netlink_notify_kernel(daemon, id, -ECONNABORTED);
-		return;
-	}
-
 	hashmap_del(daemon->sock_map_port, port);
+
+	if (sock_ctx->state != SOCKET_CONNECTING)
+		goto err;
 
 	sock_ctx->id = id;
 	sock_ctx->state = SOCKET_ACCEPTED;
 
-	hashmap_add(daemon->sock_map, id, (void*)sock_ctx);
+	int ret = hashmap_add(daemon->sock_map, id, (void*)sock_ctx);
+    if (ret != 0)
+        goto err;
 
-	netlink_notify_kernel(daemon, id, 0);
+    netlink_notify_kernel(daemon, id, 0);
 	return;
+ err:
+    /* Tear down this connection--nobody has access to it anyways */
+    socket_shutdown(sock_ctx);
+    socket_context_free(sock_ctx);
+
+    netlink_notify_kernel(daemon, id, -ECONNABORTED);
 }
 
 /**

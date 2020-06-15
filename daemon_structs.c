@@ -158,8 +158,8 @@ int socket_context_new(socket_ctx** new_sock_ctx, int fd,
 	sock_ctx->sockfd = fd; /* standard to show not connected */
     sock_ctx->state = SOCKET_NEW;
 
-    if (!daemon->settings->revocation_checks)
-        sock_ctx->revocation.checks |= NO_REVOCATION_CHECKS;
+    /* transfer over revocation check flags */
+    sock_ctx->rev_ctx.checks = daemon->settings->revocation_checks;
 
     int ret = hashmap_add(daemon->sock_map, id, sock_ctx);
     if (ret != 0) {
@@ -218,7 +218,7 @@ socket_ctx* accepting_socket_ctx_new(socket_ctx* listener_ctx, int fd) {
  */
 void socket_shutdown(socket_ctx* sock_ctx) {
 
-    revocation_context_cleanup(&sock_ctx->revocation);
+    revocation_context_cleanup(&sock_ctx->rev_ctx);
 
 	if (sock_ctx->ssl != NULL) {
 		switch (sock_ctx->state) {
@@ -275,7 +275,7 @@ void socket_context_free(socket_ctx* sock_ctx) {
 		EVUTIL_CLOSESOCKET(sock_ctx->sockfd);
 	}
 
-	revocation_context_cleanup(&sock_ctx->revocation);
+	revocation_context_cleanup(&sock_ctx->rev_ctx);
 	
     if (sock_ctx->ssl_ctx != NULL)
         SSL_CTX_free(sock_ctx->ssl_ctx);

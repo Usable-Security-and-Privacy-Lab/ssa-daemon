@@ -24,11 +24,27 @@
 #define NO_OCSP_STAPLED_CHECKS   (1 << 1)
 #define NO_OCSP_RESPONDER_CHECKS (1 << 2)
 #define NO_CRL_RESPONDER_CHECKS  (1 << 3)
+#define NO_CACHED_CHECKS        (1 << 4)
 
-#define DO_REVOCATION_CHECKS(checks) !(checks & NO_REVOCATION_CHECKS)
-#define DO_OCSP_STAPLED_CHECKS(checks) !(checks & NO_OCSP_STAPLED_CHECKS)
-#define DO_OCSP_RESPONDER_CHECKS(checks) !(checks & NO_OCSP_RESPONDER_CHECKS)
-#define DO_CRL_RESPONDER_CHECKS(checks) !(checks & NO_CRL_RESPONDER_CHECKS)
+#define turn_off_revocation_checks(checks) (checks |= NO_REVOCATION_CHECKS)
+#define turn_on_revocation_checks(checks) (checks &= ~NO_REVOCATION_CHECKS)
+#define has_revocation_checks(checks) !(checks & NO_REVOCATION_CHECKS)
+
+#define turn_off_stapled_checks(checks) (checks |= NO_OCSP_STAPLED_CHECKS)
+#define turn_on_stapled_checks(checks) (checks &= ~NO_OCSP_STAPLED_CHECKS)
+#define has_stapled_checks(checks) !(checks & NO_OCSP_STAPLED_CHECKS)
+
+#define turn_off_ocsp_checks(checks) (checks |= NO_OCSP_RESPONDER_CHECKS)
+#define turn_on_ocsp_checks(checks) (checks &= ~NO_OCSP_RESPONDER_CHECKS)
+#define has_ocsp_checks(checks) !(checks & NO_OCSP_RESPONDER_CHECKS)
+
+#define turn_off_crl_checks(checks) (checks |= NO_CRL_RESPONDER_CHECKS)
+#define turn_on_crl_checks(checks) (checks &= ~NO_CRL_RESPONDER_CHECKS)
+#define has_crl_checks(checks) !(checks & NO_CRL_RESPONDER_CHECKS)
+
+#define turn_off_cached_checks(checks) (checks |= NO_CACHED_CHECKS)
+#define turn_on_cached_checks(checks) (checks &= ~NO_CACHED_CHECKS)
+#define has_cached_checks(checks) !(checks & NO_CACHED_CHECKS)
 
 struct channel_st;
 struct daemon_ctx_st;
@@ -165,10 +181,7 @@ struct socket_ctx_st {
 	channel secure;
 	struct evconnlistener* listener;
 
-	struct sockaddr* addr; /* TODO: Used only for server-side connections?? */
-	int addrlen;
-
-	revocation_ctx revocation;
+	revocation_ctx rev_ctx;
 
 	struct sockaddr int_addr; /** Internal address--the program using SSA */
 	int int_addrlen;
@@ -180,6 +193,7 @@ struct socket_ctx_st {
 		int ext_addrlen;
 		int rem_addrlen;
 	};
+    int accept_port;
 
 
 	char rem_hostname[MAX_HOSTNAME+1];

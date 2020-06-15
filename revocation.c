@@ -15,7 +15,7 @@ void set_revocation_state(socket_ctx* sock_ctx, enum revocation_state state) {
     int id = sock_ctx->id;
     int response;
 
-    sock_ctx->revocation.state = state;
+    sock_ctx->rev_ctx.state = state;
 
     if (sock_ctx->state == SOCKET_FINISHING_CONN) {
         switch (state) {
@@ -305,9 +305,8 @@ int do_ocsp_response_checks(unsigned char* resp_bytes,
 	if (status == V_OCSP_CERTSTATUS_UNKNOWN)
 		goto err;
 
-	ret = add_to_ocsp_cache(id, basicresp, sock_ctx->daemon);
-	if (ret != 0)
-		goto err;
+    /* even if a user doesn't check cached responses, we shoul add them */
+	add_to_ocsp_cache(id, basicresp, sock_ctx->daemon);
 
 	OCSP_CERTID_free(id);
 
@@ -446,7 +445,8 @@ int add_to_ocsp_cache(OCSP_CERTID* id,
 	
 	ret = hashmap_add_str(rev_cache, id_string, (void*)response);
 	if (ret != 0) {
-		log_printf(LOG_ERROR, "Cache entry already exists\n");
+		log_printf(LOG_INFO, "Cache entry already exists\n");
+        OCSP_BASICRESP_free(response);
 		free(id_string);
 		return -1;
 	}

@@ -31,6 +31,10 @@
 #define CERT_V_DEPTH    "cert-verification-depth"
 #define VERIFY_CT       "verify-cert-transparency"
 #define REV_CHECKS      "revocation-checks"
+#define STAPLED_CHECKS  "revocation-stapled"
+#define OCSP_CHECKS     "revocation-ocsp"
+#define CRL_CHECKS      "revocation-crl"
+#define CACHED_CHECKS   "revocation-cached"
 
 
 /* different values that we accept in place of just 'true' or 'false' */
@@ -174,7 +178,15 @@ global_config* default_settings_new() {
     settings->max_chain_depth = 10;
     settings->ct_checks = 1;
 
-    settings->revocation_checks = 1;
+    /* checks on by default (struct is calloc'd to 0); these are redundant */
+    turn_on_revocation_checks(settings->revocation_checks);
+    turn_on_cached_checks(settings->revocation_checks);
+    turn_on_stapled_checks(settings->revocation_checks);
+    turn_on_ocsp_checks(settings->revocation_checks);
+    turn_on_crl_checks(settings->revocation_checks);
+
+
+
 
     return settings;
 }
@@ -245,7 +257,34 @@ int parse_next_setting(yaml_parser_t* parser, global_config* config) {
         ret = parse_boolean(parser, &config->session_tickets);
 
     } else if (strcmp(label, REV_CHECKS) == 0) {
-        ret = parse_boolean(parser, &config->revocation_checks);
+        int has_checks;
+        ret = parse_boolean(parser, &has_checks);
+        if (!has_checks)
+            turn_off_revocation_checks(config->revocation_checks);
+
+    } else if (strcmp(label, OCSP_CHECKS) == 0) {
+        int has_checks;
+        ret = parse_boolean(parser, &has_checks);
+        if (!has_checks)
+            turn_off_ocsp_checks(config->revocation_checks);
+
+    } else if (strcmp(label, CRL_CHECKS) == 0) {
+        int has_checks;
+        ret = parse_boolean(parser, &has_checks);
+        if (!has_checks)
+            turn_off_crl_checks(config->revocation_checks);
+    
+    } else if (strcmp(label, CACHED_CHECKS) == 0) {
+        int has_checks;
+        ret = parse_boolean(parser, &has_checks);
+        if (!has_checks)
+            turn_off_cached_checks(config->revocation_checks);
+
+    } else if (strcmp(label, STAPLED_CHECKS) == 0) {
+        int has_checks;
+        ret = parse_boolean(parser, &has_checks);
+        if (!has_checks)
+            turn_off_stapled_checks(config->revocation_checks);
 
     } else if (strcmp(label, CERT_PATH) == 0) {
         if (config->cert_cnt >= MAX_CERTKEY_PAIRS) {

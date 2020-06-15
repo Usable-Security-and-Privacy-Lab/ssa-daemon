@@ -243,6 +243,7 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
                         "TLS handshake error %li on incoming connection: %s",
 						ssl_err, X509_verify_cert_error_string(ssl_err));
 
+            hashmap_del(sock_ctx->daemon->sock_map_port, sock_ctx->accept_port);
 			socket_context_free(sock_ctx);
         }
 	}
@@ -282,13 +283,12 @@ void handle_client_event_connected(socket_ctx* sock_ctx,
 
     sock_ctx->state = SOCKET_FINISHING_CONN;
 
-
-	if (sock_ctx->revocation.checks & NO_REVOCATION_CHECKS
-            || sock_ctx->revocation.state == REV_S_PASS) {
+	if (!has_revocation_checks(sock_ctx->rev_ctx.checks)
+            || sock_ctx->rev_ctx.state == REV_S_PASS) {
 
 		netlink_handshake_notify_kernel(daemon, id, NOTIFY_SUCCESS);
 
-	} else if (sock_ctx->revocation.state == REV_S_FAIL) {
+	} else if (sock_ctx->rev_ctx.state == REV_S_FAIL) {
         socket_shutdown(sock_ctx);
         sock_ctx->state = SOCKET_ERROR;
 
@@ -317,7 +317,7 @@ void handle_server_event_connected(socket_ctx* sock_ctx, channel* startpoint) {
 			goto err;
 
 		ret = bufferevent_socket_connect(sock_ctx->plain.bev, 
-				sock_ctx->addr, sock_ctx->addrlen);
+				&sock_ctx->int_addr, sock_ctx->int_addrlen);
 		if (ret != 0)
 			goto err;
 	}
@@ -325,7 +325,7 @@ void handle_server_event_connected(socket_ctx* sock_ctx, channel* startpoint) {
  err:
     log_printf(LOG_DEBUG, "Erasing connection completely\n");
 	
-    hashmap_del(sock_ctx->daemon->sock_map_port, get_port(&sock_ctx->int_addr));
+    hashmap_del(sock_ctx->daemon->sock_map_port, sock_ctx->accept_port);
 	socket_shutdown(sock_ctx);
 	socket_context_free(sock_ctx);
 }
@@ -420,7 +420,7 @@ void ocsp_responder_read_cb(struct bufferevent* bev, void* arg) {
     responder_ctx* resp_ctx = (responder_ctx*) arg;
 	socket_ctx* sock_ctx = resp_ctx->sock_ctx;
 
-	revocation_ctx* rev_ctx = &sock_ctx->revocation;
+	revocation_ctx* rev_ctx = &sock_ctx->rev_ctx;
 	daemon_ctx* daemon = sock_ctx->daemon;
 	unsigned long id = sock_ctx->id;
 
@@ -516,7 +516,7 @@ void ocsp_responder_event_cb(struct bufferevent* bev, short events, void* arg) {
 	
 	responder_cleanup(resp_ctx);
 
-	if (sock_ctx->revocation.num_rev_checks-- == 0) {
+	if (sock_ctx->rev_ctx.num_rev_checks-- == 0) {
 		set_err_string(sock_ctx, "TLS handshake failure: "
 				"the certificate's revocation status could not be determined");
 
@@ -548,23 +548,25 @@ int revocation_cb(SSL* ssl, void* arg) {
     int ret;
 
 
-    ret = check_cached_response(sock_ctx);
-	if (ret == V_OCSP_CERTSTATUS_GOOD) {
-		log_printf(LOG_INFO, "OCSP cached response: good\n");
-        set_revocation_state(sock_ctx, REV_S_PASS);
-		return 1;
+    if (has_cached_checks(sock_ctx->rev_ctx.checks)) {
+        ret = check_cached_response(sock_ctx);
+        if (ret == V_OCSP_CERTSTATUS_GOOD) {
+            log_printf(LOG_INFO, "OCSP cached response: good\n");
+            set_revocation_state(sock_ctx, REV_S_PASS);
+            return 1;
 
-	} else if (ret == V_OCSP_CERTSTATUS_REVOKED) {
-		set_err_string(sock_ctx, "TLS handshake error: "
-				"certificate revoked (cached OCSP response)");
-        set_revocation_state(sock_ctx, REV_S_FAIL);
-        return 1;
+        } else if (ret == V_OCSP_CERTSTATUS_REVOKED) {
+            set_err_string(sock_ctx, "TLS handshake error: "
+                    "certificate revoked (cached OCSP response)");
+            set_revocation_state(sock_ctx, REV_S_FAIL);
+            return 1;
 
-	} else {
-		log_printf(LOG_INFO, "No cached revocation response were found\n");
-	}
+        } else {
+            log_printf(LOG_INFO, "No cached revocation response were found\n");
+        }
+    }
 
-	if (!(sock_ctx->revocation.checks & NO_OCSP_STAPLED_CHECKS)) {
+	if (has_ocsp_checks(sock_ctx->rev_ctx.checks)) {
 		ret = check_stapled_response(sock_ctx);
 		if (ret == V_OCSP_CERTSTATUS_GOOD) {
 			log_printf(LOG_INFO, "OCSP Stapled response: good\n");
@@ -583,10 +585,10 @@ int revocation_cb(SSL* ssl, void* arg) {
     if (cert == NULL)
         goto err;
 
-    if (!(sock_ctx->revocation.checks & NO_OCSP_RESPONDER_CHECKS))
+    if (has_ocsp_checks(sock_ctx->rev_ctx.checks))
         ocsp_urls = retrieve_ocsp_urls(cert, &ocsp_url_cnt);
 
-    if (!(sock_ctx->revocation.checks & NO_CRL_RESPONDER_CHECKS))
+    if (has_crl_checks(sock_ctx->rev_ctx.checks))
         crl_urls = retrieve_crl_urls(cert, &crl_url_cnt);
 
 
@@ -596,7 +598,7 @@ int revocation_cb(SSL* ssl, void* arg) {
 	if (crl_url_cnt > 0)
         launch_crl_checks(sock_ctx, crl_urls, crl_url_cnt);
 
-    if (sock_ctx->revocation.num_rev_checks == 0)
+    if (sock_ctx->rev_ctx.num_rev_checks == 0)
         goto err;
 
 
@@ -618,7 +620,7 @@ int revocation_cb(SSL* ssl, void* arg) {
         free(crl_urls);
 
     set_err_string(sock_ctx, "TLS handshake error: "
-            "no revocation responders could be queried");
+            "no revocation response could be obtained");
     set_revocation_state(sock_ctx, REV_S_FAIL);
     return 1;
 }
@@ -633,7 +635,7 @@ int revocation_cb(SSL* ssl, void* arg) {
  */
 int launch_ocsp_checks(socket_ctx* sock_ctx, char** urls, int num_urls) {
 
-	revocation_ctx* rev = &sock_ctx->revocation;
+	revocation_ctx* rev = &sock_ctx->rev_ctx;
 
 	rev->ocsp_clients = calloc(MAX_OCSP_RESPONDERS, sizeof(responder_ctx));
 	if (rev->ocsp_clients == NULL)
@@ -660,7 +662,7 @@ int launch_ocsp_checks(socket_ctx* sock_ctx, char** urls, int num_urls) {
  */
 int launch_ocsp_client(socket_ctx* sock_ctx, char* url) {
 
-	revocation_ctx* rev = &sock_ctx->revocation;
+	revocation_ctx* rev = &sock_ctx->rev_ctx;
 	responder_ctx* ocsp_client = &rev->ocsp_clients[rev->ocsp_client_cnt];
     struct bufferevent* bev = NULL;
 	char* hostname = NULL;
@@ -722,8 +724,8 @@ int launch_ocsp_client(socket_ctx* sock_ctx, char* url) {
 
 void fail_revocation_checks(socket_ctx* sock_ctx) {
 
-    sock_ctx->revocation.state = REV_S_FAIL;
-	revocation_context_cleanup(&sock_ctx->revocation);
+    sock_ctx->rev_ctx.state = REV_S_FAIL;
+	revocation_context_cleanup(&sock_ctx->rev_ctx);
 
     if (sock_ctx->state != SOCKET_CONNECTING) {
 	    socket_shutdown(sock_ctx);
