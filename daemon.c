@@ -859,8 +859,6 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
         return;
 	}
 
-    clear_global_and_socket_errors(sock_ctx);
-
 	response = check_socket_state(sock_ctx, 4, 
             SOCKET_NEW, SOCKET_CONNECTING, 
             SOCKET_FINISHING_CONN, SOCKET_CONNECTED);
@@ -868,6 +866,8 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
 		netlink_notify_kernel(daemon, id, response);
 		return;
 	}
+
+    clear_global_and_socket_errors(sock_ctx);
 
 	if (sock_ctx->state == SOCKET_CONNECTING 
             || sock_ctx->state == SOCKET_FINISHING_CONN) {
