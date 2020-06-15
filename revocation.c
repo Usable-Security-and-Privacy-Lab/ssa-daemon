@@ -435,7 +435,7 @@ char* get_ocsp_id_string(OCSP_CERTID* certid) {
 int add_to_ocsp_cache(OCSP_CERTID* id, 
 		OCSP_BASICRESP* response, daemon_ctx* daemon) {
 
-	hmap_t* rev_cache = daemon->revocation_cache;
+	hsmap_t* rev_cache = daemon->revocation_cache;
 	char* id_string = NULL;
 	int ret;
 
@@ -443,7 +443,7 @@ int add_to_ocsp_cache(OCSP_CERTID* id,
 	if (id_string == NULL)
 		return -1;
 	
-	ret = hashmap_add_str(rev_cache, id_string, (void*)response);
+	ret = str_hashmap_add(rev_cache, id_string, (void*)response);
 	if (ret != 0) {
 		log_printf(LOG_INFO, "Cache entry already exists\n");
         OCSP_BASICRESP_free(response);
@@ -457,7 +457,7 @@ int add_to_ocsp_cache(OCSP_CERTID* id,
 
 int check_cached_response(socket_ctx* sock_ctx) {
 
-	hmap_t* rev_cache = sock_ctx->daemon->revocation_cache;
+	hsmap_t* rev_cache = sock_ctx->daemon->revocation_cache;
 	OCSP_BASICRESP* cached_resp = NULL;
 	STACK_OF(X509)* chain = NULL;
 	X509_STORE* store = NULL;
@@ -478,13 +478,13 @@ int check_cached_response(socket_ctx* sock_ctx) {
 	if (id_string == NULL)
 		goto err;
 
-	cached_resp = (OCSP_BASICRESP*) hashmap_get_str(rev_cache, id_string);
+	cached_resp = (OCSP_BASICRESP*) str_hashmap_get(rev_cache, id_string);
 	if (cached_resp == NULL)
 		goto err;
 
 	ret = verify_ocsp_basicresp(cached_resp, id, chain, store);
 	if (ret == V_OCSP_CERTSTATUS_UNKNOWN) {
-		hashmap_del_str(rev_cache, id_string);
+		str_hashmap_del(rev_cache, id_string);
 		goto err;
 	}
 

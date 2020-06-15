@@ -5,6 +5,7 @@
 #include <openssl/ssl.h>
 
 #include "hashmap.h"
+#include "hashmap_str.h"
 
 #define ID_NOT_SET 0 /* for connection and sock_context id */
 #define MAX_ERR_STRING 128
@@ -98,7 +99,7 @@ struct daemon_ctx_st {
 	hmap_t* sock_map_port;
     global_config* settings;
 
-	hmap_t* revocation_cache;
+	hsmap_t* revocation_cache;
 };
 
 struct global_config_st {

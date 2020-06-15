@@ -63,7 +63,7 @@ daemon_ctx* daemon_context_new(char* config_path, int port) {
 	if (daemon->sock_map_port == NULL)
 		goto err;
 
-	daemon->revocation_cache = hashmap_create(HASHMAP_NUM_BUCKETS);
+	daemon->revocation_cache = str_hashmap_create(HASHMAP_NUM_BUCKETS);
 	if (daemon->revocation_cache == NULL)
 		goto err;
 
@@ -107,7 +107,7 @@ void daemon_context_free(daemon_ctx* daemon) {
 		evdns_base_free(daemon->dns_base, 1);
 
 	if (daemon->revocation_cache != NULL)
-		hashmap_deep_str_free(daemon->revocation_cache, (void (*)(void*))OCSP_BASICRESP_free);
+		str_hashmap_deep_free(daemon->revocation_cache, (void (*)(void*))OCSP_BASICRESP_free);
 
 	if (daemon->settings != NULL)
         global_settings_free(daemon->settings);
