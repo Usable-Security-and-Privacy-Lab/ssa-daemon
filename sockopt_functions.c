@@ -202,8 +202,6 @@ int set_certificate_chain(socket_ctx* sock_ctx, char* path) {
 	struct stat file_stats;
 	int ret, response, ssl_err;
 
-    clear_global_and_socket_errors(sock_ctx);
-
 	ret = stat(path, &file_stats);
 	if (ret != 0) {
 		response = -errno;
@@ -271,8 +269,6 @@ int set_private_key(socket_ctx* sock_ctx, char* path) {
 		ret = -EBADF;
 		goto err;
 	}
-
-    clear_global_and_socket_errors(sock_ctx);
 
 	ret = SSL_CTX_use_PrivateKey_file(sock_ctx->ssl_ctx, path, SSL_FILETYPE_PEM);
 	if (ret == 1) /* pem key loaded */
