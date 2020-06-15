@@ -81,17 +81,16 @@ enum ssa_nl_groups {
 
 /* TODO: specify exact policies and lengths here */
 static struct nla_policy ssa_nl_policy[SSA_NL_A_MAX + 1] = {
-	[SSA_NL_A_UNSPEC] = { .type = NLA_UNSPEC },
-	[SSA_NL_A_ID] = { .type = NLA_UNSPEC },
-	[SSA_NL_A_BLOCKING] = { .type = NLA_UNSPEC },
-	[SSA_NL_A_COMM] = { .type = NLA_UNSPEC },
-	[SSA_NL_A_SOCKADDR_INTERNAL] = { .type = NLA_UNSPEC },
-	[SSA_NL_A_SOCKADDR_EXTERNAL] = { .type = NLA_UNSPEC },
-	[SSA_NL_A_SOCKADDR_REMOTE] = { .type = NLA_UNSPEC },
-	[SSA_NL_A_OPTLEVEL] = { .type = NLA_UNSPEC },
-	[SSA_NL_A_OPTNAME] = { .type = NLA_UNSPEC },
-	[SSA_NL_A_OPTVAL] = { .type = NLA_UNSPEC },
-	[SSA_NL_A_RETURN] = { .type = NLA_UNSPEC },
+	[SSA_NL_A_ID] = { .type = NLA_U64 },
+	[SSA_NL_A_BLOCKING] = { .type = NLA_U32 },
+	[SSA_NL_A_COMM] = { .type = NLA_NUL_STRING },
+	[SSA_NL_A_SOCKADDR_INTERNAL] = { .type = NLA_BINARY },
+	[SSA_NL_A_SOCKADDR_EXTERNAL] = { .type = NLA_BINARY },
+	[SSA_NL_A_SOCKADDR_REMOTE] = { .type = NLA_BINARY },
+	[SSA_NL_A_OPTLEVEL] = { .type = NLA_U32 },
+	[SSA_NL_A_OPTNAME] = { .type = NLA_U32 },
+	[SSA_NL_A_OPTVAL] = { .type = NLA_BINARY },
+	[SSA_NL_A_RETURN] = { .type = NLA_U32 },
 };
 
 int handle_netlink_msg(struct nl_msg* msg, void* arg);
