@@ -2,237 +2,127 @@
 
 #include <event2/bufferevent.h>
 
+#include "crl.h"
+#include "error.h"
 #include "log.h"
 #include "netlink.h"
+#include "ocsp.h"
 #include "revocation.h"
 
+int check_stapled_response(socket_ctx* sock_ctx);
 
 
+/**
+ * Performs the desired revocation checks on a given connection
+ * @param sock_ctx The connection to perform checks on.
+ */
+void do_revocation_checks(socket_ctx *sock_ctx) {
 
-void set_revocation_state(socket_ctx* sock_ctx, enum revocation_state state) {
+	X509* cert;
+	char** ocsp_urls = NULL;
+	char** crl_urls = NULL;
+	int ocsp_url_cnt = 0;
+	int crl_url_cnt = 0;
+    int ret;
 
-    daemon_ctx* daemon = sock_ctx->daemon;
-    int id = sock_ctx->id;
-    int response;
+    if (has_cached_checks(sock_ctx->rev_ctx.checks)) {
 
-    sock_ctx->rev_ctx.state = state;
+        ret = check_cached_response(sock_ctx);
 
-    if (sock_ctx->state == SOCKET_FINISHING_CONN) {
-        switch (state) {
-        case REV_S_PASS:
-            response = NOTIFY_SUCCESS;
-            break;
-        default:
-            response = -EPROTO;
-            break;
+        if (ret == V_OCSP_CERTSTATUS_GOOD) {
+            log_printf(LOG_INFO, "OCSP cached response: good\n");
+            pass_revocation_checks(sock_ctx);
+            return;
+
+        } else if (ret == V_OCSP_CERTSTATUS_REVOKED) {
+            set_err_string(sock_ctx, "TLS handshake error: "
+                    "certificate revoked (cached OCSP response)");
+            fail_revocation_checks(sock_ctx);
+            return;
+
+        } else {
+            log_printf(LOG_INFO, "No cached revocation response were found\n");
         }
-
-        netlink_handshake_notify_kernel(daemon, id, response);
     }
+
+	if (has_stapled_checks(sock_ctx->rev_ctx.checks)) {
+
+		ret = check_stapled_response(sock_ctx);
+
+		if (ret == V_OCSP_CERTSTATUS_GOOD) {
+			log_printf(LOG_INFO, "OCSP Stapled response: good\n");
+            pass_revocation_checks(sock_ctx);
+			return;
+
+		} else if (ret == V_OCSP_CERTSTATUS_REVOKED) {
+			set_err_string(sock_ctx, "TLS handshake error: "
+					"certificate revoked (OCSP stapled response)");
+            fail_revocation_checks(sock_ctx);
+			return;
+		}
+	}
+
+    cert = SSL_get_peer_certificate(sock_ctx->ssl);
+    if (cert == NULL) {
+        set_err_string(sock_ctx, "TLS handshake error: "
+                "could not get peer certificate");
+        fail_revocation_checks(sock_ctx);
+        return;
+    }
+
+
+    if (has_ocsp_checks(sock_ctx->rev_ctx.checks))
+        ocsp_urls = retrieve_ocsp_urls(cert, &ocsp_url_cnt);
+
+    if (has_crl_checks(sock_ctx->rev_ctx.checks))
+        crl_urls = retrieve_crl_urls(cert, &crl_url_cnt);
+
+
+    if (ocsp_url_cnt > 0)
+		launch_ocsp_checks(sock_ctx, ocsp_urls, ocsp_url_cnt);
+
+	if (crl_url_cnt > 0)
+        launch_crl_checks(sock_ctx, crl_urls, crl_url_cnt);
+
+    if (sock_ctx->rev_ctx.num_rev_checks == 0) {
+        set_err_string(sock_ctx, "TLS handshake error: "
+                "no revocation response could be obtained");
+        fail_revocation_checks(sock_ctx);
+    }
+
+
+    if (ocsp_urls != NULL)
+        free(ocsp_urls);
+    if (crl_urls != NULL)
+        free(crl_urls);
+
+    X509_free(cert);
+    return;
 }
 
 
 
-/**
- * Creates an OCSP Request for the given subject certificate and
- * populates it with all the necessary information needed to query
- * an OCSP Responder. Note that this allocates an OCSP_REQUEST struct
- * that should be freed after use.
- * @param subject The certificate to be checked.
- * @param issuer The parent CA certificate of subject.
- * @returns A pointer to a fully-formed OCSP_REQUEST struct.
- * @see OCSP_REQUEST_free 
- */
-OCSP_REQUEST* create_ocsp_request(SSL* ssl)
-{
-    OCSP_REQUEST* request = NULL;
-	OCSP_CERTID* id = NULL;
+void pass_revocation_checks(socket_ctx *sock_ctx) {
 
-    request = OCSP_REQUEST_new();
-    if (request == NULL)
-        goto err;
+    sock_ctx->rev_ctx.state = REV_S_PASS;
+    revocation_context_cleanup(&sock_ctx->rev_ctx);
 
-    id = get_ocsp_certid(ssl);
-	if (id == NULL)
-		goto err;
-
-    if (OCSP_request_add0_id(request, id) == NULL)
-		goto err;
-
-    return request;
- err:
-	OCSP_REQUEST_free(request);
-	return NULL;
+    netlink_handshake_notify_kernel(sock_ctx->daemon, sock_ctx->id, NOTIFY_SUCCESS);
 }
 
+void fail_revocation_checks(socket_ctx* sock_ctx) {
 
-/**
- * Forms an OCSP certificate ID from the peer's certificate chain found in ssl.
- * @param ssl The already-connected SSL object to form an OCSP_CERTID from.
- * @returns A newly-allocated OCSP_CERTID, or NULL on failure.
- */
-OCSP_CERTID* get_ocsp_certid(SSL* ssl) {
+    sock_ctx->rev_ctx.state = REV_S_FAIL;
+	revocation_context_cleanup(&sock_ctx->rev_ctx);
 
-	STACK_OF(X509)* certs;
-	X509* subject;
-	X509* issuer;
-
-	certs = SSL_get_peer_cert_chain(ssl);
-	if (certs == NULL || sk_X509_num(certs) < 2)
-		return NULL;
-
-	subject = sk_X509_value(certs, 0);
-	issuer = sk_X509_value(certs, 1);
-
-	return OCSP_cert_to_id(NULL, subject, issuer);
+    socket_shutdown(sock_ctx);
+    sock_ctx->state = SOCKET_ERROR;
+    netlink_handshake_notify_kernel(sock_ctx->daemon, sock_ctx->id, -EPROTO);
 }
-
-
-/**
- * Converts a given array of bytes into an OCSP_RESPONSE, checks its validity,
- * and extracts the basic response found within the response.
- * @param bytes The given bytes to convert.
- * @param len The length of bytes.
- * @param resp The OCSP basic response structure extracted from bytes.
- * @returns 0 on success, or -1 if an error occurred.
- */
-int get_ocsp_basicresp(unsigned char* bytes, int len, OCSP_BASICRESP** resp) {
-
-	OCSP_RESPONSE* full_response = NULL;
-	const unsigned char* const_bytes = bytes;
-	int ret;
-
-	full_response = d2i_OCSP_RESPONSE(NULL, &const_bytes, (long)len);
-	if (full_response == NULL)
-		goto err;
-
-	ret = OCSP_response_status(full_response);
-	if (ret != OCSP_RESPONSE_STATUS_SUCCESSFUL)
-		goto err;
-
-	*resp = OCSP_response_get1_basic(full_response);
-	if (*resp == NULL)
-		goto err;
-
-	OCSP_RESPONSE_free(full_response);
-	return 0;
- err:
-	if (full_response != NULL)
-		OCSP_RESPONSE_free(full_response);
-
-	return -1;
-}
-
 
 
 /*******************************************************************************
- *                 FUNCTIONS FOR GETTING/MANIPULATING URLS
- ******************************************************************************/
-
-
-/**
- * Parses the AUTHORITY_INFORMATION_ACCESS field out of a given X.509 
- * certificate and returns a list of URLS designating the location of the 
- * OCSP responders.
- * @param cert The X.509 certificate to parse OCSP responder information from.
- * @param num_urls The number of OCSP responder URLs parsed from cert.
- * @returns An allocated array of NULL-terminated strings containing the 
- * URLs of OCSP responders.
- */
-char** retrieve_ocsp_urls(X509* cert, int* num_urls) {
-
-	STACK_OF(OPENSSL_STRING) *url_sk = NULL;
-	char** urls = NULL;
-	url_sk = X509_get1_ocsp(cert);
-	if (url_sk == NULL)
-		return NULL;
-
-	*num_urls = sk_OPENSSL_STRING_num(url_sk);
-	if (*num_urls == 0)
-		return NULL;
-
-	urls = calloc(*num_urls, sizeof(char*));
-	if (urls == NULL)
-		return NULL;
-
-	for (int i = 0; i < *num_urls; i++) 
-		urls[i] = sk_OPENSSL_STRING_value(url_sk, i);
-
-	sk_OPENSSL_STRING_free(url_sk);
-
-	return urls;
-}
-
-
-/**
- * Parses the CRL_DISTRIBUTION_POINTS field out of a given X.509 certificate
- * and returns a list of URLs designating the location of the distribution 
- * points.
- * @param cert The X.509 certificate to parse distribution points out of.
- * @param num_urls The number of URLs returned.
- * @returns An allocated array of NULL-terminated strings containing the CRL
- * responder URLs.
- */
-char** retrieve_crl_urls(X509* cert, int* num_urls) {
-
-	return NULL; //TODO: stub
-}
-
-
-/**
- * Takes in a given URL and parses it into its hostname, port and path.
- * If no port is specified and the protocol is `http`, then the port specified 
- * will default to 80. Each output may be set to NULL safely (if only some
- * of the outputs are desired).
- * @param url The given url to parse.
- * @param host_out An address to populate with the hostname of the url.
- * @param port_out An address to populate with the port of the url.
- * @param path_out An address to populate with the path of the url.
- * @returns 0 if the url could be successfully parsed, or -1 otherwise.
- */
-int parse_url(char* url, char** host_out, int* port_out, char** path_out) {
-
-	char* host;
-	char* port_ptr;
-	char* path;
-	int ret, use_ssl;
-    long port;
-
-	ret = OCSP_parse_url(url, &host, &port_ptr, &path, &use_ssl);
-	if (ret != 1)
-		return -1;
-
-    port = strtol(port_ptr, NULL, 10);
-    if (port == INT_MAX || port < 0) {
-        free(host);
-        free(port_ptr);
-        free(path);
-        return -1;
-    }
-
-    free(port_ptr);
-
-	if (host_out != NULL)
-		*host_out = host;
-	else
-		free(host);
-	
-	if (port_out != NULL)
-		*port_out = (int) port;
-
-
-	if (path_out != NULL)
-		*path_out = path;
-	else
-		free(path);
-
-	return 0;
-}
-
-
-
-/*******************************************************************************
- *          FUNCTIONS FOR VERIFYING THE CORRECTNESS OF RESPONSES
+ *   FUNCTIONS TO CHECK AN OCSP RESPONSE (STAPLED, CACHED OR WHAT HAVE YOU)
  ******************************************************************************/
 
 /**
@@ -258,7 +148,7 @@ int check_stapled_response(socket_ctx* sock_ctx) {
 	if (resp_len < 0)
 		return V_OCSP_CERTSTATUS_UNKNOWN;
 
-    ret = do_ocsp_response_checks(stapled_resp, resp_len, sock_ctx);
+    ret = check_ocsp_response(stapled_resp, resp_len, sock_ctx);
 
 	return ret;
 }
@@ -278,7 +168,7 @@ int check_stapled_response(socket_ctx* sock_ctx) {
  * the responder could not return a definitive answer on the certificate's
  * revocation status.
  */
-int do_ocsp_response_checks(unsigned char* resp_bytes,
+int check_ocsp_response(unsigned char* resp_bytes,
 		 int resp_len, socket_ctx* sock_ctx) {
 
 	OCSP_BASICRESP* basicresp = NULL;
@@ -320,23 +210,6 @@ int do_ocsp_response_checks(unsigned char* resp_bytes,
 	
 	return V_OCSP_CERTSTATUS_UNKNOWN;
 }
-
-/**
- * Verifies the correctness of the signature and timestamps present in the 
- * given CRL list and checks to see if it contains an entry for the certificate 
- * found in ssl. If so, the CRL revoked status is returned.
- * If the response failes to validate, then the UNKNOWN status is returned.
- * @param response The response to verify the correctness of.
- * @param ssl The TLS connection to verify the response on.
- * @returns 1 if a revoked status was found for the certificate in the CRL, or
- * 0 if no such status was found; or -1 if the response's correctness could not 
- * be verified.
- */
-int do_crl_response_checks(X509_CRL* response, SSL* ssl) {
-
-	return -1; //TODO: stub
-}
-
 
 
 
@@ -388,6 +261,51 @@ int verify_ocsp_basicresp(OCSP_BASICRESP* resp,
  *                   FUNCTIONS TO DO WITH OCSP CACHING
  ******************************************************************************/
 
+
+int check_cached_response(socket_ctx* sock_ctx) {
+
+	hsmap_t* rev_cache = sock_ctx->daemon->revocation_cache;
+	OCSP_BASICRESP* cached_resp = NULL;
+	STACK_OF(X509)* chain = NULL;
+	X509_STORE* store = NULL;
+	OCSP_CERTID* id = NULL;
+	char* id_string = NULL;
+	int ret;
+
+	store = SSL_CTX_get_cert_store(SSL_get_SSL_CTX(sock_ctx->ssl));
+	chain = SSL_get_peer_cert_chain(sock_ctx->ssl);
+	if (store == NULL || chain == NULL)
+		goto err;
+
+	id = get_ocsp_certid(sock_ctx->ssl);
+	if (id == NULL)
+		goto err;
+
+	id_string = get_ocsp_id_string(id);
+	if (id_string == NULL)
+		goto err;
+
+	cached_resp = (OCSP_BASICRESP*) str_hashmap_get(rev_cache, id_string);
+	if (cached_resp == NULL)
+		goto err;
+
+	ret = verify_ocsp_basicresp(cached_resp, id, chain, store);
+	if (ret == V_OCSP_CERTSTATUS_UNKNOWN) {
+		str_hashmap_del(rev_cache, id_string);
+		goto err;
+	}
+
+	OCSP_CERTID_free(id);
+	free(id_string);
+	return ret;
+ err:
+	if (id != NULL)
+		OCSP_CERTID_free(id);
+	if (id_string != NULL)
+		free(id_string);
+
+	return V_OCSP_CERTSTATUS_UNKNOWN;
+}
 
 
 /**
@@ -455,47 +373,156 @@ int add_to_ocsp_cache(OCSP_CERTID* id,
 }
 
 
-int check_cached_response(socket_ctx* sock_ctx) {
+/*******************************************************************************
+ *              HELPER FUNCTIONS FOR HTTP REQUESTS/RESPONSES
+ ******************************************************************************/
 
-	hsmap_t* rev_cache = sock_ctx->daemon->revocation_cache;
-	OCSP_BASICRESP* cached_resp = NULL;
-	STACK_OF(X509)* chain = NULL;
-	X509_STORE* store = NULL;
-	OCSP_CERTID* id = NULL;
-	char* id_string = NULL;
-	int ret;
 
-	store = SSL_CTX_get_cert_store(SSL_get_SSL_CTX(sock_ctx->ssl));
-	chain = SSL_get_peer_cert_chain(sock_ctx->ssl);
-	if (store == NULL || chain == NULL)
-		goto err;
+/**
+ * Takes in a given URL and parses it into its hostname, port and path.
+ * If no port is specified and the protocol is `http`, then the port specified 
+ * will default to 80. Each output may be set to NULL safely (if only some
+ * of the outputs are desired).
+ * @param url The given url to parse.
+ * @param host_out An address to populate with the hostname of the url.
+ * @param port_out An address to populate with the port of the url.
+ * @param path_out An address to populate with the path of the url.
+ * @returns 0 if the url could be successfully parsed, or -1 otherwise.
+ */
+int parse_url(char* url, char** host_out, int* port_out, char** path_out) {
 
-	id = get_ocsp_certid(sock_ctx->ssl);
-	if (id == NULL)
-		goto err;
+	char* host;
+	char* port_ptr;
+	char* path;
+	int ret, use_ssl;
+    long port;
 
-	id_string = get_ocsp_id_string(id);
-	if (id_string == NULL)
-		goto err;
+	ret = OCSP_parse_url(url, &host, &port_ptr, &path, &use_ssl);
+	if (ret != 1)
+		return -1;
 
-	cached_resp = (OCSP_BASICRESP*) str_hashmap_get(rev_cache, id_string);
-	if (cached_resp == NULL)
-		goto err;
+    port = strtol(port_ptr, NULL, 10);
+    if (port == INT_MAX || port < 0) {
+        free(host);
+        free(port_ptr);
+        free(path);
+        return -1;
+    }
 
-	ret = verify_ocsp_basicresp(cached_resp, id, chain, store);
-	if (ret == V_OCSP_CERTSTATUS_UNKNOWN) {
-		str_hashmap_del(rev_cache, id_string);
-		goto err;
-	}
+    free(port_ptr);
 
-	OCSP_CERTID_free(id);
-	free(id_string);
-	return ret;
- err:
-	if (id != NULL)
-		OCSP_CERTID_free(id);
-	if (id_string != NULL)
-		free(id_string);
+	if (host_out != NULL)
+		*host_out = host;
+	else
+		free(host);
+	
+	if (port_out != NULL)
+		*port_out = (int) port;
 
-	return V_OCSP_CERTSTATUS_UNKNOWN;
+
+	if (path_out != NULL)
+		*path_out = path;
+	else
+		free(path);
+
+	return 0;
+}
+
+
+/**
+ * Checks to see if a given response has a a return code.
+ * @param response The response to check the HTTP response code of.
+ * @returns 0 if the response contains an HTTP 200 code (OK), or 1 otherwise.
+ */
+int is_bad_http_response(char* response) {
+
+	char* firstline_end = strstr(response, "\r\n");
+	char* response_code_ptr = strchr(response, ' ') + 1;
+	
+	if (response_code_ptr >= firstline_end) 
+		return 1;
+
+	long response_code = strtol(response_code_ptr, NULL, 10);
+	if (response_code != 200)
+		return 1;
+
+	return 0;
+}
+
+
+/**
+ * Determines the length of an HTTP response's body, based on the Content-Length
+ * field in the HTTP header.
+ * @param response the HTTP response to parse the response from.
+ * @returns The length of the response body, or -1 on error.
+ */
+int get_http_body_len(char* response) {
+
+	long body_length;
+
+	char* length_ptr = strstr(response, "Content-Length");
+	if (length_ptr == NULL)
+		return -1;
+
+	if (length_ptr > strstr(response, "\r\n\r\n"))
+		return -1;
+
+	length_ptr += strlen("Content-Length");
+	
+	while(*length_ptr == ' ' || *length_ptr == ':')
+		++length_ptr;
+
+	body_length = strtol(length_ptr, NULL, 10);
+	if (body_length >= INT_MAX || body_length < 0)
+		return -1;
+
+	return (int) body_length;
+}
+
+
+/**
+ * Transitions a given responder's buffer and buffer length to reading an HTTP
+ * response body (rather than reading the header + body). This function 
+ * re-allocates the buffer within resp_ctx to the correct size for the body and sets
+ * the flag in responder indicating that the buffer contains only the response
+ * body.
+ * @param resp_ctx The given responder to modify the buffer of.
+ * @returns 0 on success, or if an error occurred.
+ */
+int start_reading_body(responder_ctx* client) {
+
+	unsigned char* body_start;
+	int header_len;
+	int body_len;
+
+	if (is_bad_http_response((char*) client->buffer))
+		return -1;
+
+	body_start = (unsigned char*) strstr((char*) client->buffer, "\r\n\r\n") 
+			+ strlen("\r\n\r\n");
+	header_len = body_start - client->buffer;
+
+	body_len = get_http_body_len((char*) client->buffer);
+	if (body_len < 0)
+		return -1;
+
+	unsigned char* tmp_buffer = (unsigned char*) malloc(body_len);
+	if (tmp_buffer == NULL)
+		return -1;
+
+	client->tot_read -= header_len;
+	client->buf_size = body_len;
+
+	memcpy(tmp_buffer, body_start, client->tot_read);
+	free(client->buffer);
+	client->buffer = tmp_buffer;
+
+	client->reading_body = 1;
+
+	return 0;
+}
+
+
+int done_reading_body(responder_ctx* resp_ctx) {
+	return resp_ctx->reading_body && (resp_ctx->tot_read == resp_ctx->buf_size);
 }

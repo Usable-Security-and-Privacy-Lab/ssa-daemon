@@ -278,14 +278,6 @@ int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
                     TLSEXT_STATUSTYPE_ocsp);
         if (ret != 1)
             goto err;
-
-        ret = SSL_CTX_set_tlsext_status_arg(sock_ctx->ssl_ctx, (void*) sock_ctx);
-        if (ret != 1)
-            goto err;
-
-        ret = SSL_CTX_set_tlsext_status_cb(sock_ctx->ssl_ctx, revocation_cb);
-        if (ret != 1)
-            goto err;
     }
 
     ret = client_SSL_new(sock_ctx);

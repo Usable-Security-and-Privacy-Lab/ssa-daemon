@@ -139,9 +139,16 @@ typedef struct channel_st {
 	int closed;
 } channel;
 
+// revocation_ctx -> handles status of all certificates in a chain
+// cert_rev_ctx -> handles the status of an individual certificate
+// responder_ctx -> handles the status of an individual responder for a certificate
 
 struct revocation_ctx_st {
+    daemon_ctx *daemon;
+    unsigned long id;
+
     enum revocation_state state;
+	unsigned int checks; // bitmap; see defined options above
 
 	unsigned int num_rev_checks; /**< How many different types of revocation will be checked */
 	int crl_clients_left;
@@ -151,7 +158,7 @@ struct revocation_ctx_st {
 	responder_ctx* crl_clients;
 	unsigned int crl_client_cnt;
 
-	unsigned int checks; // bitmap; see defined options above
+
 };
 
 struct responder_ctx_st {
