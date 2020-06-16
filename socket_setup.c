@@ -175,7 +175,17 @@ int client_SSL_new(socket_ctx* sock_ctx) {
 	return 0;
 }
 
-
+/**
+ * Allocates and sets the correct settings for the bufferevents of a given 
+ * socket. The socket may be either a connecting client socket (in which case 
+ * the plain_fd must be set to -1) or an `accept()`ed server socket (in which
+ * case the plain_fd must be set to the fd of the socket).
+ * @param sock_ctx The context of the socket to prepare bufferevents for.
+ * @param plain_fd The file descriptor that will be connected internally to
+ * our program.
+ * @returns 0 on success, or a negative errno code on failure. The bufferevents 
+ * and the plain_fd are cleaned up on failure.
+ */
 int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
 
     daemon_ctx* daemon = sock_ctx->daemon;
@@ -523,7 +533,6 @@ int load_certificate_authority(SSL_CTX* ctx, char* CA_path) {
 		return 0;
 	}
 }
-
 
 
 /**
