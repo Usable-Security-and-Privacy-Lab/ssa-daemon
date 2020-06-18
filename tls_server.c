@@ -249,59 +249,16 @@ int is_pem_file(char* path) {
 }
 
 /*
- * Searches cert_list for a self-signed (root) certificate. Returns index of the root 
- * certificate in cert_list or -1 if the root CA or the X509 extension is not found.
- */
-int get_root_cert(X509** cert_list, int num_certs) {
-	for(int j = 0; j < num_certs; ++j) {
-		const ASN1_STRING* subject = X509_get0_subject_key_id(cert_list[j]); 
-		if(subject == NULL) 
-			return -1;
-		
-   		const ASN1_STRING* issuer = X509_get0_authority_key_id(cert_list[j]);
-		if(issuer == NULL) 
-			return -1;
-		
-		if(ASN1_STRING_cmp(subject, issuer) == 0) 
-			return j;		
-	}
-	return -1;
-}
-
-/*
- * Starting with the root CA, searches cert_list for the last certificate in the chain.
+ * Searches cert_list for the certificate that isn't a CA (the end entity).
  * Returns the index of the end cert or -1 on error.
  */
 int get_end_entity(X509** cert_list, int num_certs) {
-	int root_index = get_root_cert(cert_list, num_certs);
-	if(root_index < 0) {
-		log_printf(LOG_ERROR, "Could not locate root certificate.\n");
-		return -1;
-	}
-
-	int end_entity_index = 0;
-	const ASN1_STRING* ca = X509_get0_subject_key_id(cert_list[root_index]);
-
-	for(int index = 1; index < num_certs; ++index) {
-		for(int j = 0; j < num_certs; ++j) {
-
-			if(j == root_index)
-				continue;
-			
-			const ASN1_STRING* issuer = X509_get0_authority_key_id(cert_list[j]);
-			if(ASN1_STRING_cmp(issuer, ca) == 0) {
-				end_entity_index = j;
-				ca = X509_get0_subject_key_id(cert_list[j]);
-				break;
-			}
-
-			if(j == num_certs - 1) {
-				log_printf(LOG_ERROR, "Files in directory do not make a complete chain.\n");
-				return -1;
-			}
+	for(int i = 0; i < num_certs; ++i) {
+		if(X509_check_ca(cert_list[i]) == 0) {
+			return i;
 		}
 	}
-	return end_entity_index;
+	return -1;
 }
 
 int get_directory_certs(X509** cert_list, DIR* directory, char* dir_name) {
@@ -366,7 +323,7 @@ int add_directory_certs(SSL_CTX* ctx, X509** cert_list, int num_certs) {
 		return 0;
 	}
 
-	const ASN1_STRING* issuer = X509_get0_authority_key_id(cert_list[end_index]);
+	const ASN1_STRING* issuer = X509_get0_authority_key_id(cert_list[end_index]); // error check no extension?
 	for(int j = 1; j < num_certs; ++j) {
 		for(int k = 0; k < num_certs; ++k) {
 			const ASN1_STRING* subject = X509_get0_subject_key_id(cert_list[k]);
