@@ -12,7 +12,7 @@ client:
   # The following is commented out since the SSA Daemon does a decent job at finding
   # the correct CA path based on what Linux distro is being run (particularly for Fedora & Ubuntu).
 #  CA-path: /etc/ssl/certs
-  CA-path: test_files/certs/rootCA.pem # use this for testing our server
+  CA-path: test_files/certs/test_chain/rootca.pem # use this for testing our server
 
   # The CRIME attack targets TLS Compression; an attacker can gain information 
   # about authorization tokens, secret web cookies or other sensitive information 
@@ -82,7 +82,7 @@ server:
   # Realistically, they should be kept disabled unless TLS-1.3 is your minimum TLS version.
   session-tickets: disabled  # Default: disabled
 
-  CA-path: test_files/certs/rootCA.pem
+  CA-path: test_files/certs/test_chain/rootca.pem  #rootCA.pem
 
   cipher-list: 
     - ECDHE-ECDSA-AES256-GCM-SHA384
@@ -113,10 +113,10 @@ server:
   #    the first certificate in the chain ends with a '0'. The following certificates should have
   #    names ending in '1', '2', etc. with the files in order from server certificate to intermediate
   #    certificates to root certificate.
-  cert-path: test_files/certs/server_chain.pem
+  cert-path: test_files/certs/test_chain #/server_chain.pem # for testing /testing
 
   # Set the path to the file containing the private key. The file may be in PEM or DER (ASN1) format.
-  key-path: test_files/certs/server_key.pem
+  key-path: test_files/certs/middle_key.pem # server_key.pem
 
   #Multiple certificate chain / key pairs can be provided if desired (One for RSA and one for DSA certificates).
   # cert-path: test_files/certs/server_chain2.pem

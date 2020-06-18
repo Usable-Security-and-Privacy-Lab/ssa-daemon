@@ -41,7 +41,7 @@ int main() {
         printf("Connection received!\n");
 		int num_received = recv(c_fd, request, BUFFER_SIZE, 0);
 		if(num_received < 0) {
-			printf("Errno on recv: %d\n", errno);
+			printf("Errno on recv: %s\n", strerror(errno));
 			return -1;
 		}
 		printf("Received %i bytes from client.\n", num_received);

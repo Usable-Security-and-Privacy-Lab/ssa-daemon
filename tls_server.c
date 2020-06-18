@@ -1,12 +1,15 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <dirent.h>
 #include <fcntl.h>
 
 #include <event2/bufferevent.h>
 #include <event2/bufferevent_ssl.h>
 #include <event2/event.h>
 #include <openssl/err.h>
+#include <openssl/x509v3.h>
 
 #include "bev_callbacks.h"
 #include "config.h"
@@ -107,7 +110,7 @@ SSL_CTX* server_ctx_init_default() {
 }
 
 
-int load_certificate(SSL_CTX* ctx, char* path);
+int load_certificates(SSL_CTX* ctx, char** cert_chain, int cert_cnt);
 
 SSL_CTX* server_ctx_init(server_settings* config) {
 
@@ -162,19 +165,18 @@ SSL_CTX* server_ctx_init(server_settings* config) {
 		goto err;
 
 	/* TODO: WARNING: temporary--for debugging. Remove for prod */
+	
+	ret = load_certificates(ctx, config->certificates, config->cert_cnt); 
+	if (ret != 1) {
+		log_printf(LOG_ERROR, "Couldn't load certificates\n");
+		goto err;
+	}
 
-	// make sure config file has comment about ca_path
-	// if certificate chain is one pem formated file -> use certificate chain file
-	// else if ca_path is a directory, load individually in alphabetical order
-	// add certificate/key pair for both RSA and DSA?
-	
-	ret = load_certificate(ctx, config->ca_path); // key values mismatch here
-	if (ret != 1)
+	ret = SSL_CTX_use_PrivateKey_file(ctx, config->private_keys[0], SSL_FILETYPE_PEM); // FIXME (multiple keys)
+	if (ret != 1) {
+		log_printf(LOG_ERROR, "Incorrect private key file\n");
 		goto err;
-	
-	ret = SSL_CTX_use_PrivateKey_file(ctx, DEBUG_PRIVATE_KEY, SSL_FILETYPE_PEM);
-	if (ret != 1)
-		goto err;
+	}
 
 	ret = SSL_CTX_check_private_key(ctx);
 	if (ret != 1) {
@@ -237,30 +239,177 @@ int accept_SSL_new(connection* conn, connection* old) {
  */
 int is_pem_file(char* path) {
 	int len = strlen(path);
-	char* type = &path[len - 4]; // label this?
+	int pem_len = 4;
+	char* type = &path[len - pem_len];
 
-	printf("Type: %s\n", type); // for debugging
 	if(strcmp(type, ".pem") == 0) 
 		return 1;
 	else
 		return 0;
 }
 
-/**
- * 
+/*
+ * Searches cert_list for a self-signed (root) certificate. Returns index of the root 
+ * certificate in cert_list or -1 if the root CA or the X509 extension is not found.
  */
-int load_certificate(SSL_CTX* ctx, char* path) { 
+int get_root_cert(X509** cert_list, int num_certs) {
+	for(int j = 0; j < num_certs; ++j) {
+		const ASN1_STRING* subject = X509_get0_subject_key_id(cert_list[j]); 
+		if(subject == NULL) 
+			return -1;
+		
+   		const ASN1_STRING* issuer = X509_get0_authority_key_id(cert_list[j]);
+		if(issuer == NULL) 
+			return -1;
+		
+		if(ASN1_STRING_cmp(subject, issuer) == 0) 
+			return j;		
+	}
+	return -1;
+}
 
-	if(is_pem_file(path)) {
-		return SSL_CTX_use_certificate_chain_file(ctx, path);
+/*
+ * Starting with the root CA, searches cert_list for the last certificate in the chain.
+ * Returns the index of the end cert or -1 on error.
+ */
+int get_end_entity(X509** cert_list, int num_certs) {
+	int root_index = get_root_cert(cert_list, num_certs);
+	if(root_index < 0) {
+		log_printf(LOG_ERROR, "Could not locate root certificate.\n");
+		return -1;
 	}
 
-	// else if(is_directory(config->ca_path)) {}
+	int end_entity_index = 0;
+	const ASN1_STRING* ca = X509_get0_subject_key_id(cert_list[root_index]);
 
-	else {
-		log_printf(LOG_ERROR, "[CA_path] must be a pem file or directory.\n");
+	for(int index = 1; index < num_certs; ++index) {
+		for(int j = 0; j < num_certs; ++j) {
+
+			if(j == root_index)
+				continue;
+			
+			const ASN1_STRING* issuer = X509_get0_authority_key_id(cert_list[j]);
+			if(ASN1_STRING_cmp(issuer, ca) == 0) {
+				end_entity_index = j;
+				ca = X509_get0_subject_key_id(cert_list[j]);
+				break;
+			}
+
+			if(j == num_certs - 1) {
+				log_printf(LOG_ERROR, "Files in directory do not make a complete chain.\n");
+				return -1;
+			}
+		}
+	}
+	return end_entity_index;
+}
+
+int get_directory_certs(X509** cert_list, DIR* directory, char* dir_name) {
+	struct dirent* in_file;
+	int num_certs = 0; 
+	int max_file_name_len = 128;
+	char file_name[max_file_name_len];
+
+	while ((in_file = readdir(directory))) {
+
+		if (!strcmp (in_file->d_name, ".")) 
+            continue;
+
+        if (!strcmp (in_file->d_name, ".."))    
+            continue;
+
+		char* cert_name = in_file->d_name;
+		printf("%s\n", cert_name); // for debugging
+
+		file_name[0] = 0;
+		sprintf(file_name, "%s/%s", dir_name, cert_name);
+		FILE* current_file = fopen(file_name, "r"); 
+
+		if(current_file == NULL) {
+			log_printf(LOG_ERROR, "Error: Could not open file %s (Errno %d).\n", file_name, errno);
+			return -1;
+		}
+		
+		if(is_pem_file(file_name)) {
+			cert_list[num_certs] = PEM_read_X509(current_file, NULL, 0, NULL);
+		}
+
+		else { // test this (DER file)
+			cert_list[num_certs] = d2i_X509_fp(current_file, NULL);
+		}
+
+		if(cert_list[num_certs] == NULL) {
+			log_printf(LOG_ERROR, "Error converting \"%s\" file to certificate.\n", cert_name);
+			return -1;
+		}
+		
+		++num_certs;
+		errno = 0;
+	}
+	if(errno != 0) {
+		log_printf(LOG_ERROR, "Error reading directory %s.\n", dir_name);
+		return -1;
+	}
+	return num_certs;
+}
+
+// If this works, remove comment in config file to sort directory
+int add_directory_certs(SSL_CTX* ctx, X509** cert_list, int num_certs) { 
+	int end_index = get_end_entity(cert_list, num_certs);
+	if(end_index < 0) {
+		log_printf(LOG_ERROR, "Could not locate end entity certificate.\n");
 		return 0;
 	}
+
+	if(SSL_CTX_use_certificate(ctx, cert_list[end_index]) != 1) {
+		log_printf(LOG_ERROR, "Error loading end certificate.\n");
+		return 0;
+	}
+
+	const ASN1_STRING* issuer = X509_get0_authority_key_id(cert_list[end_index]);
+	for(int j = 1; j < num_certs; ++j) {
+		for(int k = 0; k < num_certs; ++k) {
+			const ASN1_STRING* subject = X509_get0_subject_key_id(cert_list[k]);
+			if(ASN1_STRING_cmp(issuer, subject) == 0) {
+				if(SSL_CTX_add0_chain_cert(ctx, cert_list[k]) != 1) { 
+					log_printf(LOG_ERROR, "Error adding CA to chain.\n");
+					return 0;
+				}
+				issuer = X509_get0_authority_key_id(cert_list[k]);
+				break;
+			}
+		}
+	}
+
+	return 1;
+}
+
+/**
+ * Load all certificates into ctx. 
+ * Returns 1 on success, 0 on error.
+ */
+int load_certificates(SSL_CTX* ctx, char** cert_chain, int cert_cnt) { 
+	
+	// for(int i = 0; i < cert_cnt; ++i) // add all cert chains? distinguish somehow?
+
+	if(is_pem_file(cert_chain[0])) {
+		return SSL_CTX_use_certificate_chain_file(ctx, cert_chain[0]);
+	}
+
+	char* dir_name = cert_chain[0];
+	DIR* directory = opendir(dir_name);
+	if(directory != NULL) {
+		int max_certs = 5; // get from config file
+		X509* cert_list[max_certs];
+		int num_certs = get_directory_certs(cert_list, directory, dir_name);
+		return add_directory_certs(ctx, cert_list, num_certs); 
+	}
+	else {
+		log_printf(LOG_ERROR, "Error: Could not open directory.\n");
+	}
+
+	log_printf(LOG_ERROR, "[cert-path] must be a pem file or directory.\n");
+	return 0;
 }
 
 /**
