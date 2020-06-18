@@ -13,7 +13,7 @@ max-tls-version: 1.3 # Default: 1.3
 # The following is commented out since the SSA Daemon does a decent job at finding
 # the correct CA path based on what Linux distro is being run (particularly for Fedora & Ubuntu).
 #  CA-path: /etc/ssl/certs
-  CA-path: test_files/certs/test_chain/rootca.pem # use this for testing our server
+CA-path: test_files/certs/rootCA.pem # use this for testing our server
 
 # The CRIME attack targets TLS Compression; an attacker can gain information 
 # about authorization tokens, secret web cookies or other sensitive information 
@@ -74,7 +74,7 @@ verify-cert-transparency: disabled
 # Default: enabled
 
 # Certificate Revocation checks are important in determining the authenticity of a webiste.
-revocation-checks: on
+revocation-checks: off
 # Default: enabled
 
 
