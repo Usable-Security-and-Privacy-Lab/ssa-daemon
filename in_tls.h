@@ -1,5 +1,5 @@
-#ifndef IN_TLS
-#define IN_TLS
+#ifndef SSA_IN_TLS
+#define SSA_IN_TLS
 
 #ifndef _BITS_SOCKADDR_H
         typedef unsigned short int sa_family_t;
@@ -26,8 +26,6 @@
 
 /* added recently--not in kernel */
 #define TLS_TRUSTED_CIPHERS               97
-#define TLS_CLIENT_CONNECTION             98
-#define TLS_SERVER_CONNECTION             99
 #define TLS_ERROR                        100
 
 

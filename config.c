@@ -29,6 +29,12 @@
 #define KEY_PATH        "key-path"
 #define SESSION_TIMEOUT "session-timeout"
 #define CERT_V_DEPTH    "cert-verification-depth"
+#define VERIFY_CT       "verify-cert-transparency"
+#define REV_CHECKS      "revocation-checks"
+#define STAPLED_CHECKS  "revocation-stapled"
+#define OCSP_CHECKS     "revocation-ocsp"
+#define CRL_CHECKS      "revocation-crl"
+#define CACHED_CHECKS   "revocation-cached"
 
 
 /* different values that we accept in place of just 'true' or 'false' */
@@ -56,20 +62,20 @@
 #define TLS1_3_ALT_STRING "1.3"
 
 
-int parse_next_client_setting(yaml_parser_t* parser, client_settings* client);
-int parse_next_server_setting(yaml_parser_t* parser, server_settings* server);
+global_config* default_settings_new();
+
+int parse_next_setting(yaml_parser_t* parser, global_config* settings);
 
 int parse_string(yaml_parser_t* parser, char** string);
 int parse_string_list(yaml_parser_t* parser, char** strings[], int* num);
 int parse_string_list_member(yaml_parser_t* parser, char** strings, int* num);
 int parse_boolean(yaml_parser_t* parser, int* enabled);
 int parse_integer(yaml_parser_t* parser, int* num);
-int parse_tls_version(yaml_parser_t* parser, enum tls_version_t* version);
+int parse_tls_version(yaml_parser_t* parser, enum tls_version* version);
 
-int parse_stream(yaml_parser_t* parser, global_settings* settings);
-int parse_document(yaml_parser_t* parser, global_settings* settings);
-int parse_client(yaml_parser_t* parser, global_settings* settings);
-int parse_server(yaml_parser_t* parser, global_settings* settings);
+int parse_stream(yaml_parser_t* parser, global_config* settings);
+int parse_document(yaml_parser_t* parser, global_config* settings);
+int parse_settings(yaml_parser_t* parser, global_config* settings);
 
 int check_label_to_parse(yaml_parser_t* parser, char* label);
 yaml_event_type_t parse_next_event(yaml_parser_t* parser);
@@ -77,8 +83,6 @@ char* parse_next_scalar(yaml_parser_t* parser);
 
 char* utf8_to_ascii(unsigned char* src, ssize_t len);
 void str_tolower(char* string);
-int is_server(char* label);
-int is_client(char* label);
 int is_enabled(char* label);
 
 void log_parser_error(yaml_parser_t parser);
@@ -133,6 +137,8 @@ void log_parser_error(yaml_parser_t parser);
  * STREAM_START
  * DOCUMENT_START
  * MAPPING_START
+ * SCALAR ('client')
+ * MAPPING_START
  * SCALAR ('min-tls-version')
  * SCALAR ('1.2')
  * SCALAR ('cipher-list')
@@ -143,6 +149,7 @@ void log_parser_error(yaml_parser_t parser);
  * SEQUENCE_END
  * SCALAR ('tls-compression')
  * SCALAR ('off')
+ * MAPPING_END
  * MAPPING_END
  * DOCUMENT_END
  * STREAM_END
@@ -155,19 +162,41 @@ void log_parser_error(yaml_parser_t parser);
  * 
  */
 
+/*******************************************************************************
+ *                             DEFAULT SETTINGS
+ ******************************************************************************/
+
+global_config* default_settings_new() {
+
+    global_config* settings = calloc(1, sizeof(global_config));
+    if (settings == NULL)
+        return NULL;
+
+    settings->min_tls_version = TLS1_2_ENUM;
+    settings->max_tls_version = TLS1_3_ENUM;
+
+    settings->max_chain_depth = 10;
+    settings->ct_checks = 1;
+
+    /* checks on by default (struct is calloc'd to 0); these are redundant */
+    turn_on_revocation_checks(settings->revocation_checks);
+    turn_on_cached_checks(settings->revocation_checks);
+    turn_on_stapled_checks(settings->revocation_checks);
+    turn_on_ocsp_checks(settings->revocation_checks);
+    turn_on_crl_checks(settings->revocation_checks);
+
+
+
+
+    return settings;
+}
+
 
 /*******************************************************************************
  *    THE IMPORTANT STUFF (WHERE TO ADD ADDITIONAL CONFIG SETTINGS EASILY)
  ******************************************************************************/
 
-
-/**
- * Parses the next key:value pair in parser, and adds it to the daemon's client
- * settings.
- * @returns 0 on success, 1 if no more key:value or key:list pairs are left to 
- * be parsed, or -1 on error.
- */
-int parse_next_client_setting(yaml_parser_t* parser, client_settings* client) {
+int parse_next_setting(yaml_parser_t* parser, global_config* config) {
 
     yaml_event_t event;
     char* label;
@@ -196,132 +225,100 @@ int parse_next_client_setting(yaml_parser_t* parser, client_settings* client) {
     /* This is the list of all possible client setting labels;
      * ADD ADDITIONAL SETTINGS AS NEEDS BE HERE (as well as to the struct) */
     if (strcmp(label, CA_PATH) == 0) {
-        ret = parse_string(parser, &client->ca_path);
+        ret = parse_string(parser, &config->ca_path);
 
     } else if (strcmp(label, CIPHER_LIST) == 0) {
         ret = parse_string_list(parser, 
-                &client->cipher_list, &client->cipher_list_cnt);
+                &config->cipher_list, &config->cipher_list_cnt);
 
     } else if (strcmp(label, CIPHERSUITES) == 0) {
         ret = parse_string_list(parser,
-                &client->ciphersuites, &client->ciphersuite_cnt);
+                &config->ciphersuites, &config->ciphersuite_cnt);
 
     } else if (strcmp(label, TLS_COMPRESSION) == 0) {
-        ret = parse_boolean(parser, &client->tls_compression);
+        ret = parse_boolean(parser, &config->tls_compression);
 
     } else if (strcmp(label, MIN_TLS_VERSION) == 0) {
-        ret = parse_tls_version(parser, &client->min_tls_version);
+        ret = parse_tls_version(parser, &config->min_tls_version);
 
     } else if (strcmp(label, MAX_TLS_VERSION) == 0) {
-        ret = parse_tls_version(parser, &client->max_tls_version);
+        ret = parse_tls_version(parser, &config->max_tls_version);
 
     } else if (strcmp(label, SESSION_TIMEOUT) == 0) {
-        ret = parse_integer(parser, &client->session_timeout);
+        ret = parse_integer(parser, &config->session_timeout);
 
     } else if (strcmp(label, CERT_V_DEPTH) == 0) {
-        ret = parse_integer(parser, &client->max_cert_chain_depth);
+        ret = parse_integer(parser, &config->max_chain_depth);
 
-    } else {
-        log_printf(LOG_ERROR, "Config: Undefined label %s\n", label);
-        ret = -1;
-    }
-    
-    free(label);
-    return ret;
-}
-
-/**
- * Parses the next key:value pair in parser, and adds it to the daemon's server
- * settings. Note that the settings don't need to be parsed in any particular
- * order; but if a string setting is read twice, it should fail the parsing.
- * @returns 0 on success, 1 if no more key:value or key:list pairs are left to 
- * be parsed, or -1 on error.
- */
-int parse_next_server_setting(yaml_parser_t* parser, server_settings* server) {
-
-    yaml_event_t event;
-    char* label; 
-    int ret;
-    
-    if (yaml_parser_parse(parser, &event) != 1)
-        return -1;
-
-    if (event.type == YAML_MAPPING_END_EVENT) {
-        yaml_event_delete(&event);
-        return 1;
-    }
-
-    if (event.type != YAML_SCALAR_EVENT) {
-        yaml_event_delete(&event);
-        return -1;
-    }
-
-    label = utf8_to_ascii(event.data.scalar.value, event.data.scalar.length);
-    if (label == NULL)
-        return -1;
-    
-    yaml_event_delete(&event);
-    str_tolower(label);
-
-    /* This is the list of all possible server setting labels--ADD HERE */
-    if (strcmp(label, CA_PATH) == 0) {
-        ret = parse_string(parser, &server->ca_path);
-
-    } else if (strcmp(label, CIPHER_LIST) == 0) {
-        ret = parse_string_list(parser, 
-                &server->cipher_list, &server->cipher_list_cnt);
-
-    } else if (strcmp(label, CIPHERSUITES) == 0) {
-        ret = parse_string_list(parser,
-                &server->ciphersuites, &server->ciphersuite_cnt);
-
-    } else if (strcmp(label, TLS_COMPRESSION) == 0) {
-        ret = parse_boolean(parser, &server->tls_compression);
+    } else if (strcmp(label, VERIFY_CT) == 0) {
+        ret = parse_boolean(parser, &config->ct_checks);
 
     } else if (strcmp(label, SESSION_TICKETS) == 0) {
-        ret = parse_boolean(parser, &server->session_tickets);
+        ret = parse_boolean(parser, &config->session_tickets);
 
-    } else if (strcmp(label, MIN_TLS_VERSION) == 0) {
-        ret = parse_tls_version(parser, &server->min_tls_version);
+    } else if (strcmp(label, REV_CHECKS) == 0) {
+        int has_checks;
+        ret = parse_boolean(parser, &has_checks);
+        if (!has_checks)
+            turn_off_revocation_checks(config->revocation_checks);
 
-    } else if (strcmp(label, MAX_TLS_VERSION) == 0) {
-        ret = parse_tls_version(parser, &server->max_tls_version);
+    } else if (strcmp(label, OCSP_CHECKS) == 0) {
+        int has_checks;
+        ret = parse_boolean(parser, &has_checks);
+        if (!has_checks)
+            turn_off_ocsp_checks(config->revocation_checks);
 
-    } else if (strcmp(label, SESSION_TIMEOUT) == 0) {
-        ret = parse_integer(parser, &server->session_timeout);
+    } else if (strcmp(label, CRL_CHECKS) == 0) {
+        int has_checks;
+        ret = parse_boolean(parser, &has_checks);
+        if (!has_checks)
+            turn_off_crl_checks(config->revocation_checks);
     
+    } else if (strcmp(label, CACHED_CHECKS) == 0) {
+        int has_checks;
+        ret = parse_boolean(parser, &has_checks);
+        if (!has_checks)
+            turn_off_cached_checks(config->revocation_checks);
+
+    } else if (strcmp(label, STAPLED_CHECKS) == 0) {
+        int has_checks;
+        ret = parse_boolean(parser, &has_checks);
+        if (!has_checks)
+            turn_off_stapled_checks(config->revocation_checks);
+
     } else if (strcmp(label, CERT_PATH) == 0) {
-        if (server->cert_cnt >= MAX_CERTKEY_PAIRS) {
+        if (config->cert_cnt >= MAX_CERTKEY_PAIRS) {
             log_printf(LOG_ERROR, "Config: Maximum keys (%i) exceeded\n", 
                     MAX_CERTKEY_PAIRS);
             ret = -1;
         } else {
-            ret = parse_string(parser, &server->certificates[server->cert_cnt]);
-            server->cert_cnt++;
+            ret = parse_string(parser, &config->certificates[config->cert_cnt]);
+            config->cert_cnt++;
         }
 
     } else if (strcmp(label, KEY_PATH) == 0) {
-        if (server->key_cnt >= MAX_CERTKEY_PAIRS) {
+        if (config->key_cnt >= MAX_CERTKEY_PAIRS) {
             log_printf(LOG_ERROR, "Config: Maximum keys (%i) exceeded\n", 
                     MAX_CERTKEY_PAIRS);
             ret = -1;
         } else {
-            ret = parse_string(parser, &server->private_keys[server->key_cnt]);
-            server->key_cnt++;
+            ret = parse_string(parser, &config->private_keys[config->key_cnt]);
+            config->key_cnt++;
         }
     
     } else {
         log_printf(LOG_ERROR, "Config: Undefined label %s\n", label);
         ret = -1;
     }
-
+    
     free(label);
     return ret;
 }
 
+
 /*
  *******************************************************************************
- *      USE THESE FUNCTIONS TO PARSE INFO INTO THE GLOBAL_SETTINGS STRUCT
+ *      USE THESE FUNCTIONS TO PARSE INFO INTO THE GLOBAL_CONFIG STRUCT
  *******************************************************************************
  */ 
 
@@ -498,10 +495,10 @@ int parse_integer(yaml_parser_t* parser, int* num) {
  * appropriate version enum.
  * @param parser The parser to extract the next event from.
  * @param version A reference to be updated if the parsed event represents a 
- * valid TLS version. See enum tls_version_t in config.h for possible versions.
+ * valid TLS version. See enum tls_version in config.h for possible versions.
  * @returns 0 on success, or -1 if an error occurred.
  */
-int parse_tls_version(yaml_parser_t* parser, enum tls_version_t* version) {
+int parse_tls_version(yaml_parser_t* parser, enum tls_version* version) {
     
     char* tls_version = parse_next_scalar(parser);
     if (tls_version == NULL)
@@ -541,16 +538,15 @@ int parse_tls_version(yaml_parser_t* parser, enum tls_version_t* version) {
 
 
 /**
- * Parses a given config file and fills an allocated global_settings struct 
+ * Parses a given config file and fills an allocated global_config struct 
  * with the configurations.
  * @param file_path The path to the .yml config file, or NULL if the default
  * file path is desired.
- * @param global_settings A struct to be allocated and populated with the 
- * appropriate TLS settings if the parser succeeds at parsing the file.
- * @returns 0 on success (and/or if no file was found), or -1 on failure.
+ * @returns A pointer to a new global_config struct, or NULL on error.
  */
-int parse_config(char* file_path, global_settings** settings) {
+global_config* parse_config(char* file_path) {
     
+    global_config* settings;
     yaml_parser_t parser;
     FILE* input = NULL;
 
@@ -559,8 +555,7 @@ int parse_config(char* file_path, global_settings** settings) {
 
     if (yaml_parser_initialize(&parser) != 1) {
         log_printf(LOG_ERROR, "Failed to initialize config parser\n");
-        *settings = NULL;
-        return -1;
+        return NULL;
     }
 
     input = fopen(file_path, "r");
@@ -569,13 +564,10 @@ int parse_config(char* file_path, global_settings** settings) {
                 "Couldn't find config file--using default settings...\n");
 
         yaml_parser_delete(&parser);
-        *settings = NULL;
-        return 0;
+        return default_settings_new();
     }
 
-    
-
-    *settings = calloc(1, sizeof(global_settings));
+    settings = calloc(1, sizeof(global_config));
     if (settings == NULL) {
         log_printf(LOG_ERROR, "Failed to allocate settings struct: %s\n",
                 strerror(errno));
@@ -587,25 +579,24 @@ int parse_config(char* file_path, global_settings** settings) {
     if (parse_next_event(&parser) != YAML_STREAM_START_EVENT)
         goto err;
 
-    if (parse_stream(&parser, *settings) != 0)
+    if (parse_stream(&parser, settings) != 0)
         goto err;
 
     fclose(input);
     yaml_parser_delete(&parser);
     
-    return 0;
+    return settings;
  err:
     log_parser_error(parser);
     yaml_parser_delete(&parser);
 
-    if (*settings != NULL)
-        global_settings_free(*settings);
-    *settings = NULL;
+    if (settings != NULL)
+        global_settings_free(settings);
     
     if (input != NULL)
         fclose(input);
 
-    return -1;
+    return NULL;
 }
 
 /**
@@ -615,7 +606,7 @@ int parse_config(char* file_path, global_settings** settings) {
  * @param settings The struct to pass settings from the parser into.
  * @returns 0 on success, or -1 if an error occurred parsing the file.
  */
-int parse_stream(yaml_parser_t* parser, global_settings* settings) {
+int parse_stream(yaml_parser_t* parser, global_config* settings) {
 
     yaml_event_type_t type = parse_next_event(parser);
 
@@ -645,15 +636,15 @@ int parse_stream(yaml_parser_t* parser, global_settings* settings) {
  * @param settings The struct to put extracted settings into
  * @returns 0 on success, or -1 if an error occurred.
  */
-int parse_document(yaml_parser_t* parser, global_settings* settings) {
+int parse_document(yaml_parser_t* parser, global_config* settings) {
 
     yaml_event_type_t type;
-    char* label;
 
     type = parse_next_event(parser);
     
     if (type == YAML_DOCUMENT_END_EVENT) {
         return 0; /* empty documents are also acceptable */
+        
     } else if (type != YAML_MAPPING_START_EVENT) {
         log_printf(LOG_ERROR, "Config: expected either "
                 "\'client:\' or \'server:\' at start of document\n");
@@ -661,23 +652,8 @@ int parse_document(yaml_parser_t* parser, global_settings* settings) {
     }
     /* else (type == YAML_MAPPING_START_EVENT) */
 
-    label = parse_next_scalar(parser);
-
-    if (is_client(label)) {
-        free(label);
-
-        if (parse_client(parser, settings) != 0)
-            return -1;
-    } else if (is_server(label)) {
-        free(label);
-
-        if (parse_server(parser, settings) != 0)
-            return -1;
-    } else {
-        log_printf(LOG_ERROR, "Config: expected either "
-                "'client:' or 'server:' at start of document\n");
+    if (parse_settings(parser, settings) != 0)
         return -1;
-    }
 
     type = parse_next_event(parser);
 
@@ -697,81 +673,16 @@ int parse_document(yaml_parser_t* parser, global_settings* settings) {
  * @param settings The struct to fill with the information parsed from parser.
  * @returns 0 on success, -1 on error.
  */
-int parse_client(yaml_parser_t* parser, global_settings* settings) {
+int parse_settings(yaml_parser_t* parser, global_config* settings) {
 
     int done = 0;
-    int ret;
 
-    if (settings->server != NULL) {
-        log_printf(LOG_ERROR, "Config: Multiple 'client:' labels\n");
-        return -1;
-    }
-
-    /* indicates the beginning of the 'client:' key/value pairs */
-    if (parse_next_event(parser) != YAML_MAPPING_START_EVENT) {
-        log_printf(LOG_ERROR, "Config: Bad syntax after 'client:'\n");
-        return -1;
-    }
-
-
-    settings->client = calloc(1, sizeof(client_settings));
-    if (settings->client == NULL)
-        return -1;
-
-    /* parse all the key:value pairs within client settings */
     while (!done)
-        done = parse_next_client_setting(parser, settings->client);
-    if (done == -1) /* error */
+        done = parse_next_setting(parser, settings);
+    if (done == -1)
         return -1;
 
-    ret = check_label_to_parse(parser, "server");
-    if (ret == 1)
-        return parse_server(parser, settings);
-
-    return ret; /* 0 for clean MAPPING_END, -1 for error */
-}
-
-/**
- * Parses all events within a given 'server:' label and assigns the
- * information contained to the appropriate settings.
- * @param parser The parser to extract events from.
- * @param settings The struct to fill with the information parsed from parser.
- * @returns 0 on success, -1 on error.
- */
-int parse_server(yaml_parser_t* parser, global_settings* settings) {
-
-    int done = 0;
-    int ret;
-
-    if (settings->server != NULL) {
-        log_printf(LOG_ERROR, "Config: Multiple 'server:' labels\n");
-        return -1;
-    }
-
-    /* indicates the beginning of the 'client:' key/value pairs */
-    if (parse_next_event(parser) != YAML_MAPPING_START_EVENT) {
-        log_printf(LOG_ERROR, "Config: Bad syntax after 'server'\n");
-        return -1;
-    }
-
-    settings->server = calloc(1, sizeof(server_settings));
-    if (settings->server == NULL) {
-        log_printf(LOG_ERROR, "Parser: malloc failure--%s\n", strerror(errno));
-        return -1;
-    }
-
-    /* parse all the key:value pairs within client settings */
-    while (!done)
-        done = parse_next_server_setting(parser, settings->server);
-    if (done == -1) /* error */
-        return -1;
-
-    ret = check_label_to_parse(parser, "client");
-
-    if (ret == 1)
-        return parse_client(parser, settings);
-
-    return ret; /* 0 for clean MAPPING_END, -1 for error */
+    return 0;
 }
 
 
@@ -805,7 +716,8 @@ int check_label_to_parse(yaml_parser_t* parser, char* label) {
         return 0;
     
     case YAML_SCALAR_EVENT:
-        ev_label = utf8_to_ascii(event.data.scalar.value, event.data.scalar.length);
+        ev_label = utf8_to_ascii(event.data.scalar.value,  
+                event.data.scalar.length);
         str_tolower(ev_label);
         yaml_event_delete(&event);
         
@@ -906,32 +818,6 @@ int is_enabled(char* label) {
     return -1;
 }
 
-
-/**
- * Checks to see if the given string is 'client'
- * @param label A null-terminated string (can be NULL).
- * @returns 1 if the given string is 'client'; 0 otherwise.
- */
-int is_client(char* label) {
-    if (label == NULL)
-        return 0;
-    if (strcmp(label, "client") == 0)
-        return 1;
-    return 0;
-}
-
-/**
- * Checks to see if the given string is 'server'
- * @param label A null-terminated string (can be NULL).
- * @returns 1 if the given string is 'server'; 0 otherwise.
- */
-int is_server(char* label) {
-    if (label == NULL)
-        return 0;
-    if (strcmp(label, "server") == 0)
-        return 1;
-    return 0;
-}
 
 /**
  * Allocates a new char array the length of src and fills it with an ASCII 
@@ -1039,58 +925,39 @@ void log_parser_error(yaml_parser_t parser) {
 
 
 /**
- * Performs a deep free of all data structures allocated within global_settings.
- * @param settings The global_settings to be freed.
+ * Performs a deep free of all data structures allocated within global_config.
+ * @param settings The global_config to be freed.
  */
-void global_settings_free(global_settings* settings) {
+void global_settings_free(global_config* settings) {
 
-    client_settings* client = settings->client;
-    server_settings* server = settings->server;
-
-    /* Client settings */
-    if (client != NULL) {
-        if (client->ca_path != NULL)
-            free(client->ca_path);
+    if (settings != NULL) {
+        if (settings->ca_path != NULL)
+            free(settings->ca_path);
         
-        if (client->cipher_list != NULL) {
-            for (int i = 0; i < client->cipher_list_cnt; i++) {
-                free(client->cipher_list[i]);
+        if (settings->cipher_list != NULL) {
+            for (int i = 0; i < settings->cipher_list_cnt; i++) {
+                free(settings->cipher_list[i]);
             }
-            free(client->cipher_list);
+            free(settings->cipher_list);
         }
 
-        if (client->ciphersuites != NULL) {
-            for (int i = 0; i < client->ciphersuite_cnt; i++) {
-                free(client->ciphersuites[i]);
+        if (settings->ciphersuites != NULL) {
+            for (int i = 0; i < settings->ciphersuite_cnt; i++) {
+                free(settings->ciphersuites[i]);
             }
-            free(client->ciphersuites);
+            free(settings->ciphersuites);
         }
 
-        free(client);
+        for (int i = 0; i < settings->cert_cnt; i++) {
+            if (settings->certificates[i] != NULL)
+                free(settings->certificates[i]);
+        }
+
+        for (int i = 0; i < settings->key_cnt; i++) {
+            if (settings->private_keys[i] != NULL)
+                free(settings->private_keys[i]);
+        }
+
+        free(settings);
     }
-
-    /* Server settings */
-    if (server != NULL) {
-
-        if (server->ca_path != NULL)
-            free(server->ca_path);
-        
-        if (server->cipher_list != NULL) {
-            for (int i = 0; i < server->cipher_list_cnt; i++) {
-                free(server->cipher_list[i]);
-            }
-            free(server->cipher_list);
-        }
-
-        if (server->ciphersuites != NULL) {
-            for (int i = 0; i < server->ciphersuite_cnt; i++) {
-                free(server->ciphersuites[i]);
-            }
-            free(server->ciphersuites);
-        }
-        
-        free(server);
-    }
-
-    free(settings);
 }

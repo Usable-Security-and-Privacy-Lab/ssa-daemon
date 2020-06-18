@@ -24,8 +24,8 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef LOG_H
-#define LOG_H
+#ifndef SSA_LOG_H
+#define SSA_LOG_H
 
 #include <sys/time.h>
 #include <sys/socket.h>

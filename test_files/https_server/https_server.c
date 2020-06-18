@@ -42,6 +42,7 @@ int main() {
 		int num_received = recv(c_fd, request, BUFFER_SIZE, 0);
 		if(num_received < 0) {
 			printf("Errno on recv: %s\n", strerror(errno));
+			close(c_fd);
 			return -1;
 		}
 		printf("Received %i bytes from client.\n", num_received);

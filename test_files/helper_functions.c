@@ -130,6 +130,7 @@ int run_client(const char *host, const char *port,
     fprintf(stderr, "Done.\n");
 
 	freeaddrinfo(addr_list);
+    close(clientfd);
     return 0;
  err:
 
@@ -243,7 +244,7 @@ int run_http_client(const char *host, const char *port, char **out, int *out_len
     fprintf(stderr, "Done.\n");
 
 	freeaddrinfo(addr_list);
-
+    close(clientfd);
     return 0;
  err:
 

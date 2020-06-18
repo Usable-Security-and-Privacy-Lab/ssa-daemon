@@ -25,13 +25,14 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <netlink/genl/ctrl.h>
+#include <netlink/genl/genl.h>
+
 #include <event2/util.h>
 
-#include <netlink/genl/genl.h>
-#include <netlink/genl/ctrl.h>
-#include "netlink.h"
 #include "daemon.h"
 #include "log.h"
+#include "netlink.h"
 
 
 // Attributes
@@ -80,22 +81,21 @@ enum ssa_nl_groups {
 
 /* TODO: specify exact policies and lengths here */
 static struct nla_policy ssa_nl_policy[SSA_NL_A_MAX + 1] = {
-	[SSA_NL_A_UNSPEC] = { .type = NLA_UNSPEC },
-	[SSA_NL_A_ID] = { .type = NLA_UNSPEC },
-	[SSA_NL_A_BLOCKING] = { .type = NLA_UNSPEC },
-	[SSA_NL_A_COMM] = { .type = NLA_UNSPEC },
-	[SSA_NL_A_SOCKADDR_INTERNAL] = { .type = NLA_UNSPEC },
-	[SSA_NL_A_SOCKADDR_EXTERNAL] = { .type = NLA_UNSPEC },
-	[SSA_NL_A_SOCKADDR_REMOTE] = { .type = NLA_UNSPEC },
-	[SSA_NL_A_OPTLEVEL] = { .type = NLA_UNSPEC },
-	[SSA_NL_A_OPTNAME] = { .type = NLA_UNSPEC },
-	[SSA_NL_A_OPTVAL] = { .type = NLA_UNSPEC },
-	[SSA_NL_A_RETURN] = { .type = NLA_UNSPEC },
+	[SSA_NL_A_ID] = { .type = NLA_U64 },
+	[SSA_NL_A_BLOCKING] = { .type = NLA_U32 },
+	[SSA_NL_A_COMM] = { .type = NLA_NUL_STRING },
+	[SSA_NL_A_SOCKADDR_INTERNAL] = { .type = NLA_BINARY },
+	[SSA_NL_A_SOCKADDR_EXTERNAL] = { .type = NLA_BINARY },
+	[SSA_NL_A_SOCKADDR_REMOTE] = { .type = NLA_BINARY },
+	[SSA_NL_A_OPTLEVEL] = { .type = NLA_U32 },
+	[SSA_NL_A_OPTNAME] = { .type = NLA_U32 },
+	[SSA_NL_A_OPTVAL] = { .type = NLA_BINARY },
+	[SSA_NL_A_RETURN] = { .type = NLA_U32 },
 };
 
 int handle_netlink_msg(struct nl_msg* msg, void* arg);
 
-struct nl_sock* netlink_connect(daemon_context* ctx) {
+struct nl_sock* netlink_connect(daemon_ctx* ctx) {
 	int group;
 	int family;
 	struct nl_sock* netlink_sock = nl_socket_alloc();
@@ -115,7 +115,8 @@ struct nl_sock* netlink_connect(daemon_context* ctx) {
 	}
 
 	if ((family = genl_ctrl_resolve(netlink_sock, "SSA")) < 0) {
-		log_printf(LOG_ERROR, "Failed to resolve SSA family identifier\n");
+		log_printf(LOG_ERROR, "Failed to resolve SSA family identifier--"
+				"make sure that the SSA kernel module is properly loaded\n");
 		return NULL;
 	}
 	ctx->netlink_family = family;
@@ -158,7 +159,7 @@ void netlink_recv(evutil_socket_t fd, short events, void *arg) {
 
 int handle_netlink_msg(struct nl_msg* msg, void* arg) {
 
-	daemon_context* ctx = (daemon_context*)arg;
+	daemon_ctx* ctx = (daemon_ctx*)arg;
 	struct nlmsghdr* nlh;
 	struct genlmsghdr* gnlh;
 	struct nlattr* attrs[SSA_NL_A_MAX + 1];
@@ -279,7 +280,7 @@ int netlink_disconnect(struct nl_sock* sock) {
         return 0;
 }
 
-void netlink_notify_kernel(daemon_context* ctx, unsigned long id, int resp) {
+void netlink_notify_kernel(daemon_ctx* ctx, unsigned long id, int resp) {
 	int ret;
 	struct nl_msg* msg;
 	void* msg_head;
@@ -316,7 +317,7 @@ void netlink_notify_kernel(daemon_context* ctx, unsigned long id, int resp) {
 	return;
 }
 
-void netlink_error_notify_kernel(daemon_context* ctx, unsigned long id) {
+void netlink_error_notify_kernel(daemon_ctx* ctx, unsigned long id) {
 	int ret;
 	struct nl_msg* msg;
 	void* msg_head;
@@ -347,7 +348,7 @@ void netlink_error_notify_kernel(daemon_context* ctx, unsigned long id) {
 	return;
 }
 
-void netlink_send_and_notify_kernel(daemon_context* ctx,
+void netlink_send_and_notify_kernel(daemon_ctx* ctx,
 		unsigned long id, char* data, unsigned int len) {
 	int ret;
 	struct nl_msg* msg;
@@ -385,7 +386,7 @@ void netlink_send_and_notify_kernel(daemon_context* ctx,
 	return;
 }
 
-void netlink_handshake_notify_kernel(daemon_context* ctx, unsigned long id, int resp) {
+void netlink_handshake_notify_kernel(daemon_ctx* ctx, unsigned long id, int resp) {
 	int ret;
 	struct nl_msg* msg;
 	void* msg_head;

@@ -77,7 +77,7 @@ The following explanation walks through what happens in the SSA as each of these
 	
 	_At this point, a socket has been allocated in the kernel for the client, but the client does not have a file descriptor for it, as its call to `socket` has not yet returned._
 
-2. When the daemon receives the notification, it creates a regular socket (`socket_cb`), configures OpenSSL to secure default settings (`client_SSL_new`), and notifies the kernel (`netlink_notify_kernel`).
+2. When the daemon receives the notification, it calls the function `socket_cb()`, which creates a regular socket, asssigns it to a context that holds it and other important data structures (`socket_context_new`), configures OpenSSL to secure default settings (`SSL_CTX_create`), and notifies the kernel (`netlink_notify_kernel`).
 
 	<img src="diagrams/step2.png" width="300">
 
@@ -104,11 +104,13 @@ _Blue numbered circles reference explanations above_
 
 7. The client call to `connect` is intercepted by the kernel module, which calls `tls_inet_connect`. This function binds the source port (if it hasn't been bound already), notifies the daemon (`send_connect_notification`), and waits for a response from the daemon.
 	
-8. When the daemon receives the notification, it calls `connect_cb`, which configures OpenSSL to use the hostname passed in for validation and creates 2 bufferevents (`client_connection_setup`). The first bufferevent (`plain.bev`, created with `bufferevent_socket_new`) is for monitoring the client-facing socket (which as of yet does not exist; the daemon waits to create it until the client's socket connects to it). The second bufferevent (`secure.bev`, created with `bufferevent_openssl_socket_new`) is for monitoring the internet-facing socket. This is an Openssl bufferevent, which means Libevent will perform the TLS handshake and encryption according to the TLS configurations passed to it. The socket created by the daemon in `socket_cb` is registered with `secure.bev`. 
+8. When the daemon receives the notification, it calls `connect_cb`, which configures OpenSSL to use the hostname passed in for validation (`prepare_SSL_connection`) and creates 2 bufferevents (`prepare_bufferevents`). The first bufferevent (`plain.bev`, created with `bufferevent_socket_new`) is for monitoring the client-facing socket (which as of yet does not exist; the daemon waits to create it until the client's socket connects to it). The second bufferevent (`secure.bev`, created with `bufferevent_openssl_socket_new`) is for monitoring the internet-facing socket. This is an OpenSSL bufferevent, which means Libevent will perform the TLS handshake and encryption according to the TLS configurations passed to it. The socket created by the daemon in `socket_cb` is registered with `secure.bev`. 
 
 	<img src="diagrams/step8.png" width="300">
 	
 9. Finally, the `connect_cb` function calls `bufferevent_socket_connect` to asynchronously connect the internet-facing socket with the destination address and perform the TLS handshake. `connect_cb` then returns. Once the daemon's internet-facing socket successfully connects to the destination server, an event is detected on its bufferevent (`secure.bev`), causing `client_bev_event_cb` to be called. This function notifies the kernel that the connection is established (`netlink_handshake_notify_kernel`).
+
+Note that there may be some modifications made here to accomodate revocation checking--it will be added to documentation eventually.
 
 	<img src="diagrams/step9.png" width="400">
 
@@ -122,7 +124,7 @@ _Blue numbered circles reference explanations above_
 
 	_The client's socket is now connected to the daemon's client-facing socket_
 
-12. Meanwhile, in the daemon, the incoming connection triggers a call to the callback function registered with the listening socket's bufferevent (`accept_cb`). `accept_cb` associates the newly created socket with the `plain.bev` bufferevent created in `connect_cb` (`associate_fd`).
+12. Meanwhile, in the daemon, the incoming connection triggers a call to the callback function registered with the listening socket's bufferevent (`accept_cb`). `accept_cb` associates the newly created socket with the `plain.bev` bufferevent created in `connect_cb` (via `associate_fd`).
 
 	<img src="diagrams/step12.png" width="400">
 

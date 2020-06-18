@@ -37,13 +37,13 @@ then 0 will be returned. If an error occured during connection or validation,
 
   Errno Code     |   Description
   ---------------|---------------
-  `EBADFD`       | The socket that `sockfd` refers to is in a bad state (such as if it already failed a previous call to `connect`).
-  `ECONNABORTED` | The user-to-daemon or daemon-to-address connection process failed.
-  `EPROTO`       | The peer was unable to pass TLS validation or did not provide secure enough connection parameters.
-  `ECONNREFUSED` | The instantiated the TLS handshake shutdown (TODO: they invalidate?)
   `EBADF`        | No socket exists in the daemon that is associated with `sockfd`.
+  `EBADFD`       | The socket that `sockfd` refers to is in a bad state (such as if it already failed a previous call to `connect()`).
+  `ECONNABORTED` | The user-to-daemon or daemon-to-address connection process failed.
+  `EPROTO`       | The TLS handshake could not be completed--usually because the peer could not be validated or no common ciphers could not be chosen.
   `EOPNOTSUPP`   | The socket was not in the right state to connect (such as if `listen()` had already been called on `sockfd`)
   `ENOMEM`       | Insuffient memory available for necessary connection establishment within the daemon.
+  `ECANCELED`    | The daemon was unable to initiate a connection with the remote peer. Consult the SSA daemon logs for more information.
   
 ## NOTES
 

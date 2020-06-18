@@ -46,10 +46,8 @@ is returned, and errno is set appropriately.
   Errno Code   |   Description
   -------------|---------------
   `ENOMEM`     | Insuffient memory available for alloctions within the SSA daemon.
-  `ENOBUFS`    | The SSA daemon's socket hashmap is full.
-  
+  `ECANCELED`  | The given operation was not able to be completed by the SSA daemon. Look into the logs of the SSA daemon for more information.
+  other errors | Consult the POSIX man page for `socket()`.
 ## NOTES
-
-TODO: The errors contained in this man page are incomplete.
 
 TODO: Add information about the AF_HOSTNAME sockaddr struct and whatnot

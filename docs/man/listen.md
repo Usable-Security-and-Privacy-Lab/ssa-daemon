@@ -29,9 +29,11 @@ appropriately.
 
   Errno Code     |   Description
   ---------------|---------------
+  `EBADF`        | No socket exists in the daemon that is associated with `sockfd`.
   `EBADFD`       | The socket that `sockfd` refers to is in a bad state (for instance, it already failed a previous call to `listen`).
   `EOPNOTSUPP`   | The socket that `sockfd` refers to is already being used or has been used (for instance, `connect()` or `listen()` have already been called on it).
-  `EBADF`        | No socket exists in the daemon that is associated with `sockfd`.
+   other errors  | Consult the POSIX man pages for `listen()`
+
   
 ## NOTES
 

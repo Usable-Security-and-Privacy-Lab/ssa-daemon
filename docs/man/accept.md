@@ -17,26 +17,22 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
 connections for the listening socket, `sockfd`, creates a new connected socket, 
 and returns a new file descriptor referring to that socket. The queue of 
 pending connections comes from the SSA daemon, and have already been 
-validated/encrypted.
+validated/encrypted. Note that any connections that fail to validate over the TLS 
+handshake will be dropped, so calls to `accept()` will not always accurately represent 
+the actual number of TCP connections accepted.
 
 ## RETURN VALUE
 
 On success, zero is returned. On error, -1 is returned, and `errno` is set 
-appropriately. 
+appropriately.
 
 ## ERRORS
 
   Errno Code     |   Description
   ---------------|---------------
-  `EBADFD`       | The socket that `sockfd` refers to is in a bad state (for instance, it already failed a previous call to `listen`).
-  `EINVAL`       | The socket that `sockfd` refers to is not a listening socket.
-  `EBADF`        | The daemon could not find the socket associated with `sockfd`.
+  `ECONNABORTED` | A connection was accepted, but encountered an error before finishing setup within the daemon.
+  other errors   | Consult the POSIX socket man pages.
 
 ## NOTES
-
-`EOPNOTSUPP` is not listed in the errors, as the standard man pages state that 
-`EINVAL` should be returned if the socket is not listening for connections. So, 
-in this special case, the function will return `EINVAL` instead of `EOPNOTSUPP` 
-if the socket is not in the right state.
 
 A listening socket may fail at some point during use. If this is the case, the next call to `accept()` will return an appropriate error.

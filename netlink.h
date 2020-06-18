@@ -24,25 +24,25 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef NETLINK_H
-#define NETLINK_H
+#ifndef SSA_NETLINK_H
+#define SSA_NETLINK_H
+
+#include <netlink/genl/ctrl.h>
+#include <netlink/genl/genl.h>
 
 #include <event2/util.h>
 
-#include <netlink/genl/genl.h>
-#include <netlink/genl/ctrl.h>
-
-#include "daemon.h"
+#include "daemon_structs.h"
 
 
 #define NOTIFY_SUCCESS 0
 
 int netlink_disconnect(struct nl_sock* sock);
 void netlink_recv(evutil_socket_t fd, short events, void *arg);
-void netlink_notify_kernel(daemon_context* ctx, unsigned long id, int response);
-void netlink_error_notify_kernel(daemon_context* ctx, unsigned long id);
-void netlink_send_and_notify_kernel(daemon_context* ctx, unsigned long id, char* data, unsigned int len);
-void netlink_handshake_notify_kernel(daemon_context* ctx, unsigned long id, int response); 
-struct nl_sock* netlink_connect(daemon_context* ctx);
+void netlink_notify_kernel(daemon_ctx* ctx, unsigned long id, int response);
+void netlink_error_notify_kernel(daemon_ctx* ctx, unsigned long id);
+void netlink_send_and_notify_kernel(daemon_ctx* ctx, unsigned long id, char* data, unsigned int len);
+void netlink_handshake_notify_kernel(daemon_ctx* ctx, unsigned long id, int response); 
+struct nl_sock* netlink_connect(daemon_ctx* ctx);
 
 #endif
