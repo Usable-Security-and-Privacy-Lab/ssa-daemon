@@ -250,7 +250,7 @@ void handle_client_event_connected(socket_ctx* sock_ctx,
 
 
     if (has_revocation_checks(sock_ctx->rev_ctx.checks))
-        do_revocation_checks(sock_ctx);
+        do_cert_chain_revocation_checks(sock_ctx);
     else
         netlink_handshake_notify_kernel(daemon, id, NOTIFY_SUCCESS);
     

@@ -11,10 +11,10 @@
 
 
 char** retrieve_ocsp_urls(X509* cert, int* num_urls);
-void launch_ocsp_checks(socket_ctx* sock_ctx, char** urls, int num_urls);
+int launch_ocsp_checks(revocation_ctx* rev_ctx, int cert_index, OCSP_CERTID* id);
 
 int get_ocsp_basicresp(unsigned char* bytes, int len, OCSP_BASICRESP** resp);
-OCSP_CERTID* get_ocsp_certid(SSL* ssl);
+OCSP_CERTID* get_ocsp_certid(revocation_ctx* rev_ctx, int cert_index);
 
 
 

@@ -8,10 +8,10 @@
 #include "revocation.h"
 
 
-int launch_ocsp_client(socket_ctx* sock_ctx, char* url);
+ocsp_responder* launch_ocsp_client(revocation_ctx* rev_ctx, char* url);
+ocsp_responder* get_last_responder(ocsp_responder* list);
 
-
-OCSP_REQUEST* create_ocsp_request(SSL* ssl);
+OCSP_REQUEST* create_ocsp_request(OCSP_CERTID* id);
 int form_http_request(unsigned char **http_req, 
         OCSP_REQUEST *ocsp_req, const char *host, const char *path);
 int send_ocsp_request(struct bufferevent* bev, char* url, OCSP_REQUEST* req);
@@ -57,23 +57,73 @@ char** retrieve_ocsp_urls(X509* cert, int* num_urls) {
 /**
  * Initiates clients to connect to the given OCSP responder URLs and retrieve
  * OCSP revocation responses from them.
- * @param sock_ctx The socket context that the checks are being performed
- * on behalf of.
+ * @param rev_ctx The revocation context that the checks are being performed in.
  * @param urls The URLs of OCSP responders for the clients to connect to.
  * @param num_ocsp_urls The number of URLs found in urls.
+ * @returns The number of different responders that were successfully queried.
  */
-void launch_ocsp_checks(socket_ctx* sock_ctx, char** urls, int num_urls) {
+int launch_ocsp_checks(revocation_ctx* rev_ctx, int cert_index, OCSP_CERTID* id) {
 
-	revocation_ctx* rev = &sock_ctx->rev_ctx;
+    X509* cert = sk_X509_value(rev_ctx->certs, cert_index);
+    ocsp_responder* last = NULL;
+    ocsp_responder* new_responder;
 
-	rev->ocsp_clients = calloc(MAX_OCSP_RESPONDERS, sizeof(responder_ctx));
-	if (rev->ocsp_clients == NULL)
-		return;
+    char** urls;
+    int num_urls;
+    int num_responders_queried = 0;
 
-	for (int i = 0; i < num_urls && i < MAX_OCSP_RESPONDERS; i++)
-		launch_ocsp_client(sock_ctx, urls[i]);
+    urls = retrieve_ocsp_urls(cert, &num_urls);
+    if (urls == NULL)
+        return 0;
 
-	return;
+    last = get_last_responder(rev_ctx->ocsp_responders);
+
+	for (int i = 0; i < num_urls && i < MAX_OCSP_RESPONDERS; i++) {
+
+        new_responder = launch_ocsp_client(rev_ctx, urls[i]);
+        if (new_responder == NULL)
+            continue;
+
+        new_responder->certid = OCSP_CERTID_dup(id);
+        if (new_responder->certid == NULL) {
+            ocsp_responder_free(new_responder);
+            continue;
+        }
+
+        new_responder->cert_position = cert_index;
+        num_responders_queried += 1;
+
+        if (last == NULL)
+            rev_ctx->ocsp_responders = new_responder;
+         else 
+            last->next = new_responder;
+            
+        last = new_responder;
+    }
+
+    if (urls != NULL)
+        free(urls);
+
+    return num_responders_queried;
+}
+
+/**
+ * Traverses through the linked list of responders until it reaches the last
+ * responder in the list.
+ * @param list A node in the list of responders (can be the beginning, or 
+ * somewhere in the middle).
+ * @returns The last OCSP responder struct in the list, or NULL if the list
+ * was null.
+ */
+ocsp_responder* get_last_responder(ocsp_responder* list) {
+
+    if (list == NULL)
+        return NULL;
+
+    while (list->next != NULL)
+        list = list->next;
+
+    return list;
 }
 
 
@@ -86,65 +136,60 @@ void launch_ocsp_checks(socket_ctx* sock_ctx, char** urls, int num_urls) {
  * @param url The URL of the OCSP responder for the client to connect to.
  * @returns 0 on success, or -1 if an error occurred.
  */
-int launch_ocsp_client(socket_ctx* sock_ctx, char* url) {
+ocsp_responder* launch_ocsp_client(revocation_ctx* rev_ctx, char* url) {
 
-	revocation_ctx* rev = &sock_ctx->rev_ctx;
-	responder_ctx* ocsp_client = &rev->ocsp_clients[rev->ocsp_client_cnt];
+    struct timeval read_timeout = { .tv_sec = OCSP_READ_TIMEOUT };
+	ocsp_responder* ocsp_resp;
     struct bufferevent* bev = NULL;
 	char* hostname = NULL;
 	int port;
 	int ret;
 
-    struct timeval read_timeout = {
-		.tv_sec = OCSP_READ_TIMEOUT,
-		.tv_usec = 0,
-	};
+    ocsp_resp = calloc(1, sizeof(ocsp_responder));
+    if (ocsp_resp == NULL) {
+        free(url);
+        return NULL;
+    }
 
-	ret = parse_url(url, &hostname, &port, NULL);
+	ocsp_resp->url = url;
+
+    ret = parse_url(url, &hostname, &port, NULL);
 	if (ret != 0)
 		goto err;
 
-
-    bev = bufferevent_socket_new(sock_ctx->daemon->ev_base, 
-            -1, BEV_OPT_CLOSE_ON_FREE);
+    bev = bufferevent_socket_new(rev_ctx->daemon->ev_base, 
+                -1, BEV_OPT_CLOSE_ON_FREE);
     if (bev == NULL)
         goto err;
+
+    ocsp_resp->bev = bev;
 
     ret = bufferevent_set_timeouts(bev, &read_timeout, NULL);
     if (ret != 0)
         goto err;
 
     bufferevent_setcb(bev, ocsp_responder_read_cb, NULL, 
-            ocsp_responder_event_cb, (void*) ocsp_client);
+            ocsp_responder_event_cb, (void*) ocsp_resp);
 
     ret = bufferevent_socket_connect_hostname(bev, 
-            sock_ctx->daemon->dns_base, AF_UNSPEC, hostname, port);
+            rev_ctx->daemon->dns_base, AF_UNSPEC, hostname, port);
     if (ret != 0)
         goto err;
 
-    ocsp_client->buffer = (unsigned char*) calloc(1, MAX_HEADER_SIZE + 1);
-	if (ocsp_client->buffer == NULL) 
+    ocsp_resp->buffer = (unsigned char*) calloc(1, MAX_HEADER_SIZE + 1);
+	if (ocsp_resp->buffer == NULL) 
 		goto err;
 
-    ocsp_client->bev = bev;
-	ocsp_client->sock_ctx = sock_ctx;
-	ocsp_client->buf_size = MAX_HEADER_SIZE;
-	ocsp_client->url = url;
-		
-	rev->num_rev_checks++;
-	rev->ocsp_client_cnt++;
+	ocsp_resp->rev_ctx = rev_ctx;
+	ocsp_resp->buf_size = MAX_HEADER_SIZE;
 
 	free(hostname);
-	return 0;
+	return ocsp_resp;
  err:
-    if (bev != NULL)
-        bufferevent_free(bev);
-    if (hostname != NULL)
-		free(hostname);
-	if (ocsp_client->buffer != NULL)
-		free(ocsp_client->buffer);
+    if (ocsp_resp != NULL)
+        ocsp_responder_free(ocsp_resp);
 
-	return -1;
+    return NULL;
 }
 
 
@@ -249,20 +294,28 @@ int send_ocsp_request(struct bufferevent* bev, char* url, OCSP_REQUEST* req) {
  ******************************************************************************/
 
 
+/**
+ * The 'event' callback for the responder--gets called when the bufferevent
+ * completes the connection, or when an error/timeout occurs.
+ * @param bev The bufferevent that the event belongs to.
+ * @param events A bitmap of triggered events.
+ * @param arg A void pointer to the responder context of the bufferevent.
+ */
 void ocsp_responder_event_cb(struct bufferevent* bev, short events, void* arg) {
 
-    responder_ctx* resp_ctx = (responder_ctx*) arg;
-	socket_ctx* sock_ctx = resp_ctx->sock_ctx;
-	SSL* ssl = sock_ctx->ssl;
-	OCSP_REQUEST* request = NULL;
+    ocsp_responder* ocsp_resp = (ocsp_responder*) arg;
+    revocation_ctx* rev_ctx = ocsp_resp->rev_ctx;
+    OCSP_REQUEST* request = NULL;
 	int ret;
 
 	if (events & BEV_EVENT_CONNECTED) {
-		OCSP_REQUEST* request = create_ocsp_request(ssl);
+        log_printf(LOG_ERROR, "Received connected event on ocsp responder\n");
+
+		request = create_ocsp_request(ocsp_resp->certid);
 		if (request == NULL)
 			goto err;
 
-		ret = send_ocsp_request(bev, resp_ctx->url, request);
+		ret = send_ocsp_request(bev, ocsp_resp->url, request);
 		if (ret != 0)
 			goto err;
 
@@ -270,97 +323,121 @@ void ocsp_responder_event_cb(struct bufferevent* bev, short events, void* arg) {
 		if (ret != 0)
 			goto err;
 
-		OCSP_REQUEST_free(request);
+        OCSP_REQUEST_free(request);
+        request = NULL;
 	}
 
 	if (events & BEV_EVENT_TIMEOUT || events & BEV_EVENT_ERROR) {
 		log_printf(LOG_ERROR, "Bufferevent timed out/encountered error\n");
 		goto err;
 	}
+        log_printf(LOG_ERROR, "Finished connected event on ocsp responder\n");
 
 	return;
  err:
-	if (request != NULL)
-		OCSP_REQUEST_free(request);
-	
-	responder_cleanup(resp_ctx);
+    if (request != NULL)
+        OCSP_REQUEST_free(request);
 
-	if (sock_ctx->rev_ctx.num_rev_checks-- == 0) {
-		set_err_string(sock_ctx, "TLS handshake failure: "
+    ocsp_responder_shutdown(ocsp_resp);
+
+	if (rev_ctx->responders_at[ocsp_resp->cert_position]-- == 0) {
+		set_err_string(rev_ctx->sock_ctx, "TLS handshake failure: "
 				"the certificate's revocation status could not be determined");
         
-		fail_revocation_checks(sock_ctx);
+		fail_revocation_checks(rev_ctx);
 	}
 }
 
 
+/**
+ * A callback function triggered whenever the read buffer of the bufferevent 
+ * receives data. 
+ * @param bev The bufferevent that the event is associated with.
+ * @param arg A void pointer to the responder context associated with the 
+ * bufferevent.
+ */
 void ocsp_responder_read_cb(struct bufferevent* bev, void* arg) {
 	
-    responder_ctx* resp_ctx = (responder_ctx*) arg;
-	socket_ctx* sock_ctx = resp_ctx->sock_ctx;
-
-	revocation_ctx* rev_ctx = &sock_ctx->rev_ctx;
-	daemon_ctx* daemon = sock_ctx->daemon;
-	unsigned long id = sock_ctx->id;
+    ocsp_responder* ocsp_resp = (ocsp_responder*) arg;
+	revocation_ctx* rev_ctx = ocsp_resp->rev_ctx;
 
 	int ret, status;
 	int num_read;
 
-	num_read = bufferevent_read(bev, &resp_ctx->buffer[resp_ctx->tot_read], 
-			resp_ctx->buf_size - resp_ctx->tot_read);
+	num_read = bufferevent_read(bev, &ocsp_resp->buffer[ocsp_resp->tot_read],
+			ocsp_resp->buf_size - ocsp_resp->tot_read);
 
-	resp_ctx->tot_read += num_read;
+	ocsp_resp->tot_read += num_read;
 
-	if (!resp_ctx->reading_body) {
+	if (!ocsp_resp->is_reading_body) {
 
-		if (strstr((char*)resp_ctx->buffer, "\r\n\r\n") != NULL) {
-			ret = start_reading_body(resp_ctx);
+		if (strstr((char*)ocsp_resp->buffer, "\r\n\r\n") != NULL) {
+			ret = start_reading_body(ocsp_resp);
 			if (ret != 0)
 				goto err;
 
-		} else if (resp_ctx->tot_read == resp_ctx->buf_size) {
+		} else if (ocsp_resp->tot_read == ocsp_resp->buf_size) {
 			goto err;
 		}
 	}
 
 	/* A connection could be all done reading both header and body in one go */
-	if (done_reading_body(resp_ctx)) {
-		status = check_ocsp_response(resp_ctx->buffer, 
-				resp_ctx->tot_read, sock_ctx);
+	if (done_reading_body(ocsp_resp)) {
+
+		status = check_ocsp_response(ocsp_resp->buffer, 
+				ocsp_resp->tot_read, rev_ctx, ocsp_resp->certid);
 
 		switch (status) {
 		case V_OCSP_CERTSTATUS_UNKNOWN:
 			goto err;
 
 		case V_OCSP_CERTSTATUS_GOOD:
-			revocation_context_cleanup(rev_ctx);
-			netlink_handshake_notify_kernel(daemon, id, NOTIFY_SUCCESS);
+            pass_individual_rev_check(ocsp_resp);
 			break;
 
 		case V_OCSP_CERTSTATUS_REVOKED:
-			set_err_string(sock_ctx, "TLS handshake error: "
+			set_err_string(rev_ctx->sock_ctx, "TLS handshake error: "
 					"certificate revoked (OCSP remote response)");
-			
-			fail_revocation_checks(sock_ctx);
+
+			fail_revocation_checks(rev_ctx);
 			break;
 		}
 	}
 
 	return;
  err:
-	responder_cleanup(resp_ctx);
+	ocsp_responder_shutdown(ocsp_resp);
 
-	if (rev_ctx->num_rev_checks-- == 0) {
-		set_err_string(sock_ctx, "TLS handshake failure: "
+	if (rev_ctx->responders_at[ocsp_resp->cert_position]-- == 0) {
+		set_err_string(rev_ctx->sock_ctx, "TLS handshake failure: "
 				"the certficate's revocation status could not be determined");
 
-		fail_revocation_checks(sock_ctx);
+		fail_revocation_checks(rev_ctx);
 	}
 }
 
 /*******************************************************************************
  *                           HELPER FUNCTIONS
  ******************************************************************************/
+
+/**
+ * Creates an OCSP_CERTID for the certificate at the given index in the peer's
+ * cert chain.
+ * @param rev_ctx The revocation context for the connection (contains the peer's
+ * certificate chain).
+ * @param cert_index The index of the certificate in the chain to get an 
+ * OCSP_CERTID for.
+ * @returns A newly allocated OCSP_CERTID, or NULL on failure.
+ */
+OCSP_CERTID* get_ocsp_certid(revocation_ctx* rev_ctx, int cert_index) {
+
+    X509* subject = sk_X509_value(rev_ctx->certs, cert_index);
+    X509* issuer = sk_X509_value(rev_ctx->certs, cert_index + 1);
+
+    return OCSP_cert_to_id(NULL, subject, issuer);
+}
+
+
 
 /**
  * Creates an OCSP Request for the given subject certificate and
@@ -372,48 +449,28 @@ void ocsp_responder_read_cb(struct bufferevent* bev, void* arg) {
  * @returns A pointer to a fully-formed OCSP_REQUEST struct.
  * @see OCSP_REQUEST_free 
  */
-OCSP_REQUEST* create_ocsp_request(SSL* ssl)
-{
+OCSP_REQUEST* create_ocsp_request(OCSP_CERTID* id) {
     OCSP_REQUEST* request = NULL;
-	OCSP_CERTID* id = NULL;
+
+    id = OCSP_CERTID_dup(id);
+    if (id == NULL)
+        goto err;
 
     request = OCSP_REQUEST_new();
     if (request == NULL)
         goto err;
-
-    id = get_ocsp_certid(ssl);
-	if (id == NULL)
-		goto err;
 
     if (OCSP_request_add0_id(request, id) == NULL)
 		goto err;
 
     return request;
  err:
-	OCSP_REQUEST_free(request);
-	return NULL;
-}
+    if (request != NULL)
+	    OCSP_REQUEST_free(request);
+    else
+        OCSP_CERTID_free(id);
 
-
-/**
- * Forms an OCSP certificate ID from the peer's certificate chain found in ssl.
- * @param ssl The already-connected SSL object to form an OCSP_CERTID from.
- * @returns A newly-allocated OCSP_CERTID, or NULL on failure.
- */
-OCSP_CERTID* get_ocsp_certid(SSL* ssl) {
-
-	STACK_OF(X509)* certs;
-	X509* subject;
-	X509* issuer;
-
-	certs = SSL_get_peer_cert_chain(ssl);
-	if (certs == NULL || sk_X509_num(certs) < 2)
-		return NULL;
-
-	subject = sk_X509_value(certs, 0);
-	issuer = sk_X509_value(certs, 1);
-
-	return OCSP_cert_to_id(NULL, subject, issuer);
+    return NULL;
 }
 
 
