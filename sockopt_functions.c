@@ -2,6 +2,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -204,7 +205,7 @@ int set_certificate_chain(socket_ctx* sock_ctx, char* path) {
 
 	ret = stat(path, &file_stats);
 	if (ret != 0) {
-		response = -errno;
+		response = -EINVAL;
 		goto err;
 	}
 
@@ -212,7 +213,7 @@ int set_certificate_chain(socket_ctx* sock_ctx, char* path) {
 		/* is a file */
 		ret = SSL_CTX_use_certificate_chain_file(sock_ctx->ssl_ctx, path);
 		if (ret != 1) {
-			response = -EBADF;
+			response = -ECANCELED;
 			goto err;
 		}
 
@@ -222,11 +223,11 @@ int set_certificate_chain(socket_ctx* sock_ctx, char* path) {
 		 * See man fts for functions needed to do this */
 
 		/* stub */
-		response = -EBADF;
+		response = -EINVAL;
 		goto err;
 	} else {
 		/* could be a link, a socket, etc */
-		response = -EBADF;
+		response = -EINVAL;
 		goto err;
 	}
 
@@ -312,14 +313,32 @@ int set_private_key(socket_ctx* sock_ctx, char* path) {
  */
 int set_trusted_CA_certificates(socket_ctx *sock_ctx, char* path) {
 	
-	STACK_OF(X509_NAME)* cert_names = SSL_load_client_CA_file(path);
-	if (cert_names == NULL) {
-		set_err_string(sock_ctx, "TLS error: unable to load CA certificates - %s",
-				ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
-		return -EBADF;
-	}
+    /* TODO: modify this to load client CAs from a folder as well */
+	struct stat file_stats;
+    int ret;
 
-	SSL_CTX_set_client_CA_list(sock_ctx->ssl_ctx, cert_names);
+    if (stat(path, &file_stats) != 0) {
+        set_err_string(sock_ctx, "Error: unable to open specified file");
+		return -EINVAL;
+    }
+	
+	if (S_ISREG(file_stats.st_mode)) { /* is a file */
+		ret = SSL_CTX_load_verify_locations(sock_ctx->ssl_ctx, path, NULL);
+
+    } else if (S_ISDIR(file_stats.st_mode)) { /* is a directory */
+		ret = SSL_CTX_load_verify_locations(sock_ctx->ssl_ctx, NULL, path);
+    
+    } else {
+        set_err_string(sock_ctx, "Error: path is not a file/directory");
+        return -EINVAL;
+    }
+
+    if (ret != 1) {
+        set_err_string(sock_ctx, "TLS error: unable to load CA certificates - %s",
+				ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
+
+        return -ECANCELED;
+    }
 
 	return 0;
 }
@@ -432,6 +451,7 @@ int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist) {
 		if (strcmp(name, cipher) == 0) {
 			has_cipher = 1;
 			sk_SSL_CIPHER_delete(cipherlist, i);
+            SSL_CIPHER_free(curr_cipher);
 		} else {
 			i++;
 		}
