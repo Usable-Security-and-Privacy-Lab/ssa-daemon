@@ -199,7 +199,7 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
 	hints.ai_socktype = type;
 
 	if (family == PF_UNIX) {
-		sock = socket(AF_UNIX, type, 0);
+		sock = socket(AF_UNIX, type | SOCK_NONBLOCK, 0);
 		if (sock == -1) {
 			log_printf(LOG_ERROR, "socket: %s\n", strerror(errno));
 			exit(EXIT_FAILURE);
@@ -208,14 +208,6 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
 		ret = evutil_make_listen_socket_reuseable(sock);
 		if (ret == -1) {
 			log_printf(LOG_ERROR, "Failed in evutil_make_listen_socket_reuseable: %s\n",
-				 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-			EVUTIL_CLOSESOCKET(sock);
-			exit(EXIT_FAILURE);
-		}
-
-		ret = evutil_make_socket_nonblocking(sock);
-		if (ret == -1) {
-			log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
 				 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
 			EVUTIL_CLOSESOCKET(sock);
 			exit(EXIT_FAILURE);
@@ -254,7 +246,7 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
 	}
 
 	for (addr_ptr = addr_list; addr_ptr != NULL; addr_ptr = addr_ptr->ai_next) {
-		sock = socket(addr_ptr->ai_family, addr_ptr->ai_socktype, addr_ptr->ai_protocol);
+		sock = socket(addr_ptr->ai_family, addr_ptr->ai_socktype | SOCK_NONBLOCK, addr_ptr->ai_protocol);
 		if (sock == -1) {
 			log_printf(LOG_ERROR, "socket: %s\n", strerror(errno));
 			continue;
@@ -263,14 +255,6 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
 		ret = evutil_make_listen_socket_reuseable(sock);
 		if (ret == -1) {
 			log_printf(LOG_ERROR, "Failed in evutil_make_listen_socket_reuseable: %s\n",
-				 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-			EVUTIL_CLOSESOCKET(sock);
-			continue;
-		}
-
-		ret = evutil_make_socket_nonblocking(sock);
-		if (ret == -1) {
-			log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
 				 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
 			EVUTIL_CLOSESOCKET(sock);
 			continue;
@@ -330,13 +314,6 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 
 	if (sock_ctx->state != SOCKET_FINISHING_CONN) {
 		log_printf(LOG_ERROR, "accept_cb() called on bad connection\n");
-		goto err;
-	}
-
-	/* the odds of this are *pretty much nil* */
-	if (evutil_make_socket_nonblocking(fd) == -1) {
-		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
-			 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
 		goto err;
 	}
 
@@ -434,10 +411,6 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	evutil_socket_t ifd = -1;
 	int ret = 0;
 
-	ret = evutil_make_socket_nonblocking(efd);
-	if (ret != 0)
-		goto err;
-
 	new_ctx = accepting_socket_ctx_new(listening_ctx, efd);
 	if (ret != 0)
 		goto err;
@@ -445,12 +418,8 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	new_ctx->int_addr = listening_ctx->int_addr;
 	new_ctx->int_addrlen = listening_ctx->int_addrlen;
 
-    ifd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ifd = socket(PF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
 	if (ifd == -1)
-		goto err;
-
-	ret = evutil_make_socket_nonblocking(ifd);
-	if (ret != 0)
 		goto err;
 
 	if (bind(ifd, (struct sockaddr*)&int_addr, sizeof(int_addr)) == -1)
@@ -569,17 +538,10 @@ void socket_cb(daemon_ctx* daemon, unsigned long id, char* comm) {
 		goto err;
 	}
 
-    /* TODO: what if AF_INET6 is what the user intents to connect to? */
-	fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    /* BUG: what if AF_INET6 is what the user intents to connect to? */
+	fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
 	if (fd == -1) {
 		response = -errno;
-		goto err;
-	}
-
-	if (evutil_make_socket_nonblocking(fd) != 0) {
-        log_printf(LOG_ERROR, "Failed to make socket nonblocking (errno %i): %s",
-                    EVUTIL_SOCKET_ERROR(), strerror(EVUTIL_SOCKET_ERROR()));
-		response = -ECANCELED;
 		goto err;
 	}
 	
