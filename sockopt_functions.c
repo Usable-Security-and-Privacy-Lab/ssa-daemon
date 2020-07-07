@@ -178,8 +178,6 @@ int get_enabled_ciphers(socket_ctx* sock_ctx, char** data, unsigned int* len) {
 
 	*len = ciphers_len + 1;
 end:
-	log_printf(LOG_DEBUG, "Trusted ciphers:\n%s\n", ciphers_str);
-	log_printf(LOG_DEBUG, "Cipher length: %i\n", *len);
 	*data = ciphers_str;
 	return 0;
 }
@@ -451,7 +449,7 @@ int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist) {
 		if (strcmp(name, cipher) == 0) {
 			has_cipher = 1;
 			sk_SSL_CIPHER_delete(cipherlist, i);
-            SSL_CIPHER_free(curr_cipher);
+            /* SSL_CIPHER_free(curr_cipher) */;
 		} else {
 			i++;
 		}
