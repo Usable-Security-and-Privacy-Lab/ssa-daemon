@@ -302,8 +302,6 @@ int verify_ocsp_basicresp(OCSP_BASICRESP* resp,
 	ASN1_GENERALIZEDTIME* nextupd = NULL;
 	int ret, status, reason;
 
-    log_printf(LOG_INFO, "ID pointer (verify): %p\n", id);
-
     ret = OCSP_basic_verify(resp, certs, store, 0);
     if (ret != 1)
 		return V_OCSP_CERTSTATUS_UNKNOWN;

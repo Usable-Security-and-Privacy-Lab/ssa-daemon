@@ -309,7 +309,6 @@ void ocsp_responder_event_cb(struct bufferevent* bev, short events, void* arg) {
 	int ret;
 
 	if (events & BEV_EVENT_CONNECTED) {
-        log_printf(LOG_ERROR, "Received connected event on ocsp responder\n");
 
 		request = create_ocsp_request(ocsp_resp->certid);
 		if (request == NULL)
@@ -331,7 +330,6 @@ void ocsp_responder_event_cb(struct bufferevent* bev, short events, void* arg) {
 		log_printf(LOG_ERROR, "Bufferevent timed out/encountered error\n");
 		goto err;
 	}
-        log_printf(LOG_ERROR, "Finished connected event on ocsp responder\n");
 
 	return;
 err:
