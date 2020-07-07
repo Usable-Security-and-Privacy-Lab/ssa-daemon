@@ -95,7 +95,6 @@ TEST_F(SocketAPITests, SocketCreation) {
 TEST_F(SocketAPITests, SocketWrongDomain) {
 
     int socket_return = socket(AF_NETLINK, SOCK_STREAM, IPPROTO_TLS);
-    int socket_errno = errno;
 
     EXPECT_EQ(socket_return, -1);
     /* TODO: test the errno here too */
@@ -110,7 +109,6 @@ TEST_F(SocketAPITests, SocketWrongType) {
     /* TODO: someday we'll implement DTLS. this should be changed then */
 
     int socket_return = socket(AF_NETLINK, SOCK_DGRAM, IPPROTO_TLS);
-    int socket_errno = errno;
 
     EXPECT_EQ(socket_return, -1);
     /* TODO: test the errno here too */
@@ -123,11 +121,11 @@ TEST_F(SocketAPITests, SocketWrongType) {
 
 TEST_F(SocketAPITests, SocketWithNonblockType) {
 
-    int socket_return = socket(AF_NETLINK, 
+    int socket_return = socket(AF_INET, 
                 SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TLS);
     int socket_errno = errno;
 
-    EXPECT_EQ(socket_return, 0);
+    EXPECT_GE(socket_return, 0);
     EXPECT_EQ(socket_errno, 0);
     /* TODO: test the errno here too */
     if (socket_return < 0)
@@ -139,7 +137,7 @@ TEST_F(SocketAPITests, SocketWithNonblockType) {
 
 TEST_F(SocketAPITests, ConnectWithNonblockSocket) {
 
-    int socket_return = socket(AF_NETLINK, 
+    int socket_return = socket(AF_INET, 
                 SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TLS);
     int socket_errno = errno;
 
@@ -147,7 +145,7 @@ TEST_F(SocketAPITests, ConnectWithNonblockSocket) {
         fprintf(stderr, "Socket creation failed with errno %i: %s\n", 
                     socket_errno, strerror(socket_errno));
 
-    ASSERT_EQ(socket_return, 0);
+    ASSERT_GE(socket_return, 0);
     EXPECT_EQ(socket_errno, 0);
     /* TODO: test the errno here too */
 
@@ -177,19 +175,6 @@ TEST_F(SocketAPITests, ConnectWithNonblockSocket) {
                     connect_errno, strerror(connect_errno));
 
     close(socket_return);
-}
-
-
-TEST_F(SocketAPITests, Socket) {
-
-    int socket_return = socket(AF_NETLINK, SOCK_DGRAM, IPPROTO_TLS);
-    EXPECT_EQ(socket_return, 0);
-    /* TODO: test the errno here too */
-    if (socket_return < 0)
-        fprintf(stderr, "Socket creation failed with errno %i: %s\n", 
-                    errno, strerror(errno));
-    else
-        close(socket_return);
 }
 
 
