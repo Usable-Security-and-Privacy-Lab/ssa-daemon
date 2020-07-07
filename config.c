@@ -131,7 +131,6 @@ void log_parser_error(yaml_parser_t parser);
  *     - cipher-2
  *     - cipher-3
  *   tls-compression: off
- *   alpn-protos: on
  * 
  * Would be represented by the following tokens:
  * STREAM_START
