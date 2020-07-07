@@ -216,6 +216,7 @@ int run_http_client(const char *host, const char *port, char **out, int *out_len
     }
 
     fprintf(stderr, "Done.\n");
+    /*
     fprintf(stderr, "Sending http request...\n");
 
     ret = sprintf(request, "GET / HTTP/1.1\r\n"
@@ -242,6 +243,11 @@ int run_http_client(const char *host, const char *port, char **out, int *out_len
     }
 
     fprintf(stderr, "Done.\n");
+
+    */
+
+   *out = "Connected";
+   *out_len = strlen("Connected") + 1;
 
 	freeaddrinfo(addr_list);
     close(clientfd);
