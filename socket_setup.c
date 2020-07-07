@@ -144,7 +144,7 @@ SSL_CTX* SSL_CTX_create(global_config* settings) {
 	}
 
 	return ctx;
- err:
+err:
 	if (ERR_peek_error())
 		log_printf(LOG_ERROR, "OpenSSL error initializing client SSL_CTX: %s\n",
 				ERR_error_string(ERR_get_error(), NULL));
@@ -252,7 +252,7 @@ int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
     */
 
     return 0;
- err:
+err:
     if (sock_ctx->plain.bev != NULL)
         bufferevent_free(sock_ctx->plain.bev);
     else if (plain_fd != NO_FD)
@@ -309,7 +309,7 @@ int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
     }
 
     return 0;
- err:
+err:
     if (!has_error_string(sock_ctx))
         response = determine_and_set_error(sock_ctx);
 
@@ -390,7 +390,7 @@ int load_cipher_list(SSL_CTX* ctx, char** list, int num) {
 		goto end;
 	}
 
- end:
+end:
 	free(ciphers);
 	return ret;
 }
@@ -422,7 +422,7 @@ int load_ciphersuites(SSL_CTX* ctx, char** list, int num) {
 		goto end;
 	}
 
- end:
+end:
 	free(ciphers);
 	return ret;
 }
@@ -547,7 +547,7 @@ int associate_fd(socket_ctx* sock_ctx, evutil_socket_t ifd) {
 
 	log_printf(LOG_INFO, "plaintext channel bev enabled\n");
 	return 0;
- err:
+err:
 	log_printf(LOG_ERROR, "associate_fd failed.\n");
 	return -ECONNABORTED; /* Only happens while client is connecting */
 }

@@ -132,7 +132,7 @@ int run_client(const char *host, const char *port,
 	freeaddrinfo(addr_list);
     close(clientfd);
     return 0;
- err:
+err:
 
     fprintf(stderr, "Errno code %i: %s\n", errno, strerror(errno));   
 
@@ -246,7 +246,7 @@ int run_http_client(const char *host, const char *port, char **out, int *out_len
 	freeaddrinfo(addr_list);
     close(clientfd);
     return 0;
- err:
+err:
 
     fprintf(stderr, "Errno code %i: %s\n", errno, strerror(errno));   
 

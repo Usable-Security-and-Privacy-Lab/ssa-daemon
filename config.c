@@ -585,7 +585,7 @@ global_config* parse_config(char* file_path) {
     yaml_parser_delete(&parser);
     
     return settings;
- err:
+err:
     log_parser_error(parser);
     yaml_parser_delete(&parser);
 

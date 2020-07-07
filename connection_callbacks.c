@@ -282,7 +282,7 @@ void handle_server_event_connected(socket_ctx* sock_ctx, channel* startpoint) {
 			goto err;
 	}
 	return;
- err:
+err:
     log_printf(LOG_DEBUG, "Erasing connection completely\n");
 	
     hashmap_del(sock_ctx->daemon->sock_map_port, sock_ctx->accept_port);

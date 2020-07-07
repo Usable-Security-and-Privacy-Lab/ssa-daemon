@@ -73,7 +73,7 @@ int get_peer_certificate(socket_ctx* sock_ctx, char** data, unsigned int* len) {
 	ret = 0;
 	*data = pem_data;
 	*len = cert_len + 1;
- end:
+end:
 	X509_free(cert);
 	BIO_free(bio);
 	return ret;
@@ -177,7 +177,7 @@ int get_enabled_ciphers(socket_ctx* sock_ctx, char** data, unsigned int* len) {
 		log_printf(LOG_ERROR, "Buffer had to be truncated.\n");
 
 	*len = ciphers_len + 1;
- end:
+end:
 	log_printf(LOG_DEBUG, "Trusted ciphers:\n%s\n", ciphers_str);
 	log_printf(LOG_DEBUG, "Cipher length: %i\n", *len);
 	*data = ciphers_str;
@@ -232,7 +232,7 @@ int set_certificate_chain(socket_ctx* sock_ctx, char* path) {
 	}
 
 	return 0;
- err:
+err:
     ssl_err = ERR_get_error();
 
     log_printf(LOG_ERROR, "Failed to load certificate chain: %s\n", 
@@ -296,7 +296,7 @@ int set_private_key(socket_ctx* sock_ctx, char* path) {
 		goto err;
 
 	return 0;
- err:
+err:
 	log_printf(LOG_ERROR, "Failed to set private key: %s\n", 
 			ERR_reason_error_string(ERR_GET_REASON(ERR_peek_error())));
 	set_err_string(sock_ctx, "TLS error: failed to set private key - %s",
@@ -362,7 +362,7 @@ int disable_cipher(socket_ctx* sock_ctx, char* cipher) {
 		goto err;
 
 	return 0;
- err:
+err:
 	set_err_string(sock_ctx, "TLS error: cipher already disabled");
 	return -EINVAL;
 }
@@ -488,7 +488,7 @@ int check_key_cert_pair(socket_ctx* sock_ctx) {
 	}
 
 	return 0;
- err:
+err:
 	return -EPROTO; /* Protocol err--key didn't match or chain didn't build */
 }
 

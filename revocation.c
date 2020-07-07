@@ -132,7 +132,7 @@ int begin_revocation_checks(revocation_ctx *rev_ctx, SSL* ssl, int cert_index) {
 
     OCSP_CERTID_free(id);
     return 0;
- err:
+err:
     if (id != NULL)
         OCSP_CERTID_free(id);
     return -1;
@@ -269,7 +269,7 @@ int check_ocsp_response(unsigned char* resp_bytes,
 	add_to_ocsp_cache(id, basicresp, rev_ctx->daemon);
 
 	return status;
- err:
+err:
 	// Something went wrong with parsing/verification
 	if (basicresp != NULL)
 		OCSP_BASICRESP_free(basicresp);
@@ -369,7 +369,7 @@ int check_cached_response(revocation_ctx* rev_ctx, OCSP_CERTID* id) {
 	free(id_string);
 
 	return status;
- err:
+err:
 	if (id_string != NULL)
 		free(id_string);
 
@@ -407,7 +407,7 @@ char* get_ocsp_id_string(OCSP_CERTID* certid) {
 	BN_free(id_bignum);
 
 	return id_string;
- err:
+err:
 	if (id_bignum != NULL)
 		BN_free(id_bignum);
 

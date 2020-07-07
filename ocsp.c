@@ -185,7 +185,7 @@ ocsp_responder* launch_ocsp_client(revocation_ctx* rev_ctx, char* url) {
 
 	free(hostname);
 	return ocsp_resp;
- err:
+err:
     if (ocsp_resp != NULL)
         ocsp_responder_free(ocsp_resp);
 
@@ -275,7 +275,7 @@ int send_ocsp_request(struct bufferevent* bev, char* url, OCSP_REQUEST* req) {
 	free(host);
 	free(path);
 	return 0;
- err:
+err:
 
 	if (http_req != NULL)
 		free(http_req);
@@ -334,7 +334,7 @@ void ocsp_responder_event_cb(struct bufferevent* bev, short events, void* arg) {
         log_printf(LOG_ERROR, "Finished connected event on ocsp responder\n");
 
 	return;
- err:
+err:
     if (request != NULL)
         OCSP_REQUEST_free(request);
 
@@ -405,7 +405,7 @@ void ocsp_responder_read_cb(struct bufferevent* bev, void* arg) {
 	}
 
 	return;
- err:
+err:
 	ocsp_responder_shutdown(ocsp_resp);
 
 	if (rev_ctx->responders_at[ocsp_resp->cert_position]-- == 0) {
@@ -464,7 +464,7 @@ OCSP_REQUEST* create_ocsp_request(OCSP_CERTID* id) {
 		goto err;
 
     return request;
- err:
+err:
     if (request != NULL)
 	    OCSP_REQUEST_free(request);
     else
@@ -502,7 +502,7 @@ int get_ocsp_basicresp(unsigned char* bytes, int len, OCSP_BASICRESP** resp) {
 
 	OCSP_RESPONSE_free(full_response);
 	return 0;
- err:
+err:
 	if (full_response != NULL)
 		OCSP_RESPONSE_free(full_response);
 

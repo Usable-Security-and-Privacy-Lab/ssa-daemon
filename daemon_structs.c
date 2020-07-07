@@ -83,7 +83,7 @@ daemon_ctx* daemon_context_new(char* config_path, int port) {
 		goto err;
 
 	return daemon;
- err:
+err:
 	if (daemon != NULL)
 		daemon_context_free(daemon);
 
@@ -172,7 +172,7 @@ int socket_context_new(socket_ctx** new_sock_ctx, int fd,
     *new_sock_ctx = sock_ctx;
 
 	return 0;
- err:
+err:
     if (sock_ctx != NULL)
         socket_context_free(sock_ctx);
 
@@ -202,7 +202,7 @@ socket_ctx* accepting_socket_ctx_new(socket_ctx* listener_ctx, int fd) {
     sock_ctx->ssl_ctx = listener_ctx->ssl_ctx;
 
     return sock_ctx;
- err:
+err:
     if (sock_ctx != NULL)
         free(sock_ctx);
 
