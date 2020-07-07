@@ -108,6 +108,7 @@ struct daemon_ctx_st {
     global_config* settings;
 
 	hsmap_t* revocation_cache;
+    hsmap_t* session_cache;
 };
 
 struct global_config_st {

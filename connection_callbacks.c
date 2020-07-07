@@ -53,8 +53,10 @@ void common_bev_write_cb(struct bufferevent *bev, void *arg) {
 	socket_ctx* sock_ctx = (socket_ctx*) arg;
 	channel* endpoint = (bev == sock_ctx->secure.bev) ? &sock_ctx->plain : &sock_ctx->secure;
 	
+    /*
 	log_printf(LOG_DEBUG, "write event on bev %p (%s)\n", bev, 
 			(bev == sock_ctx->secure.bev) ? "secure" : "plain");
+    */
 
 	if (endpoint->bev && !(bufferevent_get_enabled(endpoint->bev) & EV_READ)) {
 		bufferevent_setwatermark(bev, EV_WRITE, 0, 0);
@@ -82,8 +84,10 @@ void common_bev_read_cb(struct bufferevent* bev, void* arg) {
 	struct evbuffer* out_buf;
 	size_t in_len;
 
+    /*
 	log_printf(LOG_DEBUG, "read event on bev %p (%s)\n", bev, 
 			(bev == sock_ctx->secure.bev) ? "secure" : "plain");
+    */
 
 	in_buf = bufferevent_get_input(bev);
 	in_len = evbuffer_get_length(in_buf);
@@ -248,12 +252,15 @@ void handle_client_event_connected(socket_ctx* sock_ctx,
 
     sock_ctx->state = SOCKET_FINISHING_CONN;
 
+    if (has_revocation_checks(sock_ctx->rev_ctx.checks)
+                && SSL_session_reused(sock_ctx->ssl) == 0)
 
-    if (has_revocation_checks(sock_ctx->rev_ctx.checks))
         do_cert_chain_revocation_checks(sock_ctx);
+
     else
         netlink_handshake_notify_kernel(daemon, id, NOTIFY_SUCCESS);
     
+
     return;
 }
 
@@ -270,7 +277,6 @@ void handle_server_event_connected(socket_ctx* sock_ctx, channel* startpoint) {
 		startpoint->bev == sock_ctx->secure.bev ? "Encrypted" : "Plaintext");		
 
 	if (startpoint->bev == sock_ctx->secure.bev) {
-		log_printf(LOG_DEBUG, "Now negotiating plaintext connection\n");
 
 		int ret = bufferevent_enable(sock_ctx->plain.bev, EV_READ | EV_WRITE);
 		if (ret != 0) 

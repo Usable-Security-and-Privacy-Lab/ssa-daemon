@@ -267,6 +267,8 @@ err:
 
 int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
 
+    SSL_SESSION* session;
+    daemon_ctx* daemon = sock_ctx->daemon;
     int response;
     int ret;
 
@@ -279,6 +281,9 @@ int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
         if (ret != 1)
             goto err;
     }
+
+    /* turn off internal caching--we implement our own */
+    SSL_CTX_set_session_cache_mode(sock_ctx->ssl_ctx, SSL_SESS_CACHE_OFF);
 
     ret = client_SSL_new(sock_ctx);
     if (sock_ctx->ssl == NULL) {
@@ -307,6 +312,24 @@ int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
             goto err;
         }
     }
+
+    session = str_hashmap_get(daemon->session_cache, sock_ctx->rem_hostname);
+    if (session != NULL) {
+        log_printf(LOG_DEBUG, "Got cached session for %s\n", sock_ctx->rem_hostname);
+        int ret = str_hashmap_del(daemon->session_cache, sock_ctx->rem_hostname);
+        if (ret != 0)
+            log_printf(LOG_ERROR, "failed to delete cached session...\n");
+
+        if (SSL_SESSION_is_resumable(session)) {
+            /* TODO: check to ensure previous session details are secure enough */
+            SSL_set_session(sock_ctx->ssl, session); /* not guaranteed */
+        }
+
+        log_printf(LOG_DEBUG, "FREED SESSION\n");
+        SSL_SESSION_free(session);
+        
+    }
+
 
     return 0;
 err:
