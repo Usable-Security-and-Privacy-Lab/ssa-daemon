@@ -474,8 +474,10 @@ SSL_SESSION* get_session_if_reusable(socket_ctx* sock_ctx) {
     if (!SSL_SESSION_is_resumable(session))
         goto err;
 
+    /* 
     if (SSL_session_reused(sock_ctx->ssl))
         goto err;
+    */
 
     return session;
 err:
