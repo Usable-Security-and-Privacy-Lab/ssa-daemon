@@ -68,14 +68,22 @@ SSL_CTX* SSL_CTX_create(global_config* settings) {
 
 
 	if (!settings->tls_compression)
-		SSL_CTX_set_options(ctx, SSL_CTX_get_options(ctx) 
-                | SSL_OP_NO_COMPRESSION);
+		SSL_CTX_set_options(ctx, 
+                    SSL_CTX_get_options(ctx) | SSL_OP_NO_COMPRESSION);
+    else
+        SSL_CTX_set_options(ctx, 
+                    SSL_CTX_get_options(ctx) & ~SSL_OP_NO_COMPRESSION);
+    
 
-	if (!settings->session_tickets)
-		SSL_CTX_set_options(ctx, SSL_CTX_get_options(ctx) 
-                | SSL_OP_NO_TICKET);
+    if (!settings->session_tickets)
+        SSL_CTX_set_options(ctx, 
+                    SSL_CTX_get_options(ctx) | SSL_OP_NO_TICKET);
+    else
+        SSL_CTX_set_options(ctx,
+                    SSL_CTX_get_options(ctx) & ~SSL_OP_NO_TICKET);
+    
 
-	tls_version = get_tls_version(settings->min_tls_version);
+    tls_version = get_tls_version(settings->min_tls_version);
 	if (SSL_CTX_set_min_proto_version(ctx, tls_version) != 1) 
 		goto err;
 
@@ -321,14 +329,13 @@ int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
         if (ret != 0)
             log_printf(LOG_ERROR, "failed to delete cached session...\n");
 
-        if (SSL_SESSION_is_resumable(session)) {
-            /* TODO: check to ensure previous session details are secure enough */
+        if (SSL_SESSION_is_resumable(session))
             SSL_set_session(sock_ctx->ssl, session); /* could fail */
-        }
+        else
+            log_printf(LOG_WARNING, "Cached session not used--insecure settings\n");
 
         SSL_SESSION_free(session);
     }
-
 
     return 0;
 err:
