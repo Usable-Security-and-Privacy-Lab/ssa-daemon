@@ -256,10 +256,15 @@ void handle_client_event_connected(socket_ctx* sock_ctx,
                 && SSL_session_reused(sock_ctx->ssl) == 0)
 
         do_cert_chain_revocation_checks(sock_ctx);
-
     else
         netlink_handshake_notify_kernel(daemon, id, NOTIFY_SUCCESS);
     
+    if (SSL_session_reused(sock_ctx->ssl) == 1)
+        log_printf(LOG_DEBUG, "Using reused session...\n");
+
+    if (SSL_SESSION_get_compress_id(SSL_get_session(sock_ctx->ssl)) != 0)
+        log_printf(LOG_WARNING, "Using compression for session!\n");
+        
 
     return;
 }
