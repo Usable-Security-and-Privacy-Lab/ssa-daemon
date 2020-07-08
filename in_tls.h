@@ -24,8 +24,8 @@
 #define TLS_PEER_CERTIFICATE_CHAIN        95
 #define TLS_ID                            96
 
-/* added recently--not in kernel */
 #define TLS_TRUSTED_CIPHERS               97
+#define TLS_CHOSEN_CIPHER                 98
 #define TLS_ERROR                        100
 
 

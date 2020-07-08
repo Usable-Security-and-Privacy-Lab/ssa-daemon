@@ -613,6 +613,7 @@ void setsockopt_cb(daemon_ctx* ctx, unsigned long id, int level,
 	case TLS_ERROR:
 	case TLS_HOSTNAME:
 	case TLS_TRUSTED_CIPHERS:
+    case TLS_CHOSEN_CIPHER:
 	case TLS_ID:
 		response = -ENOPROTOOPT; /* all get only */
 		break;
@@ -699,6 +700,14 @@ void getsockopt_cb(daemon_ctx* daemon,
 		if (response == 0)
 			need_free = 1;
 		break;
+
+    case TLS_CHOSEN_CIPHER:
+        if ((response = check_socket_state(sock_ctx, 2, 
+                    SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
+            break;
+        
+        response = get_chosen_cipher(sock_ctx, &data, &len);
+        break;
 
 	case TLS_TRUSTED_PEER_CERTIFICATES:
 	case TLS_PRIVATE_KEY:

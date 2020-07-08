@@ -182,6 +182,15 @@ end:
 	return 0;
 }
 
+
+int get_chosen_cipher(socket_ctx* sock_ctx, char** data, unsigned int* len) {
+
+    *data = SSL_get_cipher(sock_ctx->ssl);
+    *len = strlen(*data) + 1;
+
+    return 0;
+}
+
 /*
  *******************************************************************************
  *                           SETSOCKOPT FUNCTIONS
