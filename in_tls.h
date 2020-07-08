@@ -27,6 +27,7 @@
 #define TLS_TRUSTED_CIPHERS               97
 #define TLS_CHOSEN_CIPHER                 98
 #define TLS_ERROR                        100
+#define TLS_DISABLE_COMPRESSION          101
 
 
 /* TCP options */

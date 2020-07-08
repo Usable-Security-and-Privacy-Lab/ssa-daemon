@@ -22,6 +22,7 @@ int set_trusted_CA_certificates(socket_ctx *sock_ctx, char* path);
 int disable_cipher(socket_ctx* sock_ctx, char* cipher);
 int set_certificate_chain(socket_ctx* sock_ctx, char* path);
 int set_private_key(socket_ctx* sock_ctx, char* path);
+void set_no_compression(socket_ctx* sock_ctx);
 
 
 int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, long len);

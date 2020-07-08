@@ -393,6 +393,13 @@ int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, long len) {
 	return 0;
 }
 
+
+void set_no_compression(socket_ctx* sock_ctx) {
+
+    int prev_opts = SSL_CTX_get_options(sock_ctx->ssl_ctx);
+    SSL_CTX_set_options(sock_ctx->ssl_ctx, prev_opts | SSL_OP_NO_COMPRESSION);
+}
+
 /*
  *******************************************************************************
  *                             HELPER FUNCTIONS

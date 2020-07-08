@@ -81,6 +81,8 @@ int begin_handling_listener_connections(socket_ctx* sock_ctx);
  */
 int run_daemon(int port, char* config_path) {
 
+ 
+
 	struct evconnlistener* listener = NULL;
 	daemon_ctx* daemon = NULL;
 
@@ -131,6 +133,7 @@ int run_daemon(int port, char* config_path) {
 	if (event_add(nl_ev, NULL) != 0)
 		goto err;
 
+    SSL_COMP_add_compression_method(1, COMP_zlib());
 
 	/* Main event loop */
 	if (event_base_dispatch(daemon->ev_base) != 0)
@@ -609,6 +612,12 @@ void setsockopt_cb(daemon_ctx* ctx, unsigned long id, int level,
 			break;
 		response = set_private_key(sock_ctx, value);
 		break;
+
+    case TLS_DISABLE_COMPRESSION:
+        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+            break;
+        set_no_compression(sock_ctx);
+        break;
 
 	case TLS_ERROR:
 	case TLS_HOSTNAME:
