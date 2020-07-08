@@ -31,7 +31,8 @@ int check_key_cert_pair(socket_ctx* sock_ctx);
  * @param len The string length of the certificate.
  * @returns 0 on success; -errno otherwise.
  */
-int get_peer_certificate(socket_ctx* sock_ctx, char** data, unsigned int* len) {
+int get_peer_certificate(socket_ctx* sock_ctx, 
+            const char** data, unsigned int* len) {
 	X509* cert = NULL;
 	BIO* bio = NULL;
 	char* bio_data = NULL;
@@ -89,7 +90,8 @@ end:
  * @param len The length of identity.
  * @returns 0 on success; or -errno if an error occurred.
  */
-int get_peer_identity(socket_ctx* sock_ctx, char** identity, unsigned int* len) {
+int get_peer_identity(socket_ctx* sock_ctx, 
+            const char** identity, unsigned int* len) {
 	
 	X509_NAME* subject_name;
 	X509* cert;
@@ -130,7 +132,7 @@ int get_peer_identity(socket_ctx* sock_ctx, char** identity, unsigned int* len) 
  * @param len The length of hostname (including the null-terminating character).
  * @returns 0 on success, or -errno if an error has occurred.
  */
-int get_hostname(socket_ctx* sock_ctx, char** data, unsigned int* len) {
+int get_hostname(socket_ctx* sock_ctx, const char** data, unsigned int* len) {
 
 	const char* hostname;
 
@@ -141,7 +143,7 @@ int get_hostname(socket_ctx* sock_ctx, char** data, unsigned int* len) {
 		return -EINVAL;
 	}
 
-	*data = (char*)hostname;
+	*data = hostname;
 	*len = strlen(hostname)+1;
 	return 0;
 }
@@ -154,7 +156,8 @@ int get_hostname(socket_ctx* sock_ctx, char** data, unsigned int* len) {
  * This should be freed after use.
  * @returns 0 on success; -errno otherwise.
  */
-int get_enabled_ciphers(socket_ctx* sock_ctx, char** data, unsigned int* len) {
+int get_enabled_ciphers(socket_ctx* sock_ctx, 
+            const char** data, unsigned int* len) {
 	
 	char* ciphers_str = NULL;
 
@@ -183,12 +186,13 @@ end:
 }
 
 
-int get_chosen_cipher(socket_ctx* sock_ctx, char** data, unsigned int* len) {
+const char* get_chosen_cipher(socket_ctx* sock_ctx, unsigned int* len) {
 
-    *data = SSL_get_cipher(sock_ctx->ssl);
-    *len = strlen(*data) + 1;
+    const char* data = SSL_get_cipher(sock_ctx->ssl);
 
-    return 0;
+    *len = strlen(data) + 1;
+
+    return data;
 }
 
 /*

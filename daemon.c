@@ -634,7 +634,7 @@ void getsockopt_cb(daemon_ctx* daemon,
 
 	socket_ctx* sock_ctx;
 	int response = 0;
-	char* data = NULL;
+	const char* data = NULL;
 	unsigned int len = 0;
 	int need_free = 0;
 
@@ -706,7 +706,7 @@ void getsockopt_cb(daemon_ctx* daemon,
                     SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
             break;
         
-        response = get_chosen_cipher(sock_ctx, &data, &len);
+        data = get_chosen_cipher(sock_ctx, &len);
         break;
 
 	case TLS_TRUSTED_PEER_CERTIFICATES:
@@ -736,7 +736,7 @@ void getsockopt_cb(daemon_ctx* daemon,
 
 	netlink_send_and_notify_kernel(daemon, id, data, len);
 	if (need_free == 1)
-		free(data);
+		free((void*) data);
 	
 	return;
 }
