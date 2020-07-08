@@ -315,19 +315,18 @@ int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
 
     session = str_hashmap_get(daemon->session_cache, sock_ctx->rem_hostname);
     if (session != NULL) {
-        log_printf(LOG_DEBUG, "Got cached session for %s\n", sock_ctx->rem_hostname);
+        log_printf(LOG_INFO, "Using previously cached session for %s\n", 
+                   sock_ctx->rem_hostname);
         int ret = str_hashmap_del(daemon->session_cache, sock_ctx->rem_hostname);
         if (ret != 0)
             log_printf(LOG_ERROR, "failed to delete cached session...\n");
 
         if (SSL_SESSION_is_resumable(session)) {
             /* TODO: check to ensure previous session details are secure enough */
-            SSL_set_session(sock_ctx->ssl, session); /* not guaranteed */
+            SSL_set_session(sock_ctx->ssl, session); /* could fail */
         }
 
-        log_printf(LOG_DEBUG, "FREED SESSION\n");
         SSL_SESSION_free(session);
-        
     }
 
 
