@@ -29,6 +29,12 @@
 #define TLS_ERROR                        100
 #define TLS_DISABLE_COMPRESSION          101
 
+#define TLS_REVOCATION_CHECKS            102
+#define TLS_OCSP_STAPLED_CHECKS          103
+#define TLS_OCSP_CHECKS                  104 
+#define TLS_CRL_CHECKS                   105 
+#define TLS_CACHE_REVOCATION             106
+
 
 /* TCP options */
 #define TCP_UPGRADE_TLS         33
