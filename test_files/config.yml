@@ -15,7 +15,7 @@ max-tls-version: 1.3 # Default: 1.3
 # CA-path can be a file or directory of CA files. All files must be in PEM format. Use "c_rehash ."
 # in directory before use. 
 #  CA-path: /etc/ssl/certs
-CA-path: test_files/certs/root_files #/rootca.pem # use this for testing our server
+CA-path: test_files/certs/root_files # use this for testing our server
 
 # The CRIME attack targets TLS Compression; an attacker can gain information 
 # about authorization tokens, secret web cookies or other sensitive information 
@@ -86,8 +86,8 @@ revocation-checks: off
 #    The certificates should be in the correct order from server certificate to root certificate.
 # 2. Give the path to a directory containing files that hold one certificate each. The files
 #    may be in PEM format or DER (ASN1). PEM files must end in ".pem" not ".crt", etc. 
-cert-path: test_files/certs/server_chain.pem
-key-path: test_files/certs/server_key.pem
+cert-path: test_files/certs/der_chain
+key-path: test_files/certs/end_dsa_key.pem
 
 cert-path: test_files/certs/test_chain
 
@@ -95,5 +95,5 @@ cert-path: test_files/certs/test_chain
 key-path: test_files/certs/middle_key.pem
 
 #Multiple certificate chain / key pairs can be provided if desired (One for RSA and one for DSA certificates).
-#cert-path: test_files/certs/server_chain.pem
-#key-path: test_files/certs/server_key.pem
+#cert-path: test_files/certs/der_chain
+#key-path: test_files/certs/middle_der.pem

@@ -175,12 +175,36 @@ int get_end_entity(X509** cert_list, int num_certs) {
 }
 
 /**
- * Frees num_certs certificates in cert_list
+ * Frees num_certs certificates in cert_list and closes directory
  */
-void free_certificates(X509** cert_list, int num_certs) {
+void free_certificates(X509** cert_list, int num_certs, DIR* directory) {
 	for(int j = 0; j < num_certs; ++j) {
 		X509_free(cert_list[j]);
 	}
+	closedir(directory);
+}
+
+/**
+ * Get number of files in directory, then closes directory.
+ * @param directory An open directory containing certificate files. 
+ * @returns number of files in directory.
+ */
+int get_directory_size(DIR* directory) {
+	int num_files = 0;
+	struct dirent* file;
+
+	while((file = readdir(directory))) {
+		if (!strcmp (file->d_name, ".")) 
+            continue;
+
+        if (!strcmp (file->d_name, ".."))    
+            continue;
+
+		++num_files;
+	}
+	
+	closedir(directory);
+	return num_files;
 }
 
 /**
@@ -188,8 +212,8 @@ void free_certificates(X509** cert_list, int num_certs) {
  * and adds them to cert_list. 
  * @param cert_list Array of certificate pointers to be populated with certificates in directory.
  * @param directory The directory containing certificates to put into cert_list.
- * @param dir_name Name of directory.
- * @return The number of certs on success, else -1. 
+ * @param dir_name Path of directory.
+ * @return 0 on success, else -1. 
  */
 int get_directory_certs(X509** cert_list, DIR* directory, char* dir_name) {
 	struct dirent* in_file;
@@ -206,28 +230,26 @@ int get_directory_certs(X509** cert_list, DIR* directory, char* dir_name) {
             continue;
 
 		char* cert_name = in_file->d_name;
-		printf("%s\n", cert_name); // for debugging
-
 		file_name[0] = 0;
 		sprintf(file_name, "%s/%s", dir_name, cert_name);
 		FILE* current_file = fopen(file_name, "r"); 
 
 		if(current_file == NULL) {
 			log_printf(LOG_ERROR, "Error: Could not open file %s (Errno %d).\n", file_name, errno);
-			free_certificates(cert_list, num_certs); // test this
+			free_certificates(cert_list, num_certs, directory);
 			return -1;
 		}
 		
 		if(is_pem_file(file_name)) {
 			cert_list[num_certs] = PEM_read_X509(current_file, NULL, 0, NULL);
 		}
-		else { // test this (DER file)
+		else { 
 			cert_list[num_certs] = d2i_X509_fp(current_file, NULL);
 		}
 
 		if(cert_list[num_certs] == NULL) {
 			log_printf(LOG_ERROR, "Error converting \"%s\" file to certificate.\n", cert_name);
-			free_certificates(cert_list, num_certs); // test
+			free_certificates(cert_list, num_certs, directory);
 			return -1;
 		}
 		
@@ -239,11 +261,11 @@ int get_directory_certs(X509** cert_list, DIR* directory, char* dir_name) {
 		log_printf(LOG_ERROR, "Error reading directory %s.\n", dir_name);
 		return -1;
 	}
-	return num_certs;
+	return 0;
 }
 
 /**
- * Sorts certificates and loads them in order into a context.
+ * Sorts certificates and loads them in order (from end entity to root) into a context.
  * @param ctx Context to load certificates into.
  * @param cert_list Array of certificates to load into context.
  * @param num_certs Number of certificates in cert_list array.
@@ -266,8 +288,9 @@ int add_directory_certs(SSL_CTX* ctx, X509** cert_list, int num_certs) {
 		log_printf(LOG_ERROR, "X509 authority key extension not found.\n");
 		return 0;
 	}
+	
 	for(int j = 1; j < num_certs; ++j) {
-		for(int k = 0; k < num_certs; ++k) { // check for breaks in chain?
+		for(int k = 0; k < num_certs; ++k) {
 
 			const ASN1_STRING* subject = X509_get0_subject_key_id(cert_list[k]);
 			if(subject == NULL) {
@@ -292,7 +315,7 @@ int add_directory_certs(SSL_CTX* ctx, X509** cert_list, int num_certs) {
 /**
  * Each certificate file or directory in the config file are built and loaded  
  * into ctx with their associated private key. Private keys are checked to
- * ensure they match with the end entity.
+ * ensure they match the end entity.
  * @param ctx The context that certificates will be loaded into.
  * @param settings The settings struct from the config file. Used to get 
  * the certificates and keys that will be loaded. 
@@ -307,11 +330,10 @@ int load_certificates(SSL_CTX* ctx, global_config* settings) {
 		return 0;
 	}
 
-	for(int i = 0; i < cert_cnt; ++i) { // Test.
+	for(int i = 0; i < cert_cnt; ++i) {
 		char* path = cert_chain[i];
 		DIR* directory = opendir(path);
 
-		printf("Cert number: %d\n", i); // debugging
 		if(is_pem_file(path)) {
 			if(SSL_CTX_use_certificate_chain_file(ctx, path) != 1) {
 				log_printf(LOG_ERROR, "Failed to load certificate chain file.\n");
@@ -319,25 +341,24 @@ int load_certificates(SSL_CTX* ctx, global_config* settings) {
 			}
 		}
 		else if(directory != NULL) {
-			// get num directory files
-			int max_certs = settings->max_chain_depth; // what if 0? Unlimited. hmmm...
-			X509* cert_list[max_certs];
+			int num_certs = get_directory_size(directory);
+			X509* cert_list[num_certs];
+			directory = opendir(path);
 
-			int num_certs = get_directory_certs(cert_list, directory, path);
-			if(num_certs < 0) {
+			int ret = get_directory_certs(cert_list, directory, path);
+			if(ret < 0) {
 				log_printf(LOG_ERROR, "Failed to get certificates from directory.\n");
 				return 0;
 			}
-
-			int ret = add_directory_certs(ctx, cert_list, num_certs);
+			
+			ret = add_directory_certs(ctx, cert_list, num_certs);
 			if(ret < 1) {
-				free_certificates(cert_list, num_certs);
+				free_certificates(cert_list, num_certs, directory);
 				log_printf(LOG_ERROR, "Failed to get certificates from directory.\n");
 				return 0;
 			}
 
-			closedir(directory);
-			free_certificates(cert_list, num_certs);
+			free_certificates(cert_list, num_certs, directory);
 		}
 		else {
 			log_printf(LOG_ERROR, "[cert-path] must be a pem file or directory.\n");
