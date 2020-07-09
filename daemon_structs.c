@@ -159,14 +159,13 @@ int socket_context_new(socket_ctx** new_sock_ctx, int fd,
 
     sock_ctx->ssl_ctx = SSL_CTX_create(daemon->settings);
     if (sock_ctx->ssl_ctx == NULL) {
-        /* TODO: also should return -EINVAL if settings failed to load?? */
         response = determine_errno_error();
         goto err;
     }
 
 	sock_ctx->daemon = daemon;
 	sock_ctx->id = id;
-	sock_ctx->sockfd = fd; /* standard to show not connected */
+	sock_ctx->sockfd = fd;
     sock_ctx->state = SOCKET_NEW;
     sock_ctx->rev_ctx.daemon = daemon;
     sock_ctx->rev_ctx.id = id;
@@ -397,7 +396,7 @@ void revocation_context_cleanup(revocation_ctx* rev_ctx) {
         sk_X509_free(rev_ctx->certs);
     rev_ctx->certs = NULL;
 
-    /* TODO: free CRL responders here too */
+    /* free CRL responders here too */
     return;
 }
 

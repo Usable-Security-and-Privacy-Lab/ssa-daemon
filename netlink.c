@@ -79,7 +79,6 @@ enum ssa_nl_groups {
 	SSA_NL_NOTIFY,
 };
 
-/* TODO: specify exact policies and lengths here */
 static struct nla_policy ssa_nl_policy[SSA_NL_A_MAX + 1] = {
 	[SSA_NL_A_ID] = { .type = NLA_U64 },
 	[SSA_NL_A_BLOCKING] = { .type = NLA_U32 },

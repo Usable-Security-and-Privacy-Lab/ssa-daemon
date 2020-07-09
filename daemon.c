@@ -400,13 +400,12 @@ void accept_error_cb(struct evconnlistener *listener, void *ctx) {
 void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	struct sockaddr *address, int addrlen, void *arg) {
 
-    /* TODO: could assign address and addrlen to rem_addr and rem_addrlen? */
-
     struct sockaddr_in int_addr = {
 		.sin_family = AF_INET,
 		.sin_port = 0, /* allow kernel to give us a random port */
 		.sin_addr.s_addr = htonl(INADDR_LOOPBACK)
 	};
+
 	socket_ctx* listening_ctx = (socket_ctx*)arg;
 	daemon_ctx* daemon = listening_ctx->daemon;
 	socket_ctx* new_ctx = NULL;

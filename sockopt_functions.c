@@ -49,13 +49,11 @@ int get_peer_certificate(socket_ctx* sock_ctx,
 
 	bio = BIO_new(BIO_s_mem());
 	if (bio == NULL) {
-		/* TODO: get specific error from OpenSSL */
 		ret = determine_and_set_error(sock_ctx);
 		goto end;
 	}
 
 	if (PEM_write_bio_X509(bio, cert) == 0) {
-		/* TODO: get specific error from OpenSSL */
 		ret = determine_and_set_error(sock_ctx);
 		goto end;
 	}
@@ -162,7 +160,7 @@ int get_enabled_ciphers(socket_ctx* sock_ctx,
 	char* ciphers_str = NULL;
 
 	STACK_OF(SSL_CIPHER)* ciphers = SSL_get_ciphers(sock_ctx->ssl);
-	/* TODO: FEATURE: use SSL_get1_supported_ciphers if connected */
+	/* FEATURE: use SSL_get1_supported_ciphers if connected */
 	if (ciphers == NULL)
 		goto end; /* no ciphers available; just return NULL. */
 
@@ -356,7 +354,6 @@ int set_trusted_CA_certificates(socket_ctx *sock_ctx, char* path) {
 
 /**
  * Removes a given cipher from the set of enabled ciphers for a connection.
- * TODO: Allow multiple ciphers to be disabled at the same time?
  * @param sock_ctx The socket context to remove a cipher from.
  * @param cipher A string representation of the cipher to be removed.
  * @returns 0 on success; -errno otherwise. EINVAL means the cipher to be
