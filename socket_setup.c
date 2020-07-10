@@ -185,7 +185,7 @@ void free_certificates(X509** cert_list, int num_certs, DIR* directory) {
 }
 
 /**
- * Get number of files in directory, then closes directory.
+ * Get number of files in directory.
  * @param directory An open directory containing certificate files. 
  * @returns number of files in directory.
  */
@@ -203,7 +203,6 @@ int get_directory_size(DIR* directory) {
 		++num_files;
 	}
 	
-	closedir(directory);
 	return num_files;
 }
 
@@ -342,6 +341,7 @@ int load_certificates(SSL_CTX* ctx, global_config* settings) {
 		}
 		else if(directory != NULL) {
 			int num_certs = get_directory_size(directory);
+			closedir(directory);
 			X509* cert_list[num_certs];
 			directory = opendir(path);
 
@@ -354,7 +354,7 @@ int load_certificates(SSL_CTX* ctx, global_config* settings) {
 			ret = add_directory_certs(ctx, cert_list, num_certs);
 			if(ret < 1) {
 				free_certificates(cert_list, num_certs, directory);
-				log_printf(LOG_ERROR, "Failed to get certificates from directory.\n");
+				log_printf(LOG_ERROR, "Failed to add certificates from directory.\n");
 				return 0;
 			}
 
@@ -536,12 +536,12 @@ int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
             goto err;
         }
 
-        // ret = SSL_set1_host(sock_ctx->ssl, sock_ctx->rem_hostname);
-        // if (ret != 1) {
-        //     log_printf(LOG_ERROR, "Connection setup error: "
-        //             "couldn't assign the socket's hostname for validation\n");
-        //     goto err;
-        // }
+        ret = SSL_set1_host(sock_ctx->ssl, sock_ctx->rem_hostname);
+        if (ret != 1) {
+            log_printf(LOG_ERROR, "Connection setup error: "
+                    "couldn't assign the socket's hostname for validation\n");
+            goto err;
+        }
     }
 
     return 0;
