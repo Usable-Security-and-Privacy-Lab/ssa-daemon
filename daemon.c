@@ -81,6 +81,8 @@ int begin_handling_listener_connections(socket_ctx* sock_ctx);
  */
 int run_daemon(int port, char* config_path) {
 
+ 
+
 	struct evconnlistener* listener = NULL;
 	daemon_ctx* daemon = NULL;
 
@@ -131,6 +133,7 @@ int run_daemon(int port, char* config_path) {
 	if (event_add(nl_ev, NULL) != 0)
 		goto err;
 
+    SSL_COMP_add_compression_method(1, COMP_zlib());
 
 	/* Main event loop */
 	if (event_base_dispatch(daemon->ev_base) != 0)
@@ -153,7 +156,7 @@ int run_daemon(int port, char* config_path) {
 	OPENSSL_cleanup();
 
     return EXIT_SUCCESS;
- err:
+err:
 
 	printf("An error occurred setting up the daemon: %s\n", strerror(errno));
 
@@ -199,25 +202,9 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
 	hints.ai_socktype = type;
 
 	if (family == PF_UNIX) {
-		sock = socket(AF_UNIX, type, 0);
+		sock = socket(AF_UNIX, type | SOCK_NONBLOCK, 0);
 		if (sock == -1) {
 			log_printf(LOG_ERROR, "socket: %s\n", strerror(errno));
-			exit(EXIT_FAILURE);
-		}
-
-		ret = evutil_make_listen_socket_reuseable(sock);
-		if (ret == -1) {
-			log_printf(LOG_ERROR, "Failed in evutil_make_listen_socket_reuseable: %s\n",
-				 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-			EVUTIL_CLOSESOCKET(sock);
-			exit(EXIT_FAILURE);
-		}
-
-		ret = evutil_make_socket_nonblocking(sock);
-		if (ret == -1) {
-			log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
-				 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-			EVUTIL_CLOSESOCKET(sock);
 			exit(EXIT_FAILURE);
 		}
 
@@ -225,6 +212,14 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
 		ret = bind(sock, (struct sockaddr*)&bind_addr, sizeof(sa_family_t) + 1 + strlen(port_buf));
 		if (ret == -1) {
 			log_printf(LOG_ERROR, "bind: %s\n", strerror(errno));
+			EVUTIL_CLOSESOCKET(sock);
+			exit(EXIT_FAILURE);
+		}
+
+        ret = evutil_make_listen_socket_reuseable(sock);
+		if (ret == -1) {
+			log_printf(LOG_ERROR, "Failed in evutil_make_listen_socket_reuseable: %s\n",
+				 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
 			EVUTIL_CLOSESOCKET(sock);
 			exit(EXIT_FAILURE);
 		}
@@ -254,31 +249,23 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
 	}
 
 	for (addr_ptr = addr_list; addr_ptr != NULL; addr_ptr = addr_ptr->ai_next) {
-		sock = socket(addr_ptr->ai_family, addr_ptr->ai_socktype, addr_ptr->ai_protocol);
+		sock = socket(addr_ptr->ai_family, addr_ptr->ai_socktype | SOCK_NONBLOCK, addr_ptr->ai_protocol);
 		if (sock == -1) {
 			log_printf(LOG_ERROR, "socket: %s\n", strerror(errno));
-			continue;
-		}
-
-		ret = evutil_make_listen_socket_reuseable(sock);
-		if (ret == -1) {
-			log_printf(LOG_ERROR, "Failed in evutil_make_listen_socket_reuseable: %s\n",
-				 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-			EVUTIL_CLOSESOCKET(sock);
-			continue;
-		}
-
-		ret = evutil_make_socket_nonblocking(sock);
-		if (ret == -1) {
-			log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
-				 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-			EVUTIL_CLOSESOCKET(sock);
 			continue;
 		}
 
 		ret = bind(sock, addr_ptr->ai_addr, addr_ptr->ai_addrlen);
 		if (ret == -1) {
 			log_printf(LOG_ERROR, "bind: %s\n", strerror(errno));
+			EVUTIL_CLOSESOCKET(sock);
+			continue;
+		}
+
+        ret = evutil_make_listen_socket_reuseable(sock);
+		if (ret == -1) {
+			log_printf(LOG_ERROR, "Failed in evutil_make_listen_socket_reuseable: %s\n",
+				 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
 			EVUTIL_CLOSESOCKET(sock);
 			continue;
 		}
@@ -333,13 +320,6 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 		goto err;
 	}
 
-	/* the odds of this are *pretty much nil* */
-	if (evutil_make_socket_nonblocking(fd) == -1) {
-		log_printf(LOG_ERROR, "Failed in evutil_make_socket_nonblocking: %s\n",
-			 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-		goto err;
-	}
-
 	log_printf_addr(&sock_ctx->rem_addr);
 
 	ret = associate_fd(sock_ctx, fd);
@@ -350,7 +330,7 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 	sock_ctx->state = SOCKET_CONNECTED;
 
 	return;
- err:
+err:
 	if (sock_ctx != NULL) {
 		hashmap_del(daemon->sock_map_port, port);
 		socket_shutdown(sock_ctx);
@@ -434,10 +414,6 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	evutil_socket_t ifd = -1;
 	int ret = 0;
 
-	ret = evutil_make_socket_nonblocking(efd);
-	if (ret != 0)
-		goto err;
-
 	new_ctx = accepting_socket_ctx_new(listening_ctx, efd);
 	if (ret != 0)
 		goto err;
@@ -445,12 +421,8 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	new_ctx->int_addr = listening_ctx->int_addr;
 	new_ctx->int_addrlen = listening_ctx->int_addrlen;
 
-    ifd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ifd = socket(PF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
 	if (ifd == -1)
-		goto err;
-
-	ret = evutil_make_socket_nonblocking(ifd);
-	if (ret != 0)
 		goto err;
 
 	if (bind(ifd, (struct sockaddr*)&int_addr, sizeof(int_addr)) == -1)
@@ -475,7 +447,7 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
         goto err;
 
     return;
- err:
+err:
 
 	if (new_ctx != NULL)
 		socket_context_free(new_ctx);
@@ -569,17 +541,10 @@ void socket_cb(daemon_ctx* daemon, unsigned long id, char* comm) {
 		goto err;
 	}
 
-    /* TODO: what if AF_INET6 is what the user intents to connect to? */
-	fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    /* BUG: what if AF_INET6 is what the user intents to connect to? */
+	fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
 	if (fd == -1) {
 		response = -errno;
-		goto err;
-	}
-
-	if (evutil_make_socket_nonblocking(fd) != 0) {
-        log_printf(LOG_ERROR, "Failed to make socket nonblocking (errno %i): %s",
-                    EVUTIL_SOCKET_ERROR(), strerror(EVUTIL_SOCKET_ERROR()));
-		response = -ECANCELED;
 		goto err;
 	}
 	
@@ -591,7 +556,7 @@ void socket_cb(daemon_ctx* daemon, unsigned long id, char* comm) {
 	netlink_notify_kernel(daemon, id, NOTIFY_SUCCESS);
 	return;
 
- err:
+err:
 	if (fd != -1)
 		close(fd);
 	if (sock_ctx != NULL)
@@ -648,9 +613,46 @@ void setsockopt_cb(daemon_ctx* ctx, unsigned long id, int level,
 		response = set_private_key(sock_ctx, value);
 		break;
 
+    case TLS_DISABLE_COMPRESSION:
+        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+            break;
+        set_no_compression(sock_ctx);
+        break;
+
+    case TLS_REVOCATION_CHECKS:
+        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+            break;
+        turn_on_revocation_checks(sock_ctx->rev_ctx.checks);
+        break;
+
+    case TLS_OCSP_STAPLED_CHECKS:
+        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+            break;
+        turn_on_stapled_checks(sock_ctx->rev_ctx.checks);
+        break;
+
+    case TLS_OCSP_CHECKS:
+        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+            break;
+        turn_on_ocsp_checks(sock_ctx->rev_ctx.checks);
+        break;
+
+    case TLS_CRL_CHECKS:
+        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+            break;
+        turn_on_crl_checks(sock_ctx->rev_ctx.checks);
+        break;
+
+    case TLS_CACHE_REVOCATION:
+        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+            break;
+        turn_on_cached_checks(sock_ctx->rev_ctx.checks);
+        break;
+
 	case TLS_ERROR:
 	case TLS_HOSTNAME:
 	case TLS_TRUSTED_CIPHERS:
+    case TLS_CHOSEN_CIPHER:
 	case TLS_ID:
 		response = -ENOPROTOOPT; /* all get only */
 		break;
@@ -671,7 +673,7 @@ void getsockopt_cb(daemon_ctx* daemon,
 
 	socket_ctx* sock_ctx;
 	int response = 0;
-	char* data = NULL;
+	const char* data = NULL;
 	unsigned int len = 0;
 	int need_free = 0;
 
@@ -738,6 +740,14 @@ void getsockopt_cb(daemon_ctx* daemon,
 			need_free = 1;
 		break;
 
+    case TLS_CHOSEN_CIPHER:
+        if ((response = check_socket_state(sock_ctx, 2, 
+                    SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
+            break;
+        
+        data = get_chosen_cipher(sock_ctx, &len);
+        break;
+
 	case TLS_TRUSTED_PEER_CERTIFICATES:
 	case TLS_PRIVATE_KEY:
 	case TLS_DISABLE_CIPHER:
@@ -765,7 +775,7 @@ void getsockopt_cb(daemon_ctx* daemon,
 
 	netlink_send_and_notify_kernel(daemon, id, data, len);
 	if (need_free == 1)
-		free(data);
+		free((void*) data);
 	
 	return;
 }
@@ -791,16 +801,16 @@ void bind_cb(daemon_ctx* daemon, unsigned long id,
 		return;
 	}
 
-	if (evutil_make_listen_socket_reuseable(sock_ctx->sockfd) != 0) {
-        log_printf(LOG_ERROR, "Failed to make socket nonblocking (errno %i): %s",
-                    EVUTIL_SOCKET_ERROR(), strerror(EVUTIL_SOCKET_ERROR()));
-		response = -ECANCELED;
-		goto err;
-	}
-
 	if (bind(sock_ctx->sockfd, ext_addr, ext_addrlen) != 0) {
 		response = -errno;
 		set_err_string(sock_ctx, "Bind error: SSA daemon socket failed to bind");
+		goto err;
+	}
+
+    if (evutil_make_listen_socket_reuseable(sock_ctx->sockfd) != 0) {
+        log_printf(LOG_ERROR, "Failed to make socket nonblocking (errno %i): %s",
+                    EVUTIL_SOCKET_ERROR(), strerror(EVUTIL_SOCKET_ERROR()));
+		response = -ECANCELED;
 		goto err;
 	}
 
@@ -812,7 +822,7 @@ void bind_cb(daemon_ctx* daemon, unsigned long id,
 	netlink_notify_kernel(daemon, id, NOTIFY_SUCCESS);
 	clear_socket_error(sock_ctx);
 	return;
- err:
+err:
 
 	if (sock_ctx != NULL) {
 		EVUTIL_CLOSESOCKET(sock_ctx->sockfd);
@@ -914,7 +924,7 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
 	}
 
 	return;
- err:
+err:
 
     socket_shutdown(sock_ctx);
     sock_ctx->state = SOCKET_ERROR;
@@ -957,7 +967,7 @@ void listen_cb(daemon_ctx* daemon, unsigned long id,
 
     netlink_notify_kernel(daemon, id, NOTIFY_SUCCESS);
 	return;
- err:
+err:
 	log_printf(LOG_ERROR, "listen_cb failed: %s\n", strerror(-response));
 	netlink_notify_kernel(daemon, id, response);
 
@@ -1007,7 +1017,7 @@ void associate_cb(daemon_ctx* daemon, unsigned long id,
 
     netlink_notify_kernel(daemon, id, 0);
 	return;
- err:
+err:
     /* Tear down this connection--nobody has access to it anyways */
     socket_shutdown(sock_ctx);
     socket_context_free(sock_ctx);

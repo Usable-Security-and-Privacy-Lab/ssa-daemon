@@ -18,7 +18,9 @@
 #define HASHMAP_NUM_BUCKETS	100
 #define CACHE_NUM_BUCKETS 20
 
-
+SSL_SESSION* get_session_if_reusable(socket_ctx* sock_ctx);
+void add_session_to_cache(daemon_ctx* daemon, 
+            SSL_SESSION* session, char* hostname);
 
 /**
  * Creates a new daemon_ctx to be used throughout the life cycle
@@ -67,6 +69,10 @@ daemon_ctx* daemon_context_new(char* config_path, int port) {
 	if (daemon->revocation_cache == NULL)
 		goto err;
 
+    daemon->session_cache = str_hashmap_create(HASHMAP_NUM_BUCKETS);
+	if (daemon->session_cache == NULL)
+		goto err;
+
 	daemon->settings = parse_config(config_path);
 	if (daemon->settings == NULL)
 		goto err;
@@ -83,7 +89,7 @@ daemon_ctx* daemon_context_new(char* config_path, int port) {
 		goto err;
 
 	return daemon;
- err:
+err:
 	if (daemon != NULL)
 		daemon_context_free(daemon);
 
@@ -99,32 +105,37 @@ daemon_ctx* daemon_context_new(char* config_path, int port) {
  * @param daemon A pointer to the daemon_context to free.
  */
 void daemon_context_free(daemon_ctx* daemon) {
-	
-	if (daemon == NULL)
-		return;
 
-	if (daemon->dns_base != NULL)
-		evdns_base_free(daemon->dns_base, 1);
+    if (daemon == NULL)
+        return;
 
-	if (daemon->revocation_cache != NULL)
-		str_hashmap_deep_free(daemon->revocation_cache, (void (*)(void*))OCSP_BASICRESP_free);
+    if (daemon->dns_base != NULL)
+        evdns_base_free(daemon->dns_base, 1);
 
-	if (daemon->settings != NULL)
+    if (daemon->revocation_cache != NULL)
+        str_hashmap_deep_free(daemon->revocation_cache,
+                (void (*)(void*)) OCSP_BASICRESP_free);
+
+    if (daemon->session_cache != NULL)
+        str_hashmap_deep_free(daemon->session_cache,
+                (void (*)(void*)) SSL_SESSION_free);
+
+    if (daemon->settings != NULL)
         global_settings_free(daemon->settings);
 
-	if (daemon->netlink_sock != NULL)
-		netlink_disconnect(daemon->netlink_sock);
+    if (daemon->netlink_sock != NULL)
+        netlink_disconnect(daemon->netlink_sock);
 
-	if (daemon->sock_map_port != NULL)
-		hashmap_free(daemon->sock_map_port);
+    if (daemon->sock_map_port != NULL)
+        hashmap_free(daemon->sock_map_port);
 
-	if (daemon->sock_map != NULL)
-		hashmap_deep_free(daemon->sock_map, (void (*)(void*))socket_context_free);
-	
-	if (daemon->ev_base != NULL)
-		event_base_free(daemon->ev_base);
+    if (daemon->sock_map != NULL)
+        hashmap_deep_free(daemon->sock_map, (void (*)(void*))socket_context_free);
 
-	free(daemon);
+    if (daemon->ev_base != NULL)
+        event_base_free(daemon->ev_base);
+
+    free(daemon);
 }
 
 
@@ -157,6 +168,8 @@ int socket_context_new(socket_ctx** new_sock_ctx, int fd,
 	sock_ctx->id = id;
 	sock_ctx->sockfd = fd; /* standard to show not connected */
     sock_ctx->state = SOCKET_NEW;
+    sock_ctx->rev_ctx.daemon = daemon;
+    sock_ctx->rev_ctx.id = id;
 
     /* transfer over revocation check flags */
     sock_ctx->rev_ctx.checks = daemon->settings->revocation_checks;
@@ -170,7 +183,7 @@ int socket_context_new(socket_ctx** new_sock_ctx, int fd,
     *new_sock_ctx = sock_ctx;
 
 	return 0;
- err:
+err:
     if (sock_ctx != NULL)
         socket_context_free(sock_ctx);
 
@@ -200,7 +213,7 @@ socket_ctx* accepting_socket_ctx_new(socket_ctx* listener_ctx, int fd) {
     sock_ctx->ssl_ctx = listener_ctx->ssl_ctx;
 
     return sock_ctx;
- err:
+err:
     if (sock_ctx != NULL)
         free(sock_ctx);
 
@@ -222,14 +235,25 @@ void socket_shutdown(socket_ctx* sock_ctx) {
 
 	if (sock_ctx->ssl != NULL) {
 		switch (sock_ctx->state) {
-        case SOCKET_FINISHING_CONN:
 		case SOCKET_CONNECTED:
+        case SOCKET_FINISHING_CONN:
         case SOCKET_ACCEPTED:
 			SSL_shutdown(sock_ctx->ssl);
 			break;
 		default:
 			break;
 		}
+
+        if (sock_ctx->state == SOCKET_CONNECTED) {
+            SSL_SESSION* session = get_session_if_reusable(sock_ctx);
+            if (session != NULL)
+                add_session_to_cache(sock_ctx->daemon, 
+                            session, sock_ctx->rem_hostname);
+            else
+                log_printf(LOG_ERROR, "Session wasn't reusable at conn end\n");
+            
+        }
+
 		SSL_free(sock_ctx->ssl);
 	}
 
@@ -305,42 +329,105 @@ void socket_context_erase(socket_ctx* sock_ctx, int port) {
 }
 
 
-void revocation_context_cleanup(revocation_ctx* ctx) {
+/**
+ * Prepares a given revocation context to perform revocation checks on a 
+ * certificate chain. The corresponding function `revocation_context_cleanup`
+ * can be used to free any memory and clear any entries set by this function.
+ * @param rev_ctx The revocation context to prepare.
+ * @param sock_ctx The socket context to be associated with the given revocation
+ * context.
+ * @returns 0 on success, or -1 if an error occured allocating memory/retrieving
+ * TLS connection information from the socket.
+ */
+int revocation_context_setup(revocation_ctx* rev_ctx, socket_ctx* sock_ctx) {
 
-	if (ctx->crl_clients != NULL) {
-		for (int i = 0; i < ctx->crl_client_cnt; i++) {
-			responder_cleanup(&ctx->crl_clients[i]);
-		}
-		free(ctx->crl_clients);
-		ctx->crl_clients = NULL;
-	}
+    STACK_OF(X509)* certs;
 
-	if (ctx->ocsp_clients != NULL) {
-		for (int i = 0; i < ctx->ocsp_client_cnt; i++) {
-			responder_cleanup(&ctx->ocsp_clients[i]);
-		}
-		free(ctx->ocsp_clients);
-		ctx->ocsp_clients = NULL;
-	}
+    rev_ctx->sock_ctx = sock_ctx;
+    rev_ctx->daemon = sock_ctx->daemon;
+    rev_ctx->id = sock_ctx->id;
+
+    certs = SSL_get_peer_cert_chain(sock_ctx->ssl);
+    if (certs == NULL || sk_X509_num(certs) == 0)
+        return -1;
+
+    rev_ctx->certs = sk_X509_dup(certs);
+    if (rev_ctx->certs == NULL)
+        return -1;
+
+    rev_ctx->store = SSL_CTX_get_cert_store(sock_ctx->ssl_ctx);
+    if (rev_ctx->store == NULL)
+        return -1;
+
+    rev_ctx->total_to_check = sk_X509_num(rev_ctx->certs) - 1;
+    rev_ctx->left_to_check = rev_ctx->total_to_check;
+
+    rev_ctx->responders_at = calloc(rev_ctx->total_to_check, sizeof(int));
+    if (rev_ctx->responders_at == NULL)
+        return -1;
+
+    rev_ctx->crl_responders_at = calloc(rev_ctx->total_to_check, sizeof(int));
+    if (rev_ctx->crl_responders_at == NULL)
+        return -1;
+
+    
+
+    return 0;
 }
 
-void responder_cleanup(responder_ctx* resp) {
+void revocation_context_cleanup(revocation_ctx* rev_ctx) {
 
-	if (resp->bev != NULL) {
-		bufferevent_free(resp->bev);
-		resp->bev = NULL;
-	}
+    if (rev_ctx->responders_at != NULL)
+        free(rev_ctx->responders_at);
+    rev_ctx->responders_at = NULL;
 
-	if (resp->buffer != NULL) {
-		free(resp->buffer);
-		resp->buffer = NULL;
-	}
+    if (rev_ctx->crl_responders_at != NULL)
+        free(rev_ctx->crl_responders_at);
+    rev_ctx->crl_responders_at = NULL;
 
-	if (resp->url != NULL) {
-		free(resp->url);
-		resp->url = NULL;
-	}
+    ocsp_responder* curr = rev_ctx->ocsp_responders;
+    while (curr != NULL) {
+        ocsp_responder* next = curr->next;
+        ocsp_responder_free(curr);
+        curr = next;
+    }
+    rev_ctx->ocsp_responders = NULL;
+
+    if (rev_ctx->certs != NULL)
+        sk_X509_free(rev_ctx->certs);
+    rev_ctx->certs = NULL;
+
+    /* TODO: free CRL responders here too */
+    return;
 }
+
+void ocsp_responder_shutdown(ocsp_responder* resp) {
+
+    if (resp->bev != NULL)
+        bufferevent_free(resp->bev);
+    resp->bev = NULL;
+
+    if (resp->buffer != NULL)
+        free(resp->buffer);
+    resp->buffer = NULL;
+
+    if (resp->url != NULL)
+        free(resp->url);
+    resp->url = NULL;
+
+    if (resp->certid != NULL)
+        OCSP_CERTID_free(resp->certid);
+    resp->certid = NULL;
+
+    return;
+}
+
+void ocsp_responder_free(ocsp_responder* resp) {
+
+    ocsp_responder_shutdown(resp);
+    free(resp);
+}
+
 
 /**
  * Checks the given socket to see if it matches any of the corresponding
@@ -376,6 +463,51 @@ int check_socket_state(socket_ctx* sock_ctx, int num, ...) {
 		return -EOPNOTSUPP;
 	}
 }
+
+SSL_SESSION* get_session_if_reusable(socket_ctx* sock_ctx) {
+
+    SSL_SESSION* session = SSL_get1_session(sock_ctx->ssl);
+
+    if (session == NULL)
+        return NULL;
+
+    if (!SSL_SESSION_is_resumable(session))
+        goto err;
+
+    /* 
+    if (SSL_session_reused(sock_ctx->ssl))
+        goto err;
+    */
+
+    return session;
+err:
+    log_printf(LOG_WARNING, "Session was not reusable. Discarding...\n");
+
+    SSL_SESSION_free(session);
+    return NULL;
+}
+
+void add_session_to_cache(daemon_ctx* daemon, 
+        SSL_SESSION* session, char* hostname) {
+
+    hostname = strdup(hostname);
+    if (hostname == NULL)
+        goto err;
+
+    int ret = str_hashmap_add(daemon->session_cache, hostname, session);
+    if (ret != 0)
+        goto err;
+
+    log_printf(LOG_DEBUG, "Session was cached!\n");
+    return;
+err:
+    log_printf(LOG_DEBUG, "Session not cached...\n");
+    if (session != NULL)
+        SSL_SESSION_free(session);
+    if (hostname != NULL)
+        free(hostname);
+}
+
 
 /**
  * Retrieves an integer port number from a given sockaddr struct.

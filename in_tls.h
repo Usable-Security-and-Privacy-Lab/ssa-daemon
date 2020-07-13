@@ -24,9 +24,16 @@
 #define TLS_PEER_CERTIFICATE_CHAIN        95
 #define TLS_ID                            96
 
-/* added recently--not in kernel */
 #define TLS_TRUSTED_CIPHERS               97
+#define TLS_CHOSEN_CIPHER                 98
 #define TLS_ERROR                        100
+#define TLS_DISABLE_COMPRESSION          101
+
+#define TLS_REVOCATION_CHECKS            102
+#define TLS_OCSP_STAPLED_CHECKS          103
+#define TLS_OCSP_CHECKS                  104 
+#define TLS_CRL_CHECKS                   105 
+#define TLS_CACHE_REVOCATION             106
 
 
 /* TCP options */

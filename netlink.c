@@ -349,7 +349,7 @@ void netlink_error_notify_kernel(daemon_ctx* ctx, unsigned long id) {
 }
 
 void netlink_send_and_notify_kernel(daemon_ctx* ctx,
-		unsigned long id, char* data, unsigned int len) {
+		unsigned long id, const char* data, unsigned int len) {
 	int ret;
 	struct nl_msg* msg;
 	void* msg_head;

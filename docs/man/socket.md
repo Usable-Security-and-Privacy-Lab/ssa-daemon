@@ -9,14 +9,17 @@ socket - create an endpoint for TLS-secured communication
 #include <sys/socket.h>
 #include <in_tls.h>
 
-int socket(int domain, SOCK_STREAM, IPPROTO_TLS);
+int socket(int domain, int type, int protocol);
 ```
 
 ## DESCRIPTION
 
 `socket()` creates a local endpoint for communication, along with an endpoint 
-in the SSA Daemon mirroring the attributes of the local endpoint. It returns
-a file descriptor that refers to the the local endpoint.
+in the SSA Daemon mirroring the attributes of the local endpoint if `protocol` 
+is set as `IPPROTO_TLS`. It returns a file descriptor that refers to the the 
+SSA daemon's local endpoint. Encrypted traffic will run through the daemon, 
+be encrypted or decrypted passively, and sent via plaintext through this 
+channel.
 
 The `domain` argument specifies the protocol family that will be used in 
 communication. Formats currently accepted by the SSA are:
@@ -27,9 +30,9 @@ communication. Formats currently accepted by the SSA are:
  AF_INET6    |   IPv6 Internet Protocols
  AF_HOSTNAME |   Internal Hostname Resolution; Supports IPv4 and IPv6
 
-Note that only TCP-oriented connections are currently supported by the SSA.
-The second argument may include the bitwise OR of any of the following values,
-to modify the behavior of `socket()`:
+Only TCP-oriented connections are currently supported by the SSA, so `type` 
+must be set to `SOCK_STREAM`. It may optionally also include a bitwise OR of 
+any of the following values to modify the behavior of `socket()`:
 
 Type           | Description
 ---------------|---------------------------

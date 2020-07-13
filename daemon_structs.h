@@ -3,6 +3,7 @@
 
 #include <event2/util.h>
 #include <openssl/ssl.h>
+#include <openssl/ocsp.h>
 
 #include "hashmap.h"
 #include "hashmap_str.h"
@@ -47,20 +48,27 @@
 #define turn_on_cached_checks(checks) (checks &= ~NO_CACHED_CHECKS)
 #define has_cached_checks(checks) !(checks & NO_CACHED_CHECKS)
 
-struct channel_st;
+
 struct daemon_ctx_st;
-struct responder_ctx_st;
-struct revocation_ctx_st;
-struct socket_ctx_st;
 struct global_config_st;
 
-typedef struct channel_st channel;
-typedef struct daemon_ctx_st daemon_ctx;
-typedef struct responder_ctx_st responder_ctx;
-typedef struct revocation_ctx_st revocation_ctx;
-typedef struct socket_ctx_st socket_ctx;
-typedef struct global_config_st global_config;
+struct revocation_ctx_st;
+struct crl_responder_st;
+struct ocsp_responder_st;
 
+struct socket_ctx_st;
+struct channel_st;
+
+
+typedef struct global_config_st global_config;
+typedef struct daemon_ctx_st daemon_ctx;
+
+typedef struct revocation_ctx_st revocation_ctx;
+typedef struct crl_responder_st crl_responder;
+typedef struct ocsp_responder_st ocsp_responder;
+
+typedef struct socket_ctx_st socket_ctx;
+typedef struct channel_st channel;
 
 enum socket_state {
 	SOCKET_ERROR = 0,
@@ -100,6 +108,7 @@ struct daemon_ctx_st {
     global_config* settings;
 
 	hsmap_t* revocation_cache;
+    hsmap_t* session_cache;
 };
 
 struct global_config_st {
@@ -140,30 +149,50 @@ typedef struct channel_st {
 } channel;
 
 
+
 struct revocation_ctx_st {
-    enum revocation_state state;
-
-	unsigned int num_rev_checks; /**< How many different types of revocation will be checked */
-	int crl_clients_left;
-
-	responder_ctx* ocsp_clients;
-	unsigned int ocsp_client_cnt;
-	responder_ctx* crl_clients;
-	unsigned int crl_client_cnt;
+    socket_ctx* sock_ctx;
+    daemon_ctx *daemon;
+    unsigned long id;
 
 	unsigned int checks; // bitmap; see defined options above
+
+    int *responders_at;
+    int *crl_responders_at;
+    int total_to_check;
+    int left_to_check;
+
+    ocsp_responder* ocsp_responders;
+    crl_responder* crl_responders;
+
+    X509_STORE* store;
+    STACK_OF(X509)* certs;
 };
 
-struct responder_ctx_st {
-	struct bufferevent* bev;
-	char* url;
+struct ocsp_responder_st {
 
-	unsigned char* buffer; /**< A temporary buffer to store read data */
-	int buf_size;
-	int tot_read;
-	int reading_body;
+    revocation_ctx* rev_ctx;
 
-	socket_ctx* sock_ctx; /**< The parent sock_ctx of ther responder. */
+    struct bufferevent* bev;
+    char* url;
+
+    int cert_position;
+
+    OCSP_CERTID* certid;
+
+    unsigned char* buffer;
+    int buf_size;
+    int tot_read;
+    int is_reading_body;
+
+    ocsp_responder* next;
+};
+
+struct crl_responder_st {
+
+    struct bufferevent* bev;
+
+    crl_responder* next;
 };
  
 
@@ -215,8 +244,11 @@ void socket_shutdown(socket_ctx* sock_ctx);
 void socket_context_free(socket_ctx* sock_ctx);
 void socket_context_erase(socket_ctx* sock_ctx, int port);
 
+int revocation_context_setup(revocation_ctx* ctx, socket_ctx* sock_ctx);
 void revocation_context_cleanup(revocation_ctx* ctx);
-void responder_cleanup(responder_ctx* resp);
+
+void ocsp_responder_shutdown(ocsp_responder* resp);
+void ocsp_responder_free(ocsp_responder* resp);
 
 int check_socket_state(socket_ctx* sock_ctx, int num, ...);
 

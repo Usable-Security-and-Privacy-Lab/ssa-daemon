@@ -28,7 +28,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "hashmap_str.h"
-#define STR_MATCH(s, n) strcmp(s, n) == 0
+#define STR_MATCH(s, n) (strcmp(s, n) == 0)
 
 typedef struct hsnode {
 	struct hsnode* next;
@@ -96,16 +96,20 @@ int str_hashmap_add(hsmap_t* map, char* key, void* value) {
 	int index;
 	hsnode_t* cur;
 	hsnode_t* next;
-	hsnode_t* new_node = (hsnode_t*)malloc(sizeof(hsnode_t));
-	new_node->key = key;
-	new_node->value = value;
-	new_node->next = NULL;
+	hsnode_t* new_node;
+    
+    if (key == NULL)
+        return 1;
 
-	if (key == NULL) {
-		return 1;
-	}
-	
-	index = hash(map, key);
+    new_node = (hsnode_t*)malloc(sizeof(hsnode_t));
+    if (new_node == NULL)
+        return -1;
+
+    new_node->key = key;
+    new_node->value = value;
+    new_node->next = NULL;
+
+    index = hash(map, key);
 	cur = map->buckets[index];
 	next = cur;
 	if (cur == NULL) {
@@ -116,11 +120,11 @@ int str_hashmap_add(hsmap_t* map, char* key, void* value) {
 
 	do {
 		cur = next;
-		if(STR_MATCH(cur->key,key)) {
-			/* Duplicate entry */
-
+		if(STR_MATCH(cur->key,key)) { /* Duplicate entry */
+            free(new_node);
 			return 1;
 		}
+
 		next = cur->next;
 	} while (next != NULL);
 
@@ -134,27 +138,31 @@ int str_hashmap_del(hsmap_t* map, char* key) {
 	hsnode_t* cur;
 	hsnode_t* tmp;
 	index = hash(map, key);
+
 	cur = map->buckets[index];
 	if (cur == NULL) {
 		/* Not found */
 		return 1;
 	}
+
 	if (STR_MATCH(cur->key,key)) {
 		map->buckets[index] = cur->next;
+        free(cur->key);
 		free(cur);
 		map->item_count--;
 		return 0;
 	}
 	while (cur->next != NULL) {
-		if (STR_MATCH(cur->key,key)) {
-			tmp = cur->next;
-			cur->next = cur->next->next;
+        tmp = cur->next;
+
+		if (STR_MATCH(tmp->key,key)) {
+			cur->next = tmp->next;
             free(tmp->key);
 			free(tmp);
 			map->item_count--;
 			return 0;
 		}
-		cur = cur->next;
+		cur = tmp;
 	}
 	/* Not found */
 	return 1;
@@ -178,9 +186,9 @@ void* str_hashmap_get(hsmap_t* map, char* key) {
 		return cur->value;
 	}
 	while (cur->next != NULL) {
-		if (STR_MATCH(cur->next->key,key)) {
+		if (STR_MATCH(cur->next->key, key))
 			return cur->next->value;
-		}
+		
 		cur = cur->next;
 	}
 	return NULL;

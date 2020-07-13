@@ -6,46 +6,41 @@
 
 #include "daemon_structs.h"
 
+#include "ocsp.h"
+#include "crl.h"
 
 
 #define LEEWAY_90_SECS 90
 #define MAX_OCSP_AGE 604800L /* 7 days is pretty standard for OCSP */
 
-
-
-void set_revocation_state(socket_ctx* sock_ctx, enum revocation_state state);
-
-OCSP_CERTID* get_ocsp_certid(SSL* ssl);
-
-int get_ocsp_basicresp(unsigned char* bytes, int len, OCSP_BASICRESP** resp);
+#define MAX_HEADER_SIZE 8192
 
 
 
-char** retrieve_ocsp_urls(X509* cert, int* num_urls);
 
-char** retrieve_crl_urls(X509* cert, int* num_urls);
+void do_cert_chain_revocation_checks(socket_ctx* sock_ctx);
+
+void pass_individual_rev_check(ocsp_responder* ocsp_resp);
+void pass_revocation_checks(revocation_ctx *rev_ctx);
+void fail_revocation_checks(revocation_ctx* rev_ctx);
 
 int parse_url(char* url, char** host_out, int* port_out, char** path_out);
+int is_bad_http_response(char* response);
+int get_http_body_len(char* response);
+int start_reading_body(ocsp_responder* ocsp_resp);
+int done_reading_body(ocsp_responder* ocsp_resp);
 
 
-
-int check_stapled_response(socket_ctx* sock_ctx);
-
+/* stapled response checks */
+int check_ocsp_response(unsigned char* resp_bytes, 
+            int resp_len, revocation_ctx* rev_ctx, OCSP_CERTID* id);
 int verify_ocsp_basicresp(OCSP_BASICRESP* resp, 
 		OCSP_CERTID* id, STACK_OF(X509)* certs, X509_STORE* store);
 
-int do_ocsp_response_checks(unsigned char* resp_bytes,
-		 int resp_len, socket_ctx* sock_ctx);
-
-int do_crl_response_checks(X509_CRL* response, SSL* ssl);
-
-
+/* ocsp cache functions */
 
 char* get_ocsp_id_string(OCSP_CERTID* certid);
-
 int add_to_ocsp_cache(OCSP_CERTID* id, 
 		OCSP_BASICRESP* response, daemon_ctx* daemon);
-
-int check_cached_response(socket_ctx* sock_ctx);
 
 #endif

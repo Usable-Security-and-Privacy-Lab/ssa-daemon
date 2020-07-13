@@ -150,7 +150,7 @@ RUN_TEST(Naver, "naver.com")
 RUN_TEST(AliexPress, "aliexpress.com")
 RUN_TEST(GitHub, "github.com")
 RUN_TEST(Office, "office.com")
-RUN_TEST(AmazonJapan, "amazon.co.jp")
+RUN_TEST(AmazonJapan, "www.amazon.co.jp")
 RUN_TEST(Fandom, "fandom.com")
 RUN_TEST(Imgur, "imgur.com")
 RUN_TEST(Quora, "quora.com")
@@ -199,7 +199,7 @@ RUN_TEST(GoFundMe, "gofundme.com")
 RUN_TEST(USPS, "usps.com")
 RUN_TEST(Breitbart, "breitbart.com")
 RUN_TEST(HP, "hp.com")
-RUN_TEST(CapitalOne, "capitalone.com")
+RUN_TEST(CapitalOne, "www.capitalone.com")
 
 
 

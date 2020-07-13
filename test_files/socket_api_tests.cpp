@@ -21,6 +21,7 @@ extern "C" {
 }
 
 
+
 class SocketAPITests : public testing::Test {
 public:
     struct sockaddr* address;
@@ -49,8 +50,11 @@ public:
         freeaddrinfo(result);
     }
 
+
 private:
     struct addrinfo* result;
+
+
 };
 
 
@@ -74,6 +78,104 @@ void print_socket_error(int fd) {
  *                              TEST CASES
  ******************************************************************************/
 
+TEST_F(SocketAPITests, SocketCreation) {
+
+    int socket_return = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    int socket_errno = errno;
+
+    EXPECT_GT(socket_return, 0);
+    EXPECT_EQ(socket_errno, 0);
+    if (socket_return < 0)
+        fprintf(stderr, "Socket creation failed with errno %i: %s\n", 
+                    errno, strerror(errno));
+    else
+        close(socket_return);
+}
+
+TEST_F(SocketAPITests, SocketWrongDomain) {
+
+    int socket_return = socket(AF_NETLINK, SOCK_STREAM, IPPROTO_TLS);
+
+    EXPECT_EQ(socket_return, -1);
+    /* TODO: test the errno here too */
+    if (socket_return < 0)
+        fprintf(stderr, "Socket creation failed with errno %i: %s\n", 
+                    errno, strerror(errno));
+    else
+        close(socket_return);
+}
+
+TEST_F(SocketAPITests, SocketWrongType) {
+    /* TODO: someday we'll implement DTLS. this should be changed then */
+
+    int socket_return = socket(AF_NETLINK, SOCK_DGRAM, IPPROTO_TLS);
+
+    EXPECT_EQ(socket_return, -1);
+    /* TODO: test the errno here too */
+    if (socket_return < 0)
+        fprintf(stderr, "Socket creation failed with errno %i: %s\n", 
+                    errno, strerror(errno));
+    else
+        close(socket_return);
+}
+
+TEST_F(SocketAPITests, SocketWithNonblockType) {
+
+    int socket_return = socket(AF_INET, 
+                SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TLS);
+    int socket_errno = errno;
+
+    EXPECT_GE(socket_return, 0);
+    EXPECT_EQ(socket_errno, 0);
+    /* TODO: test the errno here too */
+    if (socket_return < 0)
+        fprintf(stderr, "Socket creation failed with errno %i: %s\n", 
+                    errno, strerror(errno));
+    else
+        close(socket_return);
+}
+
+TEST_F(SocketAPITests, ConnectWithNonblockSocket) {
+
+    int socket_return = socket(AF_INET, 
+                SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TLS);
+    int socket_errno = errno;
+
+    if (socket_return < 0)
+        fprintf(stderr, "Socket creation failed with errno %i: %s\n", 
+                    socket_errno, strerror(socket_errno));
+
+    ASSERT_GE(socket_return, 0);
+    EXPECT_EQ(socket_errno, 0);
+    /* TODO: test the errno here too */
+
+
+    int hostname_setsockopt_return = setsockopt(socket_return, 
+                IPPROTO_TLS, TLS_REMOTE_HOSTNAME, HOSTNAME, strlen(HOSTNAME)+1);
+    int hostname_errno = errno;
+
+    if (hostname_setsockopt_return != 0) {
+        fprintf(stderr, "Hostname setsockopt failed with errno %i: %s\n",
+                    hostname_errno, strerror(hostname_errno));
+        close(socket_return);
+    }
+    
+    ASSERT_EQ(hostname_setsockopt_return, 0);
+    EXPECT_EQ(hostname_errno, 0);
+
+    int connect_return = connect(socket_return, address, addrlen);
+    int connect_errno = errno;
+
+    EXPECT_EQ(connect_return, -1);
+    EXPECT_EQ(connect_errno, EINPROGRESS);
+    if (connect_return != -1)
+        fprintf(stderr, "Connect returned 0 (should block)\n");
+    else if (connect_errno != EINPROGRESS)
+        fprintf(stderr, "Connect errno was %i: %s\n", 
+                    connect_errno, strerror(connect_errno));
+
+    close(socket_return);
+}
 
 
 TEST_F(SocketAPITests, DoubleConnectFail) {

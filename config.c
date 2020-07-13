@@ -131,7 +131,6 @@ void log_parser_error(yaml_parser_t parser);
  *     - cipher-2
  *     - cipher-3
  *   tls-compression: off
- *   alpn-protos: on
  * 
  * Would be represented by the following tokens:
  * STREAM_START
@@ -586,7 +585,7 @@ global_config* parse_config(char* file_path) {
     yaml_parser_delete(&parser);
     
     return settings;
- err:
+err:
     log_parser_error(parser);
     yaml_parser_delete(&parser);
 

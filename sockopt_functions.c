@@ -2,6 +2,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -30,7 +31,8 @@ int check_key_cert_pair(socket_ctx* sock_ctx);
  * @param len The string length of the certificate.
  * @returns 0 on success; -errno otherwise.
  */
-int get_peer_certificate(socket_ctx* sock_ctx, char** data, unsigned int* len) {
+int get_peer_certificate(socket_ctx* sock_ctx, 
+            const char** data, unsigned int* len) {
 	X509* cert = NULL;
 	BIO* bio = NULL;
 	char* bio_data = NULL;
@@ -72,7 +74,7 @@ int get_peer_certificate(socket_ctx* sock_ctx, char** data, unsigned int* len) {
 	ret = 0;
 	*data = pem_data;
 	*len = cert_len + 1;
- end:
+end:
 	X509_free(cert);
 	BIO_free(bio);
 	return ret;
@@ -88,7 +90,8 @@ int get_peer_certificate(socket_ctx* sock_ctx, char** data, unsigned int* len) {
  * @param len The length of identity.
  * @returns 0 on success; or -errno if an error occurred.
  */
-int get_peer_identity(socket_ctx* sock_ctx, char** identity, unsigned int* len) {
+int get_peer_identity(socket_ctx* sock_ctx, 
+            const char** identity, unsigned int* len) {
 	
 	X509_NAME* subject_name;
 	X509* cert;
@@ -129,7 +132,7 @@ int get_peer_identity(socket_ctx* sock_ctx, char** identity, unsigned int* len) 
  * @param len The length of hostname (including the null-terminating character).
  * @returns 0 on success, or -errno if an error has occurred.
  */
-int get_hostname(socket_ctx* sock_ctx, char** data, unsigned int* len) {
+int get_hostname(socket_ctx* sock_ctx, const char** data, unsigned int* len) {
 
 	const char* hostname;
 
@@ -140,7 +143,7 @@ int get_hostname(socket_ctx* sock_ctx, char** data, unsigned int* len) {
 		return -EINVAL;
 	}
 
-	*data = (char*)hostname;
+	*data = hostname;
 	*len = strlen(hostname)+1;
 	return 0;
 }
@@ -153,7 +156,8 @@ int get_hostname(socket_ctx* sock_ctx, char** data, unsigned int* len) {
  * This should be freed after use.
  * @returns 0 on success; -errno otherwise.
  */
-int get_enabled_ciphers(socket_ctx* sock_ctx, char** data, unsigned int* len) {
+int get_enabled_ciphers(socket_ctx* sock_ctx, 
+            const char** data, unsigned int* len) {
 	
 	char* ciphers_str = NULL;
 
@@ -176,11 +180,19 @@ int get_enabled_ciphers(socket_ctx* sock_ctx, char** data, unsigned int* len) {
 		log_printf(LOG_ERROR, "Buffer had to be truncated.\n");
 
 	*len = ciphers_len + 1;
- end:
-	log_printf(LOG_DEBUG, "Trusted ciphers:\n%s\n", ciphers_str);
-	log_printf(LOG_DEBUG, "Cipher length: %i\n", *len);
+end:
 	*data = ciphers_str;
 	return 0;
+}
+
+
+const char* get_chosen_cipher(socket_ctx* sock_ctx, unsigned int* len) {
+
+    const char* data = SSL_get_cipher(sock_ctx->ssl);
+
+    *len = strlen(data) + 1;
+
+    return data;
 }
 
 /*
@@ -204,7 +216,7 @@ int set_certificate_chain(socket_ctx* sock_ctx, char* path) {
 
 	ret = stat(path, &file_stats);
 	if (ret != 0) {
-		response = -errno;
+		response = -EINVAL;
 		goto err;
 	}
 
@@ -212,7 +224,7 @@ int set_certificate_chain(socket_ctx* sock_ctx, char* path) {
 		/* is a file */
 		ret = SSL_CTX_use_certificate_chain_file(sock_ctx->ssl_ctx, path);
 		if (ret != 1) {
-			response = -EBADF;
+			response = -ECANCELED;
 			goto err;
 		}
 
@@ -222,16 +234,16 @@ int set_certificate_chain(socket_ctx* sock_ctx, char* path) {
 		 * See man fts for functions needed to do this */
 
 		/* stub */
-		response = -EBADF;
+		response = -EINVAL;
 		goto err;
 	} else {
 		/* could be a link, a socket, etc */
-		response = -EBADF;
+		response = -EINVAL;
 		goto err;
 	}
 
 	return 0;
- err:
+err:
     ssl_err = ERR_get_error();
 
     log_printf(LOG_ERROR, "Failed to load certificate chain: %s\n", 
@@ -295,7 +307,7 @@ int set_private_key(socket_ctx* sock_ctx, char* path) {
 		goto err;
 
 	return 0;
- err:
+err:
 	log_printf(LOG_ERROR, "Failed to set private key: %s\n", 
 			ERR_reason_error_string(ERR_GET_REASON(ERR_peek_error())));
 	set_err_string(sock_ctx, "TLS error: failed to set private key - %s",
@@ -312,14 +324,32 @@ int set_private_key(socket_ctx* sock_ctx, char* path) {
  */
 int set_trusted_CA_certificates(socket_ctx *sock_ctx, char* path) {
 	
-	STACK_OF(X509_NAME)* cert_names = SSL_load_client_CA_file(path);
-	if (cert_names == NULL) {
-		set_err_string(sock_ctx, "TLS error: unable to load CA certificates - %s",
-				ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
-		return -EBADF;
-	}
+    /* TODO: modify this to load client CAs from a folder as well */
+	struct stat file_stats;
+    int ret;
 
-	SSL_CTX_set_client_CA_list(sock_ctx->ssl_ctx, cert_names);
+    if (stat(path, &file_stats) != 0) {
+        set_err_string(sock_ctx, "Error: unable to open specified file");
+		return -EINVAL;
+    }
+	
+	if (S_ISREG(file_stats.st_mode)) { /* is a file */
+		ret = SSL_CTX_load_verify_locations(sock_ctx->ssl_ctx, path, NULL);
+
+    } else if (S_ISDIR(file_stats.st_mode)) { /* is a directory */
+		ret = SSL_CTX_load_verify_locations(sock_ctx->ssl_ctx, NULL, path);
+    
+    } else {
+        set_err_string(sock_ctx, "Error: path is not a file/directory");
+        return -EINVAL;
+    }
+
+    if (ret != 1) {
+        set_err_string(sock_ctx, "TLS error: unable to load CA certificates - %s",
+				ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
+
+        return -ECANCELED;
+    }
 
 	return 0;
 }
@@ -343,7 +373,7 @@ int disable_cipher(socket_ctx* sock_ctx, char* cipher) {
 		goto err;
 
 	return 0;
- err:
+err:
 	set_err_string(sock_ctx, "TLS error: cipher already disabled");
 	return -EINVAL;
 }
@@ -361,6 +391,13 @@ int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, long len) {
     memcpy(sock_ctx->rem_hostname, hostname, len);
 
 	return 0;
+}
+
+
+void set_no_compression(socket_ctx* sock_ctx) {
+
+    int prev_opts = SSL_CTX_get_options(sock_ctx->ssl_ctx);
+    SSL_CTX_set_options(sock_ctx->ssl_ctx, prev_opts | SSL_OP_NO_COMPRESSION);
 }
 
 /*
@@ -432,6 +469,7 @@ int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist) {
 		if (strcmp(name, cipher) == 0) {
 			has_cipher = 1;
 			sk_SSL_CIPHER_delete(cipherlist, i);
+            /* SSL_CIPHER_free(curr_cipher) */;
 		} else {
 			i++;
 		}
@@ -468,7 +506,7 @@ int check_key_cert_pair(socket_ctx* sock_ctx) {
 	}
 
 	return 0;
- err:
+err:
 	return -EPROTO; /* Protocol err--key didn't match or chain didn't build */
 }
 

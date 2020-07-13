@@ -71,14 +71,22 @@ SSL_CTX* SSL_CTX_create(global_config* settings) {
 
 
 	if (!settings->tls_compression)
-		SSL_CTX_set_options(ctx, SSL_CTX_get_options(ctx) 
-                | SSL_OP_NO_COMPRESSION);
+		SSL_CTX_set_options(ctx, 
+                    SSL_CTX_get_options(ctx) | SSL_OP_NO_COMPRESSION);
+    else
+        SSL_CTX_set_options(ctx, 
+                    SSL_CTX_get_options(ctx) & ~SSL_OP_NO_COMPRESSION);
+    
 
-	if (!settings->session_tickets)
-		SSL_CTX_set_options(ctx, SSL_CTX_get_options(ctx) 
-                | SSL_OP_NO_TICKET);
+    if (!settings->session_tickets)
+        SSL_CTX_set_options(ctx, 
+                    SSL_CTX_get_options(ctx) | SSL_OP_NO_TICKET);
+    else
+        SSL_CTX_set_options(ctx,
+                    SSL_CTX_get_options(ctx) & ~SSL_OP_NO_TICKET);
+    
 
-	tls_version = get_tls_version(settings->min_tls_version);
+    tls_version = get_tls_version(settings->min_tls_version);
 	if (SSL_CTX_set_min_proto_version(ctx, tls_version) != 1) 
 		goto err;
 
@@ -128,7 +136,7 @@ SSL_CTX* SSL_CTX_create(global_config* settings) {
 		goto err;
 
 	return ctx;
- err:
+err:
 	if (ERR_peek_error())
 		log_printf(LOG_ERROR, "OpenSSL error initializing client SSL_CTX: %s\n",
 				ERR_error_string(ERR_get_error(), NULL));
@@ -413,7 +421,17 @@ int client_SSL_new(socket_ctx* sock_ctx) {
 	return 0;
 }
 
-
+/**
+ * Allocates and sets the correct settings for the bufferevents of a given 
+ * socket. The socket may be either a connecting client socket (in which case 
+ * the plain_fd must be set to -1) or an `accept()`ed server socket (in which
+ * case the plain_fd must be set to the fd of the socket).
+ * @param sock_ctx The context of the socket to prepare bufferevents for.
+ * @param plain_fd The file descriptor that will be connected internally to
+ * our program.
+ * @returns 0 on success, or a negative errno code on failure. The bufferevents 
+ * and the plain_fd are cleaned up on failure.
+ */
 int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
 
     daemon_ctx* daemon = sock_ctx->daemon;
@@ -480,7 +498,7 @@ int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
     */
 
     return 0;
- err:
+err:
     if (sock_ctx->plain.bev != NULL)
         bufferevent_free(sock_ctx->plain.bev);
     else if (plain_fd != NO_FD)
@@ -495,6 +513,8 @@ int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
 
 int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
 
+    SSL_SESSION* session;
+    daemon_ctx* daemon = sock_ctx->daemon;
     int response;
     int ret;
 
@@ -506,15 +526,10 @@ int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
                     TLSEXT_STATUSTYPE_ocsp);
         if (ret != 1)
             goto err;
-
-        ret = SSL_CTX_set_tlsext_status_arg(sock_ctx->ssl_ctx, (void*) sock_ctx);
-        if (ret != 1)
-            goto err;
-
-        ret = SSL_CTX_set_tlsext_status_cb(sock_ctx->ssl_ctx, revocation_cb);
-        if (ret != 1)
-            goto err;
     }
+
+    /* turn off internal caching--we implement our own */
+    SSL_CTX_set_session_cache_mode(sock_ctx->ssl_ctx, SSL_SESS_CACHE_OFF);
 
     ret = client_SSL_new(sock_ctx);
     if (sock_ctx->ssl == NULL) {
@@ -544,8 +559,24 @@ int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
         }
     }
 
+    session = str_hashmap_get(daemon->session_cache, sock_ctx->rem_hostname);
+    if (session != NULL) {
+        log_printf(LOG_INFO, "Using previously cached session for %s\n", 
+                   sock_ctx->rem_hostname);
+        int ret = str_hashmap_del(daemon->session_cache, sock_ctx->rem_hostname);
+        if (ret != 0)
+            log_printf(LOG_ERROR, "failed to delete cached session...\n");
+
+        if (SSL_SESSION_is_resumable(session))
+            SSL_set_session(sock_ctx->ssl, session); /* could fail */
+        else
+            log_printf(LOG_WARNING, "Cached session not used--insecure settings\n");
+
+        SSL_SESSION_free(session);
+    }
+
     return 0;
- err:
+err:
     if (!has_error_string(sock_ctx))
         response = determine_and_set_error(sock_ctx);
 
@@ -626,7 +657,7 @@ int load_cipher_list(SSL_CTX* ctx, char** list, int num) {
 		goto end;
 	}
 
- end:
+end:
 	free(ciphers);
 	return ret;
 }
@@ -658,7 +689,7 @@ int load_ciphersuites(SSL_CTX* ctx, char** list, int num) {
 		goto end;
 	}
 
- end:
+end:
 	free(ciphers);
 	return ret;
 }
@@ -763,7 +794,6 @@ int load_certificate_authority(SSL_CTX* ctx, char* CA_path) {
 }
 
 
-
 /**
  * Associates the given file descriptor with the given connection and 
  * enables its bufferevent to read and write freely.
@@ -784,7 +814,7 @@ int associate_fd(socket_ctx* sock_ctx, evutil_socket_t ifd) {
 
 	log_printf(LOG_INFO, "plaintext channel bev enabled\n");
 	return 0;
- err:
+err:
 	log_printf(LOG_ERROR, "associate_fd failed.\n");
 	return -ECONNABORTED; /* Only happens while client is connecting */
 }
