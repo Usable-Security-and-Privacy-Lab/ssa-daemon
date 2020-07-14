@@ -534,7 +534,7 @@ void socket_cb(daemon_ctx* daemon, unsigned long id, char* comm) {
 	sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);
 	if (sock_ctx != NULL) {
 		log_printf(LOG_ERROR,
-				"We have created a socket with this ID already: %lu\n", id);
+				"Socket already created with ID %lu\n", id);
 		response = -ECANCELED;
 		sock_ctx = NULL; /* err would try to free sock_ctx otherwise */
 		goto err;
@@ -544,6 +544,7 @@ void socket_cb(daemon_ctx* daemon, unsigned long id, char* comm) {
 	fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
 	if (fd == -1) {
 		response = -errno;
+        log_global_error(LOG_ERROR, "daemon socket creation failed");
 		goto err;
 	}
 	
@@ -860,7 +861,8 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
 		struct sockaddr* rem_addr, int rem_addrlen, int blocking) {
 
 	socket_ctx* sock_ctx;
-	int response = 0, ret;
+	int response = -ECANCELED;
+    int ret;
 
 	sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);
 	if (sock_ctx == NULL) {
@@ -903,28 +905,26 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
 
     ret = bufferevent_socket_connect(sock_ctx->secure.bev, rem_addr, rem_addrlen);
 	if (ret != 0) {
-		response = -EVUTIL_SOCKET_ERROR();
-		set_err_string(sock_ctx, "Internal daemon error: "
-				"Failed to initiate TLS handshake");
+        log_global_error(LOG_ERROR, "Failed to launch connection attempt");
 		goto err;
 	}
 
     ret = hashmap_add(daemon->sock_map_port, get_port(int_addr), sock_ctx);
     if (ret != 0) {
-        response = -errno;
+        log_global_error(LOG_ERROR, "Failed to add socket to daemon's hashmap");
         goto err;
     }
 
     sock_ctx->state = SOCKET_CONNECTING;
 
 	if (!blocking) {
-		log_printf(LOG_INFO, "Nonblocking connect requested\n");
+		log_printf(LOG_INFO, "Nonblocking connect started\n");
 		netlink_notify_kernel(daemon, id, -EINPROGRESS);
 	}
 
 	return;
-err:
 
+err:
     socket_shutdown(sock_ctx);
     sock_ctx->state = SOCKET_ERROR;
 
@@ -966,9 +966,11 @@ void listen_cb(daemon_ctx* daemon, unsigned long id,
 
     netlink_notify_kernel(daemon, id, NOTIFY_SUCCESS);
 	return;
+
 err:
-	log_printf(LOG_ERROR, "listen_cb failed: %s\n", strerror(-response));
-	netlink_notify_kernel(daemon, id, response);
+    log_global_error(LOG_ERROR, "Failed to start listening for connections");
+	
+    netlink_notify_kernel(daemon, id, response);
 
     EVUTIL_CLOSESOCKET(sock_ctx->sockfd);
     sock_ctx->sockfd = -1;
@@ -1065,7 +1067,7 @@ int begin_handling_listener_connections(socket_ctx* sock_ctx) {
 	if (sock_ctx->listener == NULL) {
 		set_err_string(sock_ctx, "Listener setup error: "
 				"failed to allocate buffers within the SSA daemon");
-		return errno;
+		return -ECANCELED;
 	}
 
 	evconnlistener_set_error_cb(sock_ctx->listener, listener_accept_error_cb);

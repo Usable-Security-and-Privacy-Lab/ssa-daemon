@@ -197,7 +197,6 @@ int client_SSL_new(socket_ctx* sock_ctx) {
 int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
 
     daemon_ctx* daemon = sock_ctx->daemon;
-    int response;
     int ret;
 
     enum bufferevent_ssl_state state = (plain_fd == NO_FD)
@@ -210,25 +209,15 @@ int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
 
     sock_ctx->secure.bev = bufferevent_openssl_socket_new(daemon->ev_base,
             sock_ctx->sockfd, sock_ctx->ssl, state, 0);
-    if (sock_ctx->secure.bev == NULL) {
-        log_printf(LOG_ERROR, "Creating OpenSSL bufferevent failed: %i %s\n",
-                EVUTIL_SOCKET_ERROR(), strerror(EVUTIL_SOCKET_ERROR()));
-
-        response = -ENOMEM;
+    if (sock_ctx->secure.bev == NULL)
         goto err;
-    }
 
 	bufferevent_setcb(sock_ctx->secure.bev, common_bev_read_cb,
 			common_bev_write_cb, event_cb, sock_ctx);
 
     ret = bufferevent_enable(sock_ctx->secure.bev, EV_READ | EV_WRITE);
-	if (ret < 0) {
-        log_printf(LOG_ERROR, "Enabling bufferevent failed: %i %s\n",
-                EVUTIL_SOCKET_ERROR(), strerror(EVUTIL_SOCKET_ERROR()));
-
-        response = -ECANCELED;
+	if (ret < 0)
 		goto err;
-	}
 
     /*
 	#if LIBEVENT_VERSION_NUMBER >= 0x02010000
@@ -238,13 +227,8 @@ int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
 
     sock_ctx->plain.bev = bufferevent_socket_new(daemon->ev_base,
 			plain_fd, BEV_OPT_CLOSE_ON_FREE);
-    if (sock_ctx->plain.bev == NULL) {
-        log_printf(LOG_ERROR, "Creating plain bufferevent failed: %i %s\n",
-                EVUTIL_SOCKET_ERROR(), strerror(EVUTIL_SOCKET_ERROR()));
-
-        response = -ENOMEM;
+    if (sock_ctx->plain.bev == NULL)
         goto err;
-    }
 
 	bufferevent_setcb(sock_ctx->plain.bev, common_bev_read_cb,
 			common_bev_write_cb, event_cb, sock_ctx);
@@ -261,6 +245,8 @@ int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
 
     return 0;
 err:
+    log_global_error(LOG_ERROR, "Failed to set up bufferevents for connection");
+
     if (sock_ctx->plain.bev != NULL)
         bufferevent_free(sock_ctx->plain.bev);
     else if (plain_fd != NO_FD)
@@ -269,7 +255,7 @@ err:
     if (sock_ctx->secure.bev != NULL)
         bufferevent_free(sock_ctx->plain.bev);
 
-    return response;
+    return -ECANCELED;
 }
 
 
@@ -277,7 +263,6 @@ int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
 
     SSL_SESSION* session;
     daemon_ctx* daemon = sock_ctx->daemon;
-    int response;
     int ret;
 
     clear_global_and_socket_errors(sock_ctx);
@@ -294,10 +279,9 @@ int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
     SSL_CTX_set_session_cache_mode(sock_ctx->ssl_ctx, SSL_SESS_CACHE_OFF);
 
     ret = client_SSL_new(sock_ctx);
-    if (sock_ctx->ssl == NULL) {
-        response = -ENOMEM;
+    if (sock_ctx->ssl == NULL)
         goto err;
-    }
+    
 
     if (is_client) {
         if (strlen(sock_ctx->rem_hostname) <= 0) {
@@ -323,8 +307,9 @@ int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
 
     session = str_hashmap_get(daemon->session_cache, sock_ctx->rem_hostname);
     if (session != NULL) {
-        log_printf(LOG_INFO, "Using previously cached session for %s\n", 
-                   sock_ctx->rem_hostname);
+        log_printf(LOG_INFO, "Using previously cached session for %s\n",
+                    sock_ctx->rem_hostname);
+
         int ret = str_hashmap_del(daemon->session_cache, sock_ctx->rem_hostname);
         if (ret != 0)
             log_printf(LOG_ERROR, "failed to delete cached session...\n");
@@ -339,13 +324,14 @@ int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
 
     return 0;
 err:
-    if (!has_error_string(sock_ctx))
-        response = determine_and_set_error(sock_ctx);
 
     if (sock_ctx->ssl != NULL)
         SSL_free(sock_ctx->ssl);
 
-    return response;
+    if (has_error_string(sock_ctx))
+        return -EPROTO;
+
+    return -ECANCELED;
 }
 
 

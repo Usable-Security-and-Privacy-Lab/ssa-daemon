@@ -145,23 +145,18 @@ void daemon_context_free(daemon_ctx* daemon) {
  * pointer.
  * @param daemon The daemon_ctx of the running daemon.
  * @param id The ID assigned to the given socket_ctx.
- * @returns 0 on success, or -errno if an error occurred.
+ * @returns 0 on success, or -ECANCELED if an error occurred.
  */
 int socket_context_new(socket_ctx** new_sock_ctx, int fd,  
 		daemon_ctx* daemon, unsigned long id) {
 
-    socket_ctx* sock_ctx = NULL;
-    int response = 0;
-
-	sock_ctx = (socket_ctx*)calloc(1, sizeof(socket_ctx));
+    socket_ctx* sock_ctx = (socket_ctx*)calloc(1, sizeof(socket_ctx));
 	if (sock_ctx == NULL)
-		return -errno;
+		goto err;
 
     sock_ctx->ssl_ctx = SSL_CTX_create(daemon->settings);
-    if (sock_ctx->ssl_ctx == NULL) {
-        response = determine_errno_error();
+    if (sock_ctx->ssl_ctx == NULL)
         goto err;
-    }
 
 	sock_ctx->daemon = daemon;
 	sock_ctx->id = id;
@@ -174,21 +169,20 @@ int socket_context_new(socket_ctx** new_sock_ctx, int fd,
     sock_ctx->rev_ctx.checks = daemon->settings->revocation_checks;
 
     int ret = hashmap_add(daemon->sock_map, id, sock_ctx);
-    if (ret != 0) {
-        response = -errno;
+    if (ret != 0)
         goto err;
-    }
 
     *new_sock_ctx = sock_ctx;
 
 	return 0;
 err:
+    log_global_error(LOG_ERROR, "Socket context failed to be created");
+
     if (sock_ctx != NULL)
         socket_context_free(sock_ctx);
 
     *new_sock_ctx = NULL;
-
-    return response; 
+    return -ECANCELED; 
 }
 
 socket_ctx* accepting_socket_ctx_new(socket_ctx* listener_ctx, int fd) {

@@ -153,6 +153,22 @@ void set_err_string(socket_ctx* sock_ctx, char* string, ...) {
 
 
 
+void log_global_error(enum log_level level, char *message) {
+
+    char *error_string;
+
+    if (errno != 0)
+        error_string = strerror(errno);
+    else
+        error_string = ERR_reason_string(ERR_get_error());
+
+    log_printf(level, "%s: %s\n", message, error_string);
+
+    clear_global_errors();
+}
+
+
+
 /**
  * Clears the OpenSSL error queue and any error recorded in errno.
  */
