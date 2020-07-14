@@ -40,17 +40,16 @@ SOCK_NONBLOCK  | Set the O_NONBLOCK file status flag on the open file descriptio
 SOCK_CLOEXEC   | Set the close-on-exec (FD_CLOEXEC) flag on the new file descriptor.  See the description of the O_CLOEXEC flag in open(2) for reasons why this may be useful.
 
 ## RETURN VALUE
-
 On success, a file descriptor for the new socket is returned.  On error, -1 
 is returned, and errno is set appropriately.
 
 ## ERRORS
+The following errors are specific to sockets created using IPPROTO_TLS:
 
   Errno Code   |   Description
   -------------|---------------
-  `ENOMEM`     | Insuffient memory available for alloctions within the SSA daemon.
   `ECANCELED`  | The given operation was not able to be completed by the SSA daemon. Look into the logs of the SSA daemon for more information.
-  other errors | Consult the POSIX man page for `socket()`.
-## NOTES
+  other errors | Consult the POSIX man page for `socket()`. The error returned may apply to either the socket created by the daemon or the socket created within the application--if the error is internal to the daemon's socket then a log message will be reported.
 
+## NOTES
 TODO: Add information about the AF_HOSTNAME sockaddr struct and whatnot
