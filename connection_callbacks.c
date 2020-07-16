@@ -214,7 +214,7 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
                         "TLS handshake error %li on incoming connection: %s",
 						ssl_err, X509_verify_cert_error_string(ssl_err));
 
-            hashmap_del(sock_ctx->daemon->sock_map_port, sock_ctx->accept_port);
+            hashmap_del(sock_ctx->daemon->sock_map_port, sock_ctx->local_port);
 			socket_context_free(sock_ctx);
         }
 	}
@@ -291,7 +291,7 @@ void handle_server_event_connected(socket_ctx* sock_ctx, channel* startpoint) {
 err:
     log_printf(LOG_DEBUG, "Erasing connection completely\n");
 	
-    hashmap_del(sock_ctx->daemon->sock_map_port, sock_ctx->accept_port);
+    hashmap_del(sock_ctx->daemon->sock_map_port, sock_ctx->local_port);
 	socket_shutdown(sock_ctx);
 	socket_context_free(sock_ctx);
 }

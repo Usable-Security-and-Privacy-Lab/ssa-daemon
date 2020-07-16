@@ -325,12 +325,16 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 		goto err;
 
 	hashmap_del(daemon->sock_map_port, port);
+    sock_ctx->local_port = 0;
+
 	sock_ctx->state = SOCKET_CONNECTED;
 
 	return;
 err:
 	if (sock_ctx != NULL) {
 		hashmap_del(daemon->sock_map_port, port);
+        sock_ctx->local_port = 0;
+
 		socket_shutdown(sock_ctx);
 		sock_ctx->state = SOCKET_ERROR;
 	}
@@ -437,9 +441,9 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
     if (ret != 0)
         goto err;
 
-    new_ctx->accept_port = get_port((struct sockaddr*) &int_addr);
+    new_ctx->local_port = get_port((struct sockaddr*) &int_addr);
     ret = hashmap_add(daemon->sock_map_port, 
-                new_ctx->accept_port, (void*) new_ctx);
+                new_ctx->local_port, (void*) new_ctx);
     if (ret != 0)
         goto err;
 
@@ -882,6 +886,7 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
 
 	socket_ctx* sock_ctx;
 	int response = -ECANCELED;
+    int port;
     int ret;
 
 	sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);
@@ -929,7 +934,9 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
 		goto err;
 	}
 
-    ret = hashmap_add(daemon->sock_map_port, get_port(int_addr), sock_ctx);
+    sock_ctx->local_port = get_port(int_addr);
+
+    ret = hashmap_add(daemon->sock_map_port, sock_ctx->local_port, sock_ctx);
     if (ret != 0) {
         log_global_error(LOG_ERROR, "Failed to add socket to daemon's hashmap");
         goto err;
@@ -1025,6 +1032,7 @@ void associate_cb(daemon_ctx* daemon, unsigned long id,
 	}
 
 	hashmap_del(daemon->sock_map_port, port);
+    sock_ctx->local_port = 0;
 
 	if (sock_ctx->state != SOCKET_CONNECTING)
 		goto err;
@@ -1069,6 +1077,9 @@ void close_cb(daemon_ctx* daemon_ctx, unsigned long id) {
 	default:
 		break;
 	}
+
+    if (sock_ctx->local_port != 0)
+        hashmap_del(daemon_ctx->sock_map_port, sock_ctx->local_port);
 
 	socket_context_free(sock_ctx);
 	hashmap_del(daemon_ctx->sock_map, id);

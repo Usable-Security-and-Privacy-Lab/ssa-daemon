@@ -232,7 +232,7 @@ struct socket_ctx_st {
 		int ext_addrlen;
 		int rem_addrlen;
 	};
-    int accept_port;
+    int local_port;
 
 	char rem_hostname[MAX_HOSTNAME+1];
 
