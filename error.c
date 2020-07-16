@@ -116,7 +116,7 @@ int set_socket_error(socket_ctx* sock_ctx, unsigned long ssl_err) {
 
     set_err_string(sock_ctx, "Internal daemon error: check logs for details");
     log_printf(LOG_ERROR, "Internal daemon error during handshake: %s\n", 
-                ERR_error_string(ssl_err, NULL));
+                reason_str);
 
 
     if (sock_ctx->state == SOCKET_CONNECTING 
