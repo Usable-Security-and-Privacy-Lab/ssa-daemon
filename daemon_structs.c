@@ -153,16 +153,16 @@ int socket_context_new(socket_ctx** new_sock_ctx, int fd,
 		daemon_ctx* daemon, unsigned long id) {
 
     socket_ctx* sock_ctx = (socket_ctx*)calloc(1, sizeof(socket_ctx));
-	if (sock_ctx == NULL)
-		goto err;
+    if (sock_ctx == NULL)
+        goto err;
 
     sock_ctx->ssl_ctx = SSL_CTX_create(daemon->settings);
     if (sock_ctx->ssl_ctx == NULL)
         goto err;
 
-	sock_ctx->daemon = daemon;
-	sock_ctx->id = id;
-	sock_ctx->sockfd = fd;
+    sock_ctx->daemon = daemon;
+    sock_ctx->id = id;
+    sock_ctx->sockfd = fd;
     sock_ctx->state = SOCKET_NEW;
     sock_ctx->rev_ctx.daemon = daemon;
     sock_ctx->rev_ctx.id = id;
@@ -176,7 +176,7 @@ int socket_context_new(socket_ctx** new_sock_ctx, int fd,
 
     *new_sock_ctx = sock_ctx;
 
-	return 0;
+    return 0;
 err:
     log_global_error(LOG_ERROR, "Socket context failed to be created");
 
@@ -195,10 +195,10 @@ socket_ctx* accepting_socket_ctx_new(socket_ctx* listener_ctx, int fd) {
 
     sock_ctx = (socket_ctx*)calloc(1, sizeof(socket_ctx));
 	if (sock_ctx == NULL)
-		return NULL;
+        return NULL;
 
-	sock_ctx->daemon = daemon;
-	sock_ctx->sockfd = fd; /* standard to show not connected */
+    sock_ctx->daemon = daemon;
+    sock_ctx->sockfd = fd; /* standard to show not connected */
     sock_ctx->state = SOCKET_CONNECTING;
 
     ret = SSL_CTX_up_ref(listener_ctx->ssl_ctx);
@@ -228,29 +228,29 @@ void socket_shutdown(socket_ctx* sock_ctx) {
 
     revocation_context_cleanup(&sock_ctx->rev_ctx);
 
-	if (sock_ctx->ssl != NULL) {
-		switch (sock_ctx->state) {
-		case SOCKET_CONNECTED:
+    if (sock_ctx->ssl != NULL) {
+        switch (sock_ctx->state) {
+        case SOCKET_CONNECTED:
         case SOCKET_FINISHING_CONN:
         case SOCKET_ACCEPTED:
-			SSL_shutdown(sock_ctx->ssl);
-			break;
-		default:
-			break;
-		}
+            SSL_shutdown(sock_ctx->ssl);
+            break;
+        default:
+            break;
+        }
 
-		SSL_free(sock_ctx->ssl);
-	}
+        SSL_free(sock_ctx->ssl);
+    }
 
-	sock_ctx->ssl = NULL;
+    sock_ctx->ssl = NULL;
 
-	if (sock_ctx->listener != NULL) 
-		evconnlistener_free(sock_ctx->listener);
+    if (sock_ctx->listener != NULL) 
+        evconnlistener_free(sock_ctx->listener);
     sock_ctx->listener = NULL;
 
-	if (sock_ctx->secure.bev != NULL)
-		bufferevent_free(sock_ctx->secure.bev);
-	sock_ctx->secure.bev = NULL;
+    if (sock_ctx->secure.bev != NULL)
+        bufferevent_free(sock_ctx->secure.bev);
+    sock_ctx->secure.bev = NULL;
 	sock_ctx->secure.closed = 1;
 	
 	if (sock_ctx->plain.bev != NULL)

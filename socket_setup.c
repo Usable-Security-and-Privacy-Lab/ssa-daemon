@@ -212,7 +212,7 @@ int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
     if (sock_ctx->secure.bev == NULL)
         goto err;
 
-	bufferevent_setcb(sock_ctx->secure.bev, common_bev_read_cb,
+    bufferevent_setcb(sock_ctx->secure.bev, common_bev_read_cb,
 			common_bev_write_cb, event_cb, sock_ctx);
 
     ret = bufferevent_enable(sock_ctx->secure.bev, EV_READ | EV_WRITE);
@@ -230,8 +230,8 @@ int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
     if (sock_ctx->plain.bev == NULL)
         goto err;
 
-	bufferevent_setcb(sock_ctx->plain.bev, common_bev_read_cb,
-			common_bev_write_cb, event_cb, sock_ctx);
+    bufferevent_setcb(sock_ctx->plain.bev, common_bev_read_cb,
+            common_bev_write_cb, event_cb, sock_ctx);
 
 
     /*
@@ -261,7 +261,6 @@ err:
 
 int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
 
-    daemon_ctx* daemon = sock_ctx->daemon;
     int ret;
 
     clear_global_and_socket_errors(sock_ctx);
