@@ -66,7 +66,6 @@ SSL_CTX* SSL_CTX_create(global_config* settings) {
 
 	SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
 
-
 	if (!settings->tls_compression)
 		SSL_CTX_set_options(ctx, 
                     SSL_CTX_get_options(ctx) | SSL_OP_NO_COMPRESSION);
@@ -159,6 +158,7 @@ err:
 	
 	if (ctx != NULL)
 		SSL_CTX_free(ctx);
+
     return NULL;
 }
 
@@ -261,7 +261,6 @@ err:
 
 int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
 
-    SSL_SESSION* session;
     daemon_ctx* daemon = sock_ctx->daemon;
     int ret;
 
@@ -273,10 +272,12 @@ int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
                     TLSEXT_STATUSTYPE_ocsp);
         if (ret != 1)
             goto err;
-    }
+    } else {
 
-    /* turn off internal caching--we implement our own */
-    SSL_CTX_set_session_cache_mode(sock_ctx->ssl_ctx, SSL_SESS_CACHE_OFF);
+        ret = SSL_CTX_set_tlsext_status_type(sock_ctx->ssl_ctx, 0);
+        if (ret != 1)
+            goto err;
+    }
 
     ret = client_SSL_new(sock_ctx);
     if (sock_ctx->ssl == NULL)
@@ -303,23 +304,6 @@ int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
                     "couldn't assign the socket's hostname for validation\n");
             goto err;
         }
-    }
-
-    session = str_hashmap_get(daemon->session_cache, sock_ctx->rem_hostname);
-    if (session != NULL) {
-        log_printf(LOG_INFO, "Using previously cached session for %s\n",
-                    sock_ctx->rem_hostname);
-
-        int ret = str_hashmap_del(daemon->session_cache, sock_ctx->rem_hostname);
-        if (ret != 0)
-            log_printf(LOG_ERROR, "failed to delete cached session...\n");
-
-        if (SSL_SESSION_is_resumable(session))
-            SSL_set_session(sock_ctx->ssl, session); /* could fail */
-        else
-            log_printf(LOG_WARNING, "Cached session not used--insecure settings\n");
-
-        SSL_SESSION_free(session);
     }
 
     return 0;

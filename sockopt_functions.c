@@ -11,6 +11,9 @@
 #include "log.h"
 #include "sockopt_functions.h"
 
+/*
+#define MAX_SSA_CONTEXTS 500
+*/
 
 int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len);
 int get_ciphers_strlen(STACK_OF(SSL_CIPHER)* ciphers);
@@ -187,11 +190,60 @@ end:
 const char* get_chosen_cipher(socket_ctx* sock_ctx, unsigned int* len) {
 
     const char* data = SSL_get_cipher(sock_ctx->ssl);
-
     *len = strlen(data) + 1;
 
     return data;
 }
+
+/*
+int get_tls_context(socket_ctx* sock_ctx, const char** data, int* len) {
+
+    SSL_CTX* ssl_ctx = sock_ctx->ssl_ctx;
+    hsmap_t* session_hashmap = NULL;
+    unsigned long key;
+    int response;
+    int ret;
+
+    *data = NULL;
+
+    if (*len != sizeof(SSL_CTX*))
+        return -EINVAL;
+
+    key = (unsigned long) ssl_ctx;
+
+    SSL_CTX_sess_set_new_cb(ssl_ctx)
+
+    ret = hashmap_add(sock_ctx->daemon->ssl_ctx_cache, key, ssl_ctx);
+    if (ret == 0) { 
+        session_hashmap = str_hashmap_create(SESSION_CACHE_NUM_BUCKETS);
+        if (session_hashmap == NULL)
+            goto err;
+
+        ret = SSL_CTX_set_ex_data(ssl_ctx, 
+                    SESSION_CACHE_INDEX, session_hashmap);
+        if (ret != 1)
+            goto err;
+
+        SSL_CTX_up_ref(ssl_ctx);
+    }
+
+    *data = malloc(sizeof(SSL_CTX*));
+    if (*data == NULL)
+        goto err;
+
+    memcpy(*data, &ssl_ctx, sizeof(SSL_CTX*));
+
+    return 0;
+err:
+    if (*data != NULL)
+        free(*data);
+
+    if (session_hashmap != NULL)
+        str_hashmap_deep_free(session_hashmap, SSL_SESSION_free);
+
+    return -ECANCELED;
+}
+*/
 
 /*
  *******************************************************************************
@@ -398,6 +450,28 @@ void set_no_compression(socket_ctx* sock_ctx) {
 }
 
 /*
+int set_tls_context(socket_ctx* sock_ctx, char* data, long len) {
+
+    unsigned long id;
+    int ret;
+
+    if (len != sizeof(SSL_CTX*))
+        return -EINVAL;
+
+    memcpy(id, data, sizeof(unsigned long));
+
+    SSL_CTX* new_ctx = (void*) hashmap_get(sock_ctx->daemon->ssl_ctx_cache, id);
+    if (new_ctx == NULL)
+        return -EINVAL;
+
+    SSL_CTX_free(sock_ctx->ssl_ctx);
+    sock_ctx->ssl_ctx = new_ctx;
+    
+    return 0;
+}
+*/
+
+/*
  *******************************************************************************
  *                             HELPER FUNCTIONS
  *******************************************************************************
@@ -506,5 +580,34 @@ int check_key_cert_pair(socket_ctx* sock_ctx) {
 err:
 	return -EPROTO; /* Protocol err--key didn't match or chain didn't build */
 }
+
+/*
+int new_session_cb(SSL* ssl, SSL_SESSION* session) {
+
+    hsmap_t* session_cache;
+    SSL_CTX* ctx;
+    int ret;
+        
+    ctx = SSL_get_SSL_CTX(ssl);
+    if (ctx == NULL)
+        return 0;
+
+    session_cache = (hsmap_t*) SSL_CTX_get_ex_data(ctx, SESSION_CACHE_INDEX);
+    if (session_cache == NULL)
+        return 0;
+
+    ret = str_hashmap_add(session_cache, )
+    if (ret != 0)
+        return 0;
+
+
+}
+
+int remove_session_cb(SSL* ssl, SSL_SESSION* session) {
+
+}
+
+*/
+
 
 

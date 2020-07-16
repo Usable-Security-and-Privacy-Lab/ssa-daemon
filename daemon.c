@@ -649,6 +649,15 @@ void setsockopt_cb(daemon_ctx* ctx, unsigned long id, int level,
         turn_on_cached_checks(sock_ctx->rev_ctx.checks);
         break;
 
+/*
+    case TLS_CONTEXT:
+        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+            break;
+        else
+            response = set_tls_context(sock_ctx, (char*) value, len);
+        break;
+*/
+
 	case TLS_ERROR:
 	case TLS_HOSTNAME:
 	case TLS_TRUSTED_CIPHERS:
@@ -717,7 +726,7 @@ void getsockopt_cb(daemon_ctx* daemon,
 		break;
 
 	case TLS_PEER_IDENTITY:
-		if ((response = check_socket_state(sock_ctx, 2, 
+		if ((response = check_socket_state(sock_ctx, 2,
 				SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
 			break;
 
@@ -744,9 +753,22 @@ void getsockopt_cb(daemon_ctx* daemon,
         if ((response = check_socket_state(sock_ctx, 2, 
                     SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
             break;
-        
+
         data = get_chosen_cipher(sock_ctx, &len);
         break;
+
+/*
+    case TLS_CONTEXT:
+        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0);
+        else
+            response = get_tls_context(sock_ctx, &data, &len);
+
+        if (response == 0)
+            need_free = 1;
+        break;
+    
+    case TLS_CONTEXT_FREE:
+*/
 
 	case TLS_TRUSTED_PEER_CERTIFICATES:
 	case TLS_PRIVATE_KEY:

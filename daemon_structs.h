@@ -1,12 +1,19 @@
 #ifndef SSA_DAEMON_STRUCTS_H
 #define SSA_DAEMON_STRUCTS_H
 
+
+
 #include <event2/util.h>
 #include <openssl/ssl.h>
 #include <openssl/ocsp.h>
 
 #include "hashmap.h"
 #include "hashmap_str.h"
+
+/*
+#define SESSION_CACHE_INDEX 1
+#define SESSION_CACHE_NUM_BUCKETS 255
+*/
 
 #define ID_NOT_SET 0 /* for connection and sock_context id */
 #define MAX_ERR_STRING 128
@@ -108,7 +115,9 @@ struct daemon_ctx_st {
     global_config* settings;
 
 	hsmap_t* revocation_cache;
-    hsmap_t* session_cache;
+    /*
+    hsmap_t* ssl_ctx_cache;
+    */
 };
 
 struct global_config_st {
@@ -224,7 +233,6 @@ struct socket_ctx_st {
 		int rem_addrlen;
 	};
     int accept_port;
-
 
 	char rem_hostname[MAX_HOSTNAME+1];
 

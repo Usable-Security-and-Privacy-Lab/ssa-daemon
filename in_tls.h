@@ -31,10 +31,14 @@
 
 #define TLS_REVOCATION_CHECKS            102
 #define TLS_OCSP_STAPLED_CHECKS          103
-#define TLS_OCSP_CHECKS                  104 
-#define TLS_CRL_CHECKS                   105 
+#define TLS_OCSP_CHECKS                  104
+#define TLS_CRL_CHECKS                   105
 #define TLS_CACHE_REVOCATION             106
 
+/*
+#define TLS_CONTEXT                      107
+#define TLS_CONTEXT_FREE                 108
+*/
 
 /* TCP options */
 #define TCP_UPGRADE_TLS         33
@@ -42,8 +46,22 @@
 /* Address types */
 #define AF_HOSTNAME     43
 
+
+/** 
+ * The SSA_context can be utilized to use the same settings across multiple
+ * connections and take full advantage of client-side session caching. It can
+ * be retrieved from an SSL connection via the TLS_CONTEXT getsockopt function,
+ * and can be inserted into a connection via the TLS_CONTEXT setsockopt function
+ * to effectively set all the settings applied to the previous connection. Note
+ * that hostnames are not saved within the context--those need to be set for
+ * individual connections.
+ */
+/*
+typedef void* SSA_context;
+*/
+
 struct host_addr {
-        unsigned char name[255]; /* max hostname size in lunux */
+        unsigned char name[255]; /* max hostname size in linux */
 };
 
 struct sockaddr_host {

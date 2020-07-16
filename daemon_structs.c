@@ -18,10 +18,6 @@
 #define HASHMAP_NUM_BUCKETS	100
 #define CACHE_NUM_BUCKETS 20
 
-SSL_SESSION* get_session_if_reusable(socket_ctx* sock_ctx);
-void add_session_to_cache(daemon_ctx* daemon, 
-            SSL_SESSION* session, char* hostname);
-
 /**
  * Creates a new daemon_ctx to be used throughout the life cycle
  * of a given SSA daemon. This context holds the netlink connection,
@@ -69,9 +65,11 @@ daemon_ctx* daemon_context_new(char* config_path, int port) {
 	if (daemon->revocation_cache == NULL)
 		goto err;
 
-    daemon->session_cache = str_hashmap_create(HASHMAP_NUM_BUCKETS);
-	if (daemon->session_cache == NULL)
+    /*
+	daemon->ssl_ctx_cache = str_hashmap_create(HASHMAP_NUM_BUCKETS);
+	if (daemon->revocation_cache == NULL)
 		goto err;
+     */
 
 	daemon->settings = parse_config(config_path);
 	if (daemon->settings == NULL)
@@ -114,11 +112,13 @@ void daemon_context_free(daemon_ctx* daemon) {
 
     if (daemon->revocation_cache != NULL)
         str_hashmap_deep_free(daemon->revocation_cache,
-                (void (*)(void*)) OCSP_BASICRESP_free);
-
-    if (daemon->session_cache != NULL)
-        str_hashmap_deep_free(daemon->session_cache,
-                (void (*)(void*)) SSL_SESSION_free);
+                    (void (*)(void*)) OCSP_BASICRESP_free);
+    
+    /*
+    if (daemon->ssl_ctx_cache != NULL)
+        str_hashmap_deep_free(daemon->ssl_ctx_cache,
+                    (void (*)(void*)) SSL_CTX_free);
+     */
 
     if (daemon->settings != NULL)
         global_settings_free(daemon->settings);
@@ -130,13 +130,15 @@ void daemon_context_free(daemon_ctx* daemon) {
         hashmap_free(daemon->sock_map_port);
 
     if (daemon->sock_map != NULL)
-        hashmap_deep_free(daemon->sock_map, (void (*)(void*))socket_context_free);
+        hashmap_deep_free(daemon->sock_map, 
+                    (void (*)(void*))socket_context_free);
 
     if (daemon->ev_base != NULL)
         event_base_free(daemon->ev_base);
 
     free(daemon);
 }
+
 
 
 /**
@@ -236,16 +238,6 @@ void socket_shutdown(socket_ctx* sock_ctx) {
 		default:
 			break;
 		}
-
-        if (sock_ctx->state == SOCKET_CONNECTED) {
-            SSL_SESSION* session = get_session_if_reusable(sock_ctx);
-            if (session != NULL)
-                add_session_to_cache(sock_ctx->daemon, 
-                            session, sock_ctx->rem_hostname);
-            else
-                log_printf(LOG_ERROR, "Session wasn't reusable at conn end\n");
-            
-        }
 
 		SSL_free(sock_ctx->ssl);
 	}
@@ -455,50 +447,6 @@ int check_socket_state(socket_ctx* sock_ctx, int num, ...) {
 		set_wrong_state_err_string(sock_ctx);
 		return -EOPNOTSUPP;
 	}
-}
-
-SSL_SESSION* get_session_if_reusable(socket_ctx* sock_ctx) {
-
-    SSL_SESSION* session = SSL_get1_session(sock_ctx->ssl);
-
-    if (session == NULL)
-        return NULL;
-
-    if (!SSL_SESSION_is_resumable(session))
-        goto err;
-
-    /* 
-    if (SSL_session_reused(sock_ctx->ssl))
-        goto err;
-    */
-
-    return session;
-err:
-    log_printf(LOG_WARNING, "Session was not reusable. Discarding...\n");
-
-    SSL_SESSION_free(session);
-    return NULL;
-}
-
-void add_session_to_cache(daemon_ctx* daemon, 
-        SSL_SESSION* session, char* hostname) {
-
-    hostname = strdup(hostname);
-    if (hostname == NULL)
-        goto err;
-
-    int ret = str_hashmap_add(daemon->session_cache, hostname, session);
-    if (ret != 0)
-        goto err;
-
-    log_printf(LOG_DEBUG, "Session was cached!\n");
-    return;
-err:
-    log_printf(LOG_DEBUG, "Session not cached...\n");
-    if (session != NULL)
-        SSL_SESSION_free(session);
-    if (hostname != NULL)
-        free(hostname);
 }
 
 
