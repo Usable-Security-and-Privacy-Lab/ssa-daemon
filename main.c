@@ -55,6 +55,7 @@ int main(int argc, char* argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
+    /* TODO: fork/execve here to make it a true daemon... */
     int ret = run_daemon(PORT, config_path);
 
     log_close();
