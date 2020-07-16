@@ -91,6 +91,8 @@ RUN_TEST(Paypal, "paypal.com")
 RUN_TEST(IMDB, "imdb.com")
 RUN_TEST(Blogspot, "blogspot.com")
 RUN_TEST(Ask, "ask.com")
+
+/*
 RUN_TEST(About, "about.com")
 RUN_TEST(Reddit, "reddit.com")
 RUN_TEST(Pandora, "pandora.com")
@@ -201,7 +203,7 @@ RUN_TEST(Breitbart, "breitbart.com")
 RUN_TEST(HP, "hp.com")
 RUN_TEST(CapitalOne, "www.capitalone.com")
 
-
+*/
 
 
 
