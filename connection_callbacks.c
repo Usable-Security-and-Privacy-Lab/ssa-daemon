@@ -1,6 +1,8 @@
 #include <event2/buffer.h>
 #include <event2/bufferevent_ssl.h>
 #include <event2/event.h>
+
+#include <openssl/err.h>
 #include <openssl/ocsp.h>
 
 #include "connection_callbacks.h"
@@ -178,7 +180,7 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 
 	socket_ctx* sock_ctx = (socket_ctx*) arg;
     int is_secure_channel = (bev == sock_ctx->secure.bev) ? 1 : 0;
-	int bev_error = EVUTIL_SOCKET_ERROR();
+	int bev_error = ERR_get_error();
 	
 	channel* endpoint = (is_secure_channel) ? &sock_ctx->plain : &sock_ctx->secure;
 	channel* startpoint = (is_secure_channel) ? &sock_ctx->secure : &sock_ctx->plain;
@@ -244,8 +246,10 @@ void handle_client_event_connected(socket_ctx* sock_ctx,
 		return;
 	}
 
+    /*
 	log_printf(LOG_INFO, "Encrypted endpoint connection negotiated with %s\n", 
 			SSL_get_version(sock_ctx->ssl));
+     */
 
 	/* BUG: return value of this function never checked */
 	bufferevent_set_timeouts(sock_ctx->secure.bev, NULL, NULL);
@@ -301,7 +305,7 @@ err:
 void handle_event_error(socket_ctx* sock_ctx, 
 		int error, channel* startpoint, channel* endpoint) {
 
-	log_printf(LOG_DEBUG, "%s endpoint encountered an error\n", 
+	log_printf(LOG_WARNING, "%s endpoint encountered an error\n", 
 			startpoint->bev == sock_ctx->secure.bev 
 			? "encrypted" : "plaintext");
 	
@@ -311,7 +315,7 @@ void handle_event_error(socket_ctx* sock_ctx,
 	} else if (error != 0) {
 		log_printf(LOG_WARNING, "Unhandled error %i has occurred: %s\n", 
 				error, evutil_socket_error_to_string(error));
-	}
+    }
 
 	startpoint->closed = 1;
 
@@ -328,8 +332,10 @@ void handle_event_error(socket_ctx* sock_ctx,
 void handle_event_eof(socket_ctx* sock_ctx, 
 		channel* startpoint, channel* endpoint) {
 
-	log_printf(LOG_DEBUG, "%s endpoint got EOF\n", 
+    /*
+	log_printf(LOG_DEBUG, "%s channel got EOF\n", 
 				startpoint->bev == sock_ctx->secure.bev ? "encrypted":"plaintext");
+     */
 
 	// BUG: when the remote server closes first, this prematurely terminates connections
 	// try msn.com and see
@@ -337,15 +343,14 @@ void handle_event_eof(socket_ctx* sock_ctx,
 		endpoint->closed = 1;
 	
 	else if (endpoint->closed == 0) {
-		log_printf(LOG_DEBUG, "Other endpoint not yet closed.\n");
-		if (evbuffer_get_length(bufferevent_get_input(startpoint->bev)) > 0) {
-			log_printf(LOG_DEBUG, "Startpoint buffer size greater than 0.\n");
+        /*
+		log_printf(LOG_DEBUG, "Other channel not yet closed.\n");
+         */
+		if (evbuffer_get_length(bufferevent_get_input(startpoint->bev)) > 0)
 			common_bev_read_cb(endpoint->bev, sock_ctx);
-		}
-		if (evbuffer_get_length(bufferevent_get_output(endpoint->bev)) == 0) {
-			log_printf(LOG_DEBUG, "Startpoint buffer now is 0 size.\n");
+		
+		if (evbuffer_get_length(bufferevent_get_output(endpoint->bev)) == 0)
 			endpoint->closed = 1;
-		}
 	}
 
 	startpoint->closed = 1;
