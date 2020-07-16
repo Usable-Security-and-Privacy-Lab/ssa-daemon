@@ -184,14 +184,16 @@ int handle_netlink_msg(struct nl_msg* msg, void* arg) {
         gnlh = (struct genlmsghdr*)nlmsg_data(nlh);
         int ret = genlmsg_parse(nlh, 0, attrs, SSA_NL_A_MAX, ssa_nl_policy);
 		if (ret != 0) {
-			log_printf(LOG_ERROR, "Couldn't parse message. Error:%i\n", ret);
+			log_printf(LOG_ERROR, "Couldn't parse message. Error: %i\n", ret);
 			return 0;
 		}
 
         switch (gnlh->cmd) {
 		case SSA_NL_C_SOCKET_NOTIFY:
 			id = nla_get_u64(attrs[SSA_NL_A_ID]);
+            /*
 			log_printf(LOG_INFO, "Received socket notification for socket ID %lu\n", id);
+             */
 			commlen = nla_len(attrs[SSA_NL_A_COMM]);
 			memcpy(comm, nla_data(attrs[SSA_NL_A_COMM]), commlen);
 			socket_cb(ctx, id, comm);

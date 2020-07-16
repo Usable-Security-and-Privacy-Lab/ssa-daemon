@@ -439,6 +439,8 @@ int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, long len) {
 
     memcpy(sock_ctx->rem_hostname, hostname, len);
 
+    log_printf(LOG_INFO, "Hostname set to %s\n", sock_ctx->rem_hostname);
+
 	return 0;
 }
 

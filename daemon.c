@@ -320,8 +320,6 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
 		goto err;
 	}
 
-	log_printf_addr(&sock_ctx->rem_addr);
-
 	ret = associate_fd(sock_ctx, fd);
 	if (ret < 0)
 		goto err;
@@ -552,7 +550,7 @@ void socket_cb(daemon_ctx* daemon, unsigned long id, char* comm) {
 	if (response != 0)
 		goto err;
 
-	log_printf(LOG_INFO, "Socket created on behalf of application %s\n", comm);
+	log_printf(LOG_INFO, "Socket created for application %s\n", comm);
 	netlink_notify_kernel(daemon, id, NOTIFY_SUCCESS);
 	return;
 

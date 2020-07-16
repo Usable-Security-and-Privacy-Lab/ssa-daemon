@@ -31,9 +31,6 @@ void do_cert_chain_revocation_checks(socket_ctx* sock_ctx) {
     if (ret != 0)
         goto err;
 
-    log_printf(LOG_DEBUG, "Checking %i certificate(s) for revocation\n", 
-            rev_ctx->total_to_check);
-
     for (int i = 0; i < rev_ctx->total_to_check; i++) {
         ret = begin_revocation_checks(rev_ctx, sock_ctx->ssl, i);
         if (ret != 0)
@@ -81,7 +78,9 @@ int begin_revocation_checks(revocation_ctx *rev_ctx, SSL* ssl, int cert_index) {
 
         ret = check_cached_response(rev_ctx, id);
         if (ret == V_OCSP_CERTSTATUS_GOOD) {
+            /*
             log_printf(LOG_INFO, "Cached ocsp response good!\n");
+            */
             rev_ctx->left_to_check -= 1;
 
             OCSP_CERTID_free(id);
@@ -97,7 +96,9 @@ int begin_revocation_checks(revocation_ctx *rev_ctx, SSL* ssl, int cert_index) {
         
         ret = check_stapled_response(rev_ctx, ssl, id);
         if (ret == V_OCSP_CERTSTATUS_GOOD) {
+            /*
             log_printf(LOG_INFO, "Stapled ocsp response good!\n");
+            */
             rev_ctx->left_to_check -= 1;
 
             OCSP_CERTID_free(id);
@@ -162,7 +163,6 @@ void pass_individual_rev_check(ocsp_responder* ocsp_resp) {
 
     rev_ctx->left_to_check -= 1;
 
-    log_printf(LOG_INFO, "Passed check! Left: %i\n", rev_ctx->left_to_check);
     if (rev_ctx->left_to_check == 0)
         pass_revocation_checks(rev_ctx);
 

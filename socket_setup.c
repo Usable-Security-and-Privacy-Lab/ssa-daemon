@@ -729,14 +729,14 @@ int load_certificate_authority(SSL_CTX* ctx, char* CA_path) {
 	if (CA_path == NULL) { /* No CA file given--search for one based on system */
 		if (access(UBUNTU_DEFAULT_CA, F_OK) != -1) {
 			CA_path = UBUNTU_DEFAULT_CA;
-			log_printf(LOG_INFO, "Found the Ubuntu CA file.\n");
+			/* log_printf(LOG_INFO, "Found the Ubuntu CA file.\n"); */
 		
 		} else if(access(FEDORA_DEFAULT_CA, F_OK) != -1) {
 			CA_path = FEDORA_DEFAULT_CA;
-			log_printf(LOG_INFO, "Found the Fedora CA file.\n");
+			/* log_printf(LOG_INFO, "Found the Fedora CA file.\n"); */
 		
 		} else { /* UNSUPPORTED OS */
-			log_printf(LOG_ERROR, "Unable to find valid CA location.\n");
+			/* log_printf(LOG_ERROR, "Unable to find valid CA location.\n"); */
 			return 0;
 		}
 	}
@@ -781,7 +781,6 @@ int associate_fd(socket_ctx* sock_ctx, evutil_socket_t ifd) {
 	if (bufferevent_enable(sock_ctx->plain.bev, EV_READ | EV_WRITE) != 0)
 		goto err;
 
-	log_printf(LOG_INFO, "plaintext channel bev enabled\n");
 	return 0;
 err:
 	log_printf(LOG_ERROR, "associate_fd failed.\n");
