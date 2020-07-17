@@ -416,7 +416,7 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	int ret = 0;
 
 	new_ctx = accepting_socket_ctx_new(listening_ctx, efd);
-	if (ret != 0)
+	if (new_ctx != NULL)
 		goto err;
 
 	new_ctx->int_addr = listening_ctx->int_addr;
@@ -885,8 +885,7 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
 		struct sockaddr* rem_addr, int rem_addrlen, int blocking) {
 
 	socket_ctx* sock_ctx;
-	int response = -ECANCELED;
-    int port;
+	int response;
     int ret;
 
 	sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);
@@ -931,6 +930,7 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
     ret = bufferevent_socket_connect(sock_ctx->secure.bev, rem_addr, rem_addrlen);
 	if (ret != 0) {
         log_global_error(LOG_ERROR, "Failed to launch connection attempt");
+        response = -ECANCELED;
 		goto err;
 	}
 
@@ -939,6 +939,7 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
     ret = hashmap_add(daemon->sock_map_port, sock_ctx->local_port, sock_ctx);
     if (ret != 0) {
         log_global_error(LOG_ERROR, "Failed to add socket to daemon's hashmap");
+        response = -ECANCELED;
         goto err;
     }
 
@@ -983,7 +984,7 @@ void listen_cb(daemon_ctx* daemon, unsigned long id,
 	if (listen(sock_ctx->sockfd, SOMAXCONN) == -1) {
 		response = -errno;
 		set_err_string(sock_ctx, "Listener setup error: "
-				"SSA daemon's external socket returned error on `listen()`");
+				"SSA daemon's socket returned error on `listen()`");
 		goto err;
 	}
 
@@ -1016,7 +1017,7 @@ err:
  * client.
  */
 void associate_cb(daemon_ctx* daemon, unsigned long id,
-		struct sockaddr* int_addr, int int_addrlen) {
+		    struct sockaddr* int_addr, int int_addrlen) {
 
 	socket_ctx* sock_ctx;
 	int port = get_port(int_addr);
@@ -1081,9 +1082,9 @@ void close_cb(daemon_ctx* daemon_ctx, unsigned long id) {
     if (sock_ctx->local_port != 0)
         hashmap_del(daemon_ctx->sock_map_port, sock_ctx->local_port);
 
-	socket_context_free(sock_ctx);
-	hashmap_del(daemon_ctx->sock_map, id);
-	return;
+    socket_context_free(sock_ctx);
+    hashmap_del(daemon_ctx->sock_map, id);
+    return;
 }
 
 

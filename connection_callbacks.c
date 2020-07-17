@@ -17,7 +17,7 @@ void handle_client_event_connected(socket_ctx* sock_ctx,
 		daemon_ctx* daemon,	unsigned long id, channel* startpoint);
 void handle_server_event_connected(socket_ctx* sock_ctx, channel* startpoint);
 void handle_event_error(socket_ctx* sock_ctx, 
-		int error, channel* startpoint, channel* endpoint);
+		unsigned long error, channel* startpoint, channel* endpoint);
 void handle_event_eof(socket_ctx* sock_ctx, channel* startpoint, channel* endpoint);
 void handle_event_timeout(socket_ctx* sock_ctx);
 
@@ -58,7 +58,7 @@ void common_bev_write_cb(struct bufferevent *bev, void *arg) {
     /*
 	log_printf(LOG_DEBUG, "write event on bev %p (%s)\n", bev, 
 			(bev == sock_ctx->secure.bev) ? "secure" : "plain");
-    */
+     */
 
 	if (endpoint->bev && !(bufferevent_get_enabled(endpoint->bev) & EV_READ)) {
 		bufferevent_setwatermark(bev, EV_WRITE, 0, 0);
@@ -118,10 +118,10 @@ void common_bev_read_cb(struct bufferevent* bev, void* arg) {
 
 void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 
-	socket_ctx* sock_ctx = (socket_ctx*) arg;
-	daemon_ctx* daemon = sock_ctx->daemon;
-	unsigned long id = sock_ctx->id;
-	int bev_error = EVUTIL_SOCKET_ERROR();
+    socket_ctx* sock_ctx = (socket_ctx*) arg;
+    daemon_ctx* daemon = sock_ctx->daemon;
+    unsigned long id = sock_ctx->id;
+    unsigned long ssl_err = bufferevent_get_openssl_error(bev);
 
 	channel* endpoint = (bev == sock_ctx->secure.bev)
 			? &sock_ctx->plain : &sock_ctx->secure;
@@ -133,7 +133,7 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 		handle_client_event_connected(sock_ctx, daemon, id, startpoint);
 	
 	if (events & BEV_EVENT_ERROR)
-		handle_event_error(sock_ctx, bev_error, startpoint, endpoint);
+		handle_event_error(sock_ctx, ssl_err, startpoint, endpoint);
 	
 	if (events & BEV_EVENT_EOF)
 		handle_event_eof(sock_ctx, startpoint, endpoint);
@@ -144,11 +144,8 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 
 	/* Connection closed--usually due to error, EOF or timeout */
 	if (endpoint->closed == 1 && startpoint->closed == 1) {
-		unsigned long ssl_err;
 		switch (sock_ctx->state) {
 		case SOCKET_CONNECTING:
-			ssl_err = bufferevent_get_openssl_error(bev);
-
             if (ssl_err != 0)
 			    set_socket_error(sock_ctx, ssl_err);
 			
@@ -239,7 +236,7 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
  * @param startpoint The channel that triggered the bufferevent.
  */
 void handle_client_event_connected(socket_ctx* sock_ctx, 
-		daemon_ctx* daemon,	unsigned long id, channel* startpoint) {
+		    daemon_ctx* daemon,	unsigned long id, channel* startpoint) {
 
 	if (startpoint->bev != sock_ctx->secure.bev) {
 		log_printf(LOG_WARNING, "Unexpected connect event happened.\n");
@@ -303,18 +300,21 @@ err:
  * 
  */
 void handle_event_error(socket_ctx* sock_ctx, 
-		int error, channel* startpoint, channel* endpoint) {
+		unsigned long error, channel* startpoint, channel* endpoint) {
 
 	log_printf(LOG_WARNING, "%s endpoint encountered an error\n", 
 			startpoint->bev == sock_ctx->secure.bev 
 			? "encrypted" : "plaintext");
 	
-	if (error == ECONNRESET || error == EPIPE) {
+	if (errno == ECONNRESET || errno == EPIPE) {
 		log_printf(LOG_INFO, "Connection closed by local user\n");
 
-	} else if (error != 0) {
+	} else if (errno != 0) {
 		log_printf(LOG_WARNING, "Unhandled error %i has occurred: %s\n", 
-				error, evutil_socket_error_to_string(error));
+				errno, strerror(errno));
+    } else {
+        log_printf(LOG_ERROR, "SSL error occurred on endpoint: %s\n",
+                    ERR_reason_error_string(error));
     }
 
 	startpoint->closed = 1;
