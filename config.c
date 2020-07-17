@@ -62,7 +62,6 @@
 #define TLS1_3_ALT_STRING "1.3"
 
 
-global_config* default_settings_new();
 
 int parse_next_setting(yaml_parser_t* parser, global_config* settings);
 
@@ -160,36 +159,6 @@ void log_parser_error(yaml_parser_t parser);
  * covered by SEQUENCE_START and SEQUENCE_END is the value of that key.
  * 
  */
-
-/*******************************************************************************
- *                             DEFAULT SETTINGS
- ******************************************************************************/
-
-global_config* default_settings_new() {
-
-    global_config* settings = calloc(1, sizeof(global_config));
-    if (settings == NULL)
-        return NULL;
-
-    settings->min_tls_version = TLS1_2_ENUM;
-    settings->max_tls_version = TLS1_3_ENUM;
-
-    settings->max_chain_depth = 10;
-    settings->ct_checks = 1;
-
-    /* checks on by default (struct is calloc'd to 0); these are redundant */
-    turn_on_revocation_checks(settings->revocation_checks);
-    turn_on_cached_checks(settings->revocation_checks);
-    turn_on_stapled_checks(settings->revocation_checks);
-    turn_on_ocsp_checks(settings->revocation_checks);
-    turn_on_crl_checks(settings->revocation_checks);
-
-
-
-
-    return settings;
-}
-
 
 /*******************************************************************************
  *    THE IMPORTANT STUFF (WHERE TO ADD ADDITIONAL CONFIG SETTINGS EASILY)
@@ -559,11 +528,9 @@ global_config* parse_config(char* file_path) {
 
     input = fopen(file_path, "r");
     if (input == NULL) {
-        log_printf(LOG_WARNING, 
-                "Couldn't find config file--using default settings...\n");
-
-        yaml_parser_delete(&parser);
-        return default_settings_new();
+        log_printf(LOG_ERROR, 
+                "Couldn't find configuration file in specified path...\n");
+        return NULL;
     }
 
     settings = calloc(1, sizeof(global_config));
