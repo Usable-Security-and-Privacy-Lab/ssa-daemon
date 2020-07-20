@@ -143,16 +143,6 @@ TEST_F(BadSSLTests, Revoked) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT)
 }
 
-TEST_F(BadSSLTests, BadPinning) {
-
-    TEST_TIMEOUT_BEGIN
-
-    result = run_http_client(PINNING_URL_BAD.c_str(), HTTPS_PORT.c_str(), &resp, &resp_len);
-    EXPECT_EQ(result, (int) E_CONNECT);
-    EXPECT_EQ(errno, EPROTO);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT)
-}
 
 TEST_F(BadSSLTests, Sha1IntermediateCert) {
 
