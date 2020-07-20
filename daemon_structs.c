@@ -100,7 +100,7 @@ err:
 /**
  * Frees a given daemon context and all of its internals, including 
  * sock_contexts of active connections.
- * @param daemon A pointer to the daemon_context to free.
+ * @param daemon The daemon context to be freed.
  */
 void daemon_context_free(daemon_ctx* daemon) {
 
@@ -187,6 +187,14 @@ err:
     return -ECANCELED; 
 }
 
+/**
+ * Allocates a new socket context and assigns it all of the relevant settings
+ * it inherits from \p listener_ctx, as well as \p fd.
+ * @param listener_ctx The context of the listening socket that generated 
+ * the newly accepted connection.
+ * @param fd The file descriptor of the newly accepted connection.
+ * @returns A pointer to a socket context, or NULL on error.
+ */
 socket_ctx* accepting_socket_ctx_new(socket_ctx* listener_ctx, int fd) {
     
     daemon_ctx* daemon = listener_ctx->daemon;
@@ -218,11 +226,11 @@ err:
 }
 
 /**
- * Closes and frees all of the appropriate file descriptors/structs within a 
- * given socket_ctx. This function should be called before the connection
+ * Closes and frees all of the appropriate file descriptors/structs within 
+ * \p sock_ctx. This function should be called before the connection
  * is set to a different state, as it checks the state to do particular
  * shutdown tasks. This function does not alter state.
- * @param sock_ctx The given socket_ctx to shut down.
+ * @param sock_ctx The given socket context to shut down.
  */
 void socket_shutdown(socket_ctx* sock_ctx) {
 
@@ -266,10 +274,10 @@ void socket_shutdown(socket_ctx* sock_ctx) {
 }
 
 /**
- * Frees a given socket_ctx and all of its internal structures. 
- * This function is provided to the hashmap implementation so that it can 
- * correctly free all held data.
- * @param sock_ctx The socket_ctx to be free
+ * Frees \p sock_ctx and all of its internal structures. 
+ * Note that this function is provided to the hashmap implementation storing
+ * the socket contexts so that it can correctly free all held data.
+ * @param sock_ctx The socket_ctx to be freed.
  */
 void socket_context_free(socket_ctx* sock_ctx) {
 
@@ -301,6 +309,14 @@ void socket_context_free(socket_ctx* sock_ctx) {
 }
 
 
+/**
+ * Cleans up a connection that was in the process of being accepted by the 
+ * daemon but that failed before the calling program received it. It deletes
+ * the given socket context from the daemon's port hashmap, shuts down any 
+ * connection that was established over the socket and frees \p sock_ctx.
+ * @param sock_ctx The context of the socket to be freed.
+ * @param port The port associated with the socket.
+ */
 void socket_context_erase(socket_ctx* sock_ctx, int port) {
 
     daemon_ctx* daemon = sock_ctx->daemon;
@@ -360,6 +376,11 @@ int revocation_context_setup(revocation_ctx* rev_ctx, socket_ctx* sock_ctx) {
     return 0;
 }
 
+
+/**
+ * Frees all structures within the given revocation context and sets them to 
+ * NULL. Note that this function does not free the revocation context itself.
+ * @param rev_ctx The revocation context to free resources from. */
 void revocation_context_cleanup(revocation_ctx* rev_ctx) {
 
     if (rev_ctx->responders_at != NULL)
@@ -386,6 +407,11 @@ void revocation_context_cleanup(revocation_ctx* rev_ctx) {
     return;
 }
 
+/**
+ * Frees all structures within the given ocsp responder and closes its 
+ * connection. Note that the ocsp responder struct itself is not freed.
+ * @param resp The ocsp responder to shut down.
+ */
 void ocsp_responder_shutdown(ocsp_responder* resp) {
 
     if (resp->bev != NULL)
@@ -407,6 +433,10 @@ void ocsp_responder_shutdown(ocsp_responder* resp) {
     return;
 }
 
+/**
+ * Frees a given ocsp responder, along with all of its internal memory.
+ * @param resp The ocsp responder in question to be freed.
+ */
 void ocsp_responder_free(ocsp_responder* resp) {
 
     ocsp_responder_shutdown(resp);

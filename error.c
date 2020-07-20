@@ -152,7 +152,12 @@ void set_err_string(socket_ctx* sock_ctx, char* string, ...) {
 }
 
 
-
+/**
+ * Logs an error found within either errno or OpenSSL's error queue.
+ * @param level The log level to print the log to (i.e. LOG_WARNING).
+ * @param message The message to print before the error (this function prints
+ * it in a way similar to `perror()`).
+ */
 void log_global_error(enum log_level level, char *message) {
 
     const char *error_string;
@@ -205,7 +210,11 @@ void clear_global_and_socket_errors(socket_ctx* sock_ctx) {
 }
 
 
-
+/**
+ * Sets the error string for when an operation is attempted on a socket that 
+ * is in the SOCK_ERROR state.
+ * @param sock_ctx The context of the socket to set the error string for.
+ */
 void set_badfd_err_string(socket_ctx* sock_ctx) {
 	if (sock_ctx == NULL)
 		return;
@@ -214,7 +223,11 @@ void set_badfd_err_string(socket_ctx* sock_ctx) {
                 "previously failed an operation in an unrecoverable way");
 }
 
-
+/**
+ * Sets the error string for when an  operation is attempted on a socket that
+ * is in the wrong state for such an operation to be done.
+ * @param sock_ctx The context of the socket to set the error string for.
+ */
 void set_wrong_state_err_string(socket_ctx* sock_ctx) {
 	if (sock_ctx == NULL)
 		return;

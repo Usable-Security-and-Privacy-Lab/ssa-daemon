@@ -56,7 +56,13 @@ int load_certificates(SSL_CTX* ctx, global_config* settings);
 
 
 
-
+/**
+ * Allocates an SSL_CTX struct and populates it with the settings found in 
+ * \p settings. 
+ * @param settings a struct filled with the settings that should be applied
+ * to the SSL_CTX.
+ * @returns A pointer to an allocated SSL_CTX struct, or NULL on error.
+ */
 SSL_CTX* SSL_CTX_create(global_config* settings) {
 
     SSL_CTX* ctx = NULL;
@@ -497,6 +503,13 @@ err:
 }
 
 
+/**
+ * Prepares the SSL object for the given connection.
+ * @param sock_ctx The context of the socket to prepare the SSL object for.
+ * @param is_client A boolean value indicating whether the SSL object is
+ * being prepared for a client or for a server.
+ * @returns 0 on success, and -ECANCELED on error.
+ */
 int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
 
     int ret;

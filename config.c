@@ -164,6 +164,21 @@ void log_parser_error(yaml_parser_t parser);
  *    THE IMPORTANT STUFF (WHERE TO ADD ADDITIONAL CONFIG SETTINGS EASILY)
  ******************************************************************************/
 
+
+/**
+ * Parses the next key:value pair from the loaded configuration file. This 
+ * function is called iteratively on every setting found in the configuration 
+ * file, so the if/else chain found in this function checks to see if the 'key'
+ * received from the file matches up with any of the accepted labels. If it
+ * does match one of the labels, a more tailored function will be called to 
+ * parse the 'value' and verify that it is within its acceptable range.
+ * @param parser The yaml config parser that provides the next token to parse
+ *  (such as the token for the 'key' or the token(s) for the 'value')
+ * @param config The struct to populate with setting information as key:value
+ * pairs are parsed from the .yml config file.
+ * @returns 1 if all settings have been parsed; 0 if the next setting was 
+ * successfully parsed from the .yml config file; or -1 if an error occurred.
+ */
 int parse_next_setting(yaml_parser_t* parser, global_config* config) {
 
     yaml_event_t event;
@@ -500,17 +515,23 @@ int parse_tls_version(yaml_parser_t* parser, enum tls_version* version) {
 
 /**
  *******************************************************************************
- *   FUNCTIONS TO PARSE THE CONFIG FILE AND ENSURE IT'S CORRECTLY FORMATTED
+ *       FUNCTIONS TO PARSE THE CONFIG FILE AND ENSURE CORRECT FORMAT
  *******************************************************************************
  */
 
 
 /**
  * Parses a given config file and fills an allocated global_config struct 
- * with the configurations.
+ * with the configurations to be used by the daemon. Once the parser has 
+ * finished reading in information from the .yml config file, the global_config
+ * struct should remain unchanged--any modifications of settings (such as by
+ * `setsockopt() or `getsockopt()` calls) should only affect individual 
+ * connections, not the overarching configuration of the daemon.
  * @param file_path The path to the .yml config file, or NULL if the default
  * file path is desired.
- * @returns A pointer to a new global_config struct, or NULL on error.
+ * @returns A pointer to a newly allocated global_config struct, or NULL on 
+ * error. If the file specified by file_path cannot be opened, this function
+ * will fail.
  */
 global_config* parse_config(char* file_path) {
     
@@ -896,34 +917,30 @@ void log_parser_error(yaml_parser_t parser) {
  */
 void global_settings_free(global_config* settings) {
 
-    if (settings != NULL) {
-        if (settings->ca_path != NULL)
-            free(settings->ca_path);
-        
-        if (settings->cipher_list != NULL) {
-            for (int i = 0; i < settings->cipher_list_cnt; i++) {
-                free(settings->cipher_list[i]);
-            }
-            free(settings->cipher_list);
+    if (settings->ca_path != NULL)
+    if (settings->cipher_list != NULL) {
+        for (int i = 0; i < settings->cipher_list_cnt; i++) {
+            free(settings->cipher_list[i]);
         }
-
-        if (settings->ciphersuites != NULL) {
-            for (int i = 0; i < settings->ciphersuite_cnt; i++) {
-                free(settings->ciphersuites[i]);
-            }
-            free(settings->ciphersuites);
-        }
-
-        for (int i = 0; i < settings->cert_cnt; i++) {
-            if (settings->certificates[i] != NULL)
-                free(settings->certificates[i]);
-        }
-
-        for (int i = 0; i < settings->key_cnt; i++) {
-            if (settings->private_keys[i] != NULL)
-                free(settings->private_keys[i]);
-        }
-
-        free(settings);
+        free(settings->cipher_list);
     }
+
+    if (settings->ciphersuites != NULL) {
+        for (int i = 0; i < settings->ciphersuite_cnt; i++) {
+            free(settings->ciphersuites[i]);
+        }
+        free(settings->ciphersuites);
+    }
+
+    for (int i = 0; i < settings->cert_cnt; i++) {
+        if (settings->certificates[i] != NULL)
+            free(settings->certificates[i]);
+    }
+
+    for (int i = 0; i < settings->key_cnt; i++) {
+        if (settings->private_keys[i] != NULL)
+            free(settings->private_keys[i]);
+    }
+
+    free(settings);
 }

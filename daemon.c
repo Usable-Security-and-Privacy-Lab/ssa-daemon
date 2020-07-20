@@ -67,11 +67,11 @@ int begin_handling_listener_connections(socket_ctx* sock_ctx);
 
 
 /**
- * Performs all of the steps needed to run the SSA daemon, estabilshes
+ * Performs all of the steps needed to run the SSA daemon: estabilshes
  * a netlink connection with the kernel module, begins listening on the given 
  * port for connections, and runs the libevent event base indefinitely.
  * This function only returns if an unrecoverable error occurred in the
- * Daemon, or if a SIGINT signal was sent to the process.
+ * daemon, or if a SIGINT signal was sent to the process.
  * @param port The port to listen on for new connections.
  * @param config_path A NULL-terminated string identifying the file path
  * of a .yml configuration for the daemon.
@@ -80,8 +80,6 @@ int begin_handling_listener_connections(socket_ctx* sock_ctx);
  * before the event base could run.
  */
 int run_daemon(int port, char* config_path) {
-
- 
 
 	struct evconnlistener* listener = NULL;
 	daemon_ctx* daemon = NULL;
@@ -178,9 +176,10 @@ err:
 
 /**
  * Creates a listening socket that binds to local IPv4 and IPv6 interfaces.
- * It also makes the socket nonblocking (since this software uses libevent).
- * @param port The local port to listen on.
- * @param type SOCK_STREAM or SOCK_DGRAM.
+ * It also makes the socket nonblocking so as to allow for IO multiplexing 
+ * capabilities via libevent.
+ * @param port The local port that the created socket should listen on.
+ * @param type The socket's type; can be SOCK_STREAM or SOCK_DGRAM.
  */
 evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
 	evutil_socket_t sock;
@@ -385,12 +384,14 @@ void accept_error_cb(struct evconnlistener *listener, void *ctx) {
 }
 
 /**
- * When an external client connects to the server, this callback is called.
- * It is analagous to accept() in normal HTTP connections, but is intended
- * to do everything needed to begin a TLS connection with theexternal client.
+ * When an external client connects to a server utilizing the daemon, this 
+ * callback is called. It is partially analagous to accept() in normal HTTP 
+ * connections, but is intended to perform all needed tasks to begin a TLS 
+ * connection with the external client.
  * If this function completes successfully, then tls_bev_events_cb will be
- * called once the TLS handshake has completed. If not, the connection to the
- * client will be dropped.
+ * called once the TLS handshake has completed. If at any point the connection
+ * fails before the userspace server receives it, the client will be 
+ * transparently dropped.
  * @param efd The file descriptor of the peer that has sent the connect()
  * request to our server. 'Peer' should not be confused with the programmer
  * interacting via c POSIX sockets calls to the daemon; it is simply someone
@@ -459,6 +460,19 @@ err:
 	return;
 }
 
+
+/**
+ * When a listening socket is made in userspace with the IPPROTO_TLS option,
+ * a corresponding listening socket is created within the SSA daemon. It 
+ * accepts connections as they arrive and handles them via the 
+ * `listener_accept_cb` function. Libevent internally calls `accept()`; when
+ * errors are returned from that system call `listener_accept_error_cb` is 
+ * called. Many error returns from `accept()` are non-fatal (and are listed
+ * below in the switch statement); those that are fatal result in the listening
+ * socket entering an error state.
+ * @param listener The listener associated with the listening socket.
+ * @param arg The context of the listening socket.
+ */
 void listener_accept_error_cb(struct evconnlistener *listener, void *arg) {
 
 	socket_ctx* sock_ctx = (socket_ctx*) arg;
@@ -570,15 +584,34 @@ err:
 	return;
 }
 
-void setsockopt_cb(daemon_ctx* ctx, unsigned long id, int level,
+/**
+ * The callback invoked when an internal program calls `getsockopt()` on a 
+ * socket created with the `IPPROTO_TLS` protocol. It is intended as the 
+ * interface that a programmer may use to modify socket behavior within a 
+ * user space program utilizing the SSA daemon.
+ * @param daemon The context of the daemon (contains hashmaps of socket contexts
+ * and other important data).
+ * @param id The id of the socket to set information for.
+ * @param level The layer to set socket information for. The IPPROTO_TLS layer
+ * directly deals with TLS configurations on an individual socket within the 
+ * daemon; other options are still passed through here so that the daemon's
+ * internal socket will mirror the functionality of the program's socket.
+ * @param option The desired socket option to modify. Socket options may be
+ * get-only or set-only, depending on their functionality. See the documentation
+ * on `setsockopt()` for more info on individual options.
+ * @param value The data to be set for the given option.
+ * @param len The byte length of \p value
+ * @returns (via Netlink) a notification of 0 on success, or -errno on failure.
+ */
+void setsockopt_cb(daemon_ctx* daemon, unsigned long id, int level,
 		int option, void* value, socklen_t len) {
 
 	socket_ctx* sock_ctx;
 	int response = 0; /* Default is success */
 
-	sock_ctx = (socket_ctx*)hashmap_get(ctx->sock_map, id);
+	sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);
 	if (sock_ctx == NULL) {
-		netlink_notify_kernel(ctx, id, -EBADF);
+		netlink_notify_kernel(daemon, id, -EBADF);
 		return;
 	}
 
@@ -675,10 +708,23 @@ void setsockopt_cb(daemon_ctx* ctx, unsigned long id, int level,
 		break;
 	}
 
-	netlink_notify_kernel(ctx, id, response);
+	netlink_notify_kernel(daemon, id, response);
 	return;
 }
 
+
+/**
+ * The callback invoked whenever a program uses the `getsockopt()` system call
+ * with `level` set to `IPPROTO_TLS`. This callback only deals specifically with
+ * that level; other layers are dealt with by the kernel module.
+ * @param daemon The context of the daemon (contains hashmaps of socket contexts
+ * and other important data).
+ * @param id The id of the socket to retrieve information from.
+ * @param level The level of the socket operation (should always be 
+ * `IPPROTO_TLS`).
+ * @param option The desired socket option to retrieve information on.
+ * @returns (via Netlink) a notification of 0 on success, or -errno on failure.
+ */
 void getsockopt_cb(daemon_ctx* daemon, 
 		unsigned long id, int level, int option) {
 
@@ -804,6 +850,21 @@ void getsockopt_cb(daemon_ctx* daemon,
 	return;
 }
 
+/**
+ * The callback executed whenever `bind()` is called on a TLS socket.
+ * This is necessary as it is the daemon's internal socket that actually
+ * needs to bind to the specified address rather than the socket of the 
+ * program calling the system call.
+ * @param daemon The context of the current running daemon.
+ * @param id The id of the socket to bind.
+ * @param int_addr The address that the calling program's socket will be bound 
+ * to.
+ * @param int_addrlen The size of int_addr.
+ * @param ext_addr The address that the daemon's socket should bind to.
+ * This is what the user actually passes in when they call `bind()`.
+ * @param ext_addrlen The length of ext_addr.
+ * @returns (via Netlink) a notification of 0 on success, or -errno on failure.
+ */
 void bind_cb(daemon_ctx* daemon, unsigned long id,
 			 struct sockaddr* int_addr, int int_addrlen,
 			 struct sockaddr* ext_addr, int ext_addrlen) {
@@ -869,12 +930,12 @@ err:
  * @param daemon_ctx The daemon context associated with this daemon.
  * @param id The ID of the socket to attempt to connect. This is used along
  * with a hashmap (sock_map) found in the daemon context in order to retrieve
- * the context specific to the socket being called by the user.
- * @param int_addr The address of the internal peer calling these functions.
+ * the context specific to the socket the calling program is using.
+ * @param int_addr The address of the socket used by the calling program.
  * @param int_addrlen The length of int_addr.
  * @param ext_addr The address of the server we're attempting to connect to.
  * @param ext_addrlen The length of ext_addr.
- * @param blocking Set as 1 if the user's socket is blocking, or 0
+ * @param blocking Set as 1 if the calling program's socket is blocking, or 0
  * if it is set as non-blocking. If it is non-blocking, then this function
  * will notify the kernel with the EINPROGRESS errno code before returning.
  * @return No return value--meant to send a netlink message if something is
@@ -960,6 +1021,22 @@ err:
 	return;
 }
 
+/**
+ * Assigns the socket associated with \p id to listen for incoming connections.
+ * Both this and the calling program's internal socket will be listening; this
+ * socket will automatically accept and perform TLS handshakes for new 
+ * connections, whereas the calling program's socket will only establish new 
+ * connections whenever `accept()` is called.
+ * @param daemon The context of this daemon.
+ * @param id The id of the socket to set to listen.
+ * @param int_addr The address that the calling program's socket has been 
+ * assigned to (??).
+ * @param int_addrlen The size of int_addr.
+ * @param ext_addr The address that the daemon's socket has been assigned to 
+ * (?).
+ * @param ext_addrlen The size of ext_addr.
+ * @returns (via Netlink) a notification of 0 for success, or -errno for errors.
+ */
 void listen_cb(daemon_ctx* daemon, unsigned long id,
 			struct sockaddr* int_addr, int int_addrlen,
 			struct sockaddr* ext_addr, int ext_addrlen) {
@@ -1009,12 +1086,17 @@ err:
 
 /**
  * Finishes the process of accepting an incoming client connection.
- * This function is only called after the internal user calls accept()
+ * This function is only called after the calling program calls accept()
  * and a TLS connection has been successfully made between the incoming
  * client and the daemon's internal socket. The purpose of this function
  * is to associate an id with the sock_ctx of the already accepted connection
  * so that the internal user can begin to communicate via the daemon to the
  * client.
+ * @param daemon The context of the daemon.
+ * @param id A unique id generated by the SSA kernel module that can be assigned 
+ * to the associated socket.
+ * @param int_addr (??)
+ * @param int_addrlen The size of \p int_addr.
  */
 void associate_cb(daemon_ctx* daemon, unsigned long id,
 		    struct sockaddr* int_addr, int int_addrlen) {
@@ -1057,13 +1139,16 @@ err:
 
 /**
  * Closes and frees all internal file descriptors and buffers associated
- * with a socket.
+ * with a socket in the daemon. When a calling program is terminated, the SSA 
+ * kernel module will trigger this close_cb on every open file descriptor in
+ * that program.
+ * @param daemon The context of the daemon.
  * @param id The id of the socket to be closed.
  */
-void close_cb(daemon_ctx* daemon_ctx, unsigned long id) {
+void close_cb(daemon_ctx* daemon, unsigned long id) {
 	socket_ctx* sock_ctx;
 
-	sock_ctx = (socket_ctx*)hashmap_get(daemon_ctx->sock_map, id);
+	sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);
 	if (sock_ctx == NULL) {
 		log_printf(LOG_ERROR, "Close called on non-existent socket\n");
 		return;
@@ -1080,16 +1165,23 @@ void close_cb(daemon_ctx* daemon_ctx, unsigned long id) {
 	}
 
     if (sock_ctx->local_port != 0)
-        hashmap_del(daemon_ctx->sock_map_port, sock_ctx->local_port);
+        hashmap_del(daemon->sock_map_port, sock_ctx->local_port);
 
     socket_context_free(sock_ctx);
-    hashmap_del(daemon_ctx->sock_map, id);
+    hashmap_del(daemon->sock_map, id);
     return;
 }
 
 
 
-
+/**
+ * Sets up an evconnlistener structure within the daemon's event base and 
+ * assigns it the file descriptor of the given socket context. The functions 
+ * `listener_accept_cb()` and `listener_accept_error_cb` are assigned to this 
+ * listener.
+ * @param sock_ctx The context of the socket to create a listener for.
+ * @returns 0 on success, or -ECANCELED if an error occurred.
+ */
 int begin_handling_listener_connections(socket_ctx* sock_ctx) {
 
 	sock_ctx->listener = evconnlistener_new(sock_ctx->daemon->ev_base,

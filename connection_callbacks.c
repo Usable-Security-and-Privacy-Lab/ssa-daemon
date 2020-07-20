@@ -47,8 +47,8 @@ void handle_event_timeout(socket_ctx* sock_ctx);
  * and it certainly does not cause data to be written from the write buffer to
  * the fd. It merely reports once all data to be written from a buffer has been
  * written.
- * @param bev The bufferevent that triggered the write callback.
- * @param arg the socket_ctx associated with the given bufferevent.
+ * @param bev The bufferevent that the write callback has been triggered for.
+ * @param arg the context of the socket using the given bufferevent.
  */
 void common_bev_write_cb(struct bufferevent *bev, void *arg) {
 
@@ -73,8 +73,8 @@ void common_bev_write_cb(struct bufferevent *bev, void *arg) {
  * of the other bufferevent. If too much data is being fed through, the read 
  * operation of this bufferevent will be turned off until the other buffer has
  * written enough data out.
- * @param bev The bufferevent that triggered the read callback.
- * @param arg the socket_ctx associated with the given bufferevent.
+ * @param bev The bufferevent that the write callback has been triggered for.
+ * @param arg the context of the socket using the given bufferevent.
  */
 void common_bev_read_cb(struct bufferevent* bev, void* arg) {
 	/* TODO: set read high-water mark?? */
@@ -116,6 +116,18 @@ void common_bev_read_cb(struct bufferevent* bev, void* arg) {
 	return;
 }
 
+
+/**
+ * A callback triggered whenever the given bufferevent has any new events happen
+ * to it. The event may be a connection completion, an error, an end-of-file, or
+ * a timeout (see Libevent documentation for any other possible events).
+ * Multiple events may be present when a callback is triggered--they are 
+ * combined together as flags. The functionality associated with each individual
+ * event can be found in the event handler functions below.
+ * @param bev The bufferevent that the write callback has been triggered for.
+ * @param events The event flags that resulted in this callback being evoked.
+ * @param arg the context of the socket using the given bufferevent.
+ */
 void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 
     socket_ctx* sock_ctx = (socket_ctx*) arg;
@@ -173,6 +185,18 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 	return;
 }
 
+
+/**
+ * A callback triggered whenever the given bufferevent has any new events happen
+ * to it. The event may be a connection completion, an error, an end-of-file, or
+ * a timeout (see Libevent documentation for any other possible events).
+ * Multiple events may be present when a callback is triggered--they are 
+ * combined together as flags. The functionality associated with each individual
+ * event can be found in the event handler functions below.
+ * @param bev The bufferevent that the write callback has been triggered for.
+ * @param events The event flags that resulted in this callback being evoked.
+ * @param arg the context of the socket using the given bufferevent.
+ */
 void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 
 	socket_ctx* sock_ctx = (socket_ctx*) arg;
@@ -294,10 +318,15 @@ err:
 }
 
 /**
- * Handles an error event for a given bufferevent and determines whether it
- * will close the bufferevent (by settings startpoint->closed=1 and 
- * endpoint->closed=1) or recover from the error.
- * 
+ * Handles an error event for a given bufferevent and determines whether the
+ * daemon should keep the connection alive or close it (designated by 
+ * startpoint->closed and endpoint->closed). 
+ * @param sock_ctx The context of the socket that received the error.
+ * @param error The OpenSSL error that the particular bufferevent encountered.
+ * Note that this could be '0', designating no error--either `errno` errors
+ * or OpenSSL errors may be present when an error event is received.
+ * @param startpoint The channel of the socket that received the error event.
+ * @param endpoint The other channel of the socket.
  */
 void handle_event_error(socket_ctx* sock_ctx, 
 		unsigned long error, channel* startpoint, channel* endpoint) {
@@ -329,6 +358,14 @@ void handle_event_error(socket_ctx* sock_ctx,
 	return;
 }
 
+
+/**
+ * Handles an EOF event by closing both channels in a socket context.
+ * @param sock_ctx The context of the socket that received an EOF on
+ * one of its bufferevents.
+ * @param startpoint The channel of the socket that received the EOF.
+ * @param endpoint The other channel of the socket. 
+ */
 void handle_event_eof(socket_ctx* sock_ctx, 
 		channel* startpoint, channel* endpoint) {
 
@@ -358,6 +395,11 @@ void handle_event_eof(socket_ctx* sock_ctx,
 	return;
 }
 
+/**
+ * Called whenever a bufferevent associated with \p sock_ctx times out.
+ * @param sock_ctx The context of the socket that received a timeout on one of
+ * its bufferevents.
+ */
 void handle_event_timeout(socket_ctx* sock_ctx) {
 
     daemon_ctx* daemon = sock_ctx->daemon;

@@ -180,21 +180,21 @@ struct revocation_ctx_st {
 
 struct ocsp_responder_st {
 
-    revocation_ctx* rev_ctx;
+    revocation_ctx* rev_ctx; /**< ctx of revocation check being performed */
 
-    struct bufferevent* bev;
-    char* url;
+    struct bufferevent* bev; /**< Bufferevent reading/writing OCSP response */
+    char* url;               /**< OCSP responder's url */
 
-    int cert_position;
+    int cert_position;       /**< cert chain position of cert being verified */
 
-    OCSP_CERTID* certid;
+    OCSP_CERTID* certid;     /**< certificate's ID for the OCSP request/resp */
 
-    unsigned char* buffer;
-    int buf_size;
-    int tot_read;
-    int is_reading_body;
+    unsigned char* buffer;   /**< byte buffer to store HTTP response in */
+    int buf_size;            /**< # of bytes that can be stored in buffer */
+    int tot_read;            /**< # of bytes currently stored in buffer */
+    int is_reading_body;     /**< 0 if HTTP header being read, 1 otherwise */
 
-    ocsp_responder* next;
+    ocsp_responder* next;  /**< Pointer to the next responder in the list */
 };
 
 struct crl_responder_st {
