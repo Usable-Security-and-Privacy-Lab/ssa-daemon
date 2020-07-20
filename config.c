@@ -270,9 +270,9 @@ int parse_next_setting(yaml_parser_t* parser, global_config* config) {
             turn_off_stapled_checks(config->revocation_checks);
 
     } else if (strcmp(label, CERT_PATH) == 0) {
-        if (config->cert_cnt >= MAX_CERTKEY_PAIRS) {
+        if (config->cert_cnt >= MAX_CERTS) {
             log_printf(LOG_ERROR, "Config: Maximum keys (%i) exceeded\n", 
-                    MAX_CERTKEY_PAIRS);
+                    MAX_CERTS);
             ret = -1;
         } else {
             ret = parse_string(parser, &config->certificates[config->cert_cnt]);
@@ -280,9 +280,9 @@ int parse_next_setting(yaml_parser_t* parser, global_config* config) {
         }
 
     } else if (strcmp(label, KEY_PATH) == 0) {
-        if (config->key_cnt >= MAX_CERTKEY_PAIRS) {
+        if (config->key_cnt >= MAX_CERTS) {
             log_printf(LOG_ERROR, "Config: Maximum keys (%i) exceeded\n", 
-                    MAX_CERTKEY_PAIRS);
+                    MAX_CERTS);
             ret = -1;
         } else {
             ret = parse_string(parser, &config->private_keys[config->key_cnt]);
@@ -918,6 +918,8 @@ void log_parser_error(yaml_parser_t parser) {
 void global_settings_free(global_config* settings) {
 
     if (settings->ca_path != NULL)
+        free(settings->ca_path);
+
     if (settings->cipher_list != NULL) {
         for (int i = 0; i < settings->cipher_list_cnt; i++) {
             free(settings->cipher_list[i]);
