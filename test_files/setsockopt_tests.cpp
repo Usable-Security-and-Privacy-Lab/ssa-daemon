@@ -49,7 +49,7 @@ TEST(SetsockoptTests, SetHostnameCorrect) {
     ASSERT_GE(fd, 0);
     
     int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_REMOTE_HOSTNAME, 
-                "google.com", strlen("google.com"));
+                "google.com", strlen("google.com")+1);
 
     EXPECT_EQ(setsockopt_ret, 0);
 
@@ -86,28 +86,3 @@ TEST(SetsockoptTests, SetHostnameNull) {
 
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
-
-TEST(SetsockoptTests, SetCertificateChainBadFile) {
-
-    TEST_TIMEOUT_BEGIN
-
-    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
-    if (fd < 0) 
-        fprintf(stderr, "Socket failed to be created: %s\n", strerror(errno));
-    
-    ASSERT_NE(fd, -1);
-    
-    int ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
-                "/asdf/sadf/asdf", strlen("/asdf/sadf/asdf"));
-
-    EXPECT_EQ(ret, -1);
-    EXPECT_EQ(errno, EINVAL);
-
-    if (ret < 0)
-        print_socket_error(fd);
-
-    close(fd);
-
-    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
-}
-
