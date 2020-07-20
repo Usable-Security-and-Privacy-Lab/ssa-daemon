@@ -31,13 +31,10 @@
 #include "hashmap.h"
 
 typedef struct hnode {
-	struct hnode* next;
-	union {
-		unsigned long k_long;
-		char* k_str;
-		void* k_ptr;
-	} key;
+	unsigned long key;
 	void* value;
+
+	struct hnode* next; /** The next node in the linked list */
 } hnode_t;
 
 
@@ -97,7 +94,7 @@ int hashmap_add(hmap_t* map, unsigned long key, void* value) {
     if (new_node == NULL)
         return -1;
 
-    new_node->key.k_long = key;
+    new_node->key = key;
 	new_node->value = value;
 	new_node->next = NULL;
 	
@@ -113,7 +110,7 @@ int hashmap_add(hmap_t* map, unsigned long key, void* value) {
 	next = cur;
 	do {
 		cur = next;
-		if (cur->key.k_long == key) {
+		if (cur->key == key) {
 			free(new_node);
 			return 1; /* Duplicate entry */
 		}
@@ -137,14 +134,14 @@ int hashmap_del(hmap_t* map, unsigned long key) {
 		return 1;
 	}
 
-	if (cur->key.k_long == key) {
+	if (cur->key == key) {
 		map->buckets[index] = cur->next;
 		free(cur);
 		map->item_count--;
 		return 0;
 	}
 	while (cur->next != NULL) {
-		if (cur->next->key.k_long == key) {
+		if (cur->next->key == key) {
 			tmp = cur->next;
 			cur->next = cur->next->next;
 			free(tmp);
@@ -167,12 +164,12 @@ void* hashmap_get(hmap_t* map, unsigned long key) {
 	}
 
 	do {
-		if (cur->key.k_long == key)
+		if (cur->key == key)
 			return cur->value;
 		
 		cur = cur->next;
 	} while (cur != NULL);
-	
+
 	return NULL;
 }
 
@@ -185,7 +182,7 @@ void hashmap_print(hmap_t* map) {
 		cur = map->buckets[i];
 		while (cur) {
 			printf("\t\tNode [key = %lu, value=%p]\n",
-				cur->key.k_long, cur->value);
+				cur->key, cur->value);
 			cur = cur->next;
 		}
 	}
