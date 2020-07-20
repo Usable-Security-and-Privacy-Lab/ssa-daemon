@@ -132,7 +132,7 @@ ocsp_responder* get_last_responder(ocsp_responder* list) {
  * specified by url. On success, the information about the given connection 
  * (such as the bufferevent and the url) is stored in the revocation context
  * of the given socket context.
- * @param sock_ctx The given socket context to initiate an OCSP client for.
+ * @param rev_ctx The revocation context to initiate an OCSP client for.
  * @param url The URL of the OCSP responder for the client to connect to.
  * @returns 0 on success, or -1 if an error occurred.
  */
@@ -195,7 +195,11 @@ err:
 
 /**
  * Takes in a given OCSP_REQUEST and forms the http request to query the OCSP
- * responder with. The formed request is allocated and stored in *http_req.
+ * responder with. The formed request is allocated and stored in \p http_req.
+ * @param http_req The fully-formed HTTP request byte stream to be returned.
+ * @param ocsp_req The request to convert into an HTTP request.
+ * @param host The hostname of the server that the request will be sent to.
+ * @param path The URI to send the HTTP request to.
  * @returns The length of the request, or -1 if an error occurred.
  */
 int form_http_request(unsigned char **http_req, 

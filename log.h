@@ -38,9 +38,38 @@ typedef enum log_level {
 } log_level_t;
 
 #ifndef NO_LOG
+
+/** 
+ * Initializes the log to write its output to \p log_filename, or to stdout 
+ * otherwise. Should be followed by a call to `log_close()` once finished.
+ * @param log_filename The absolute path of a file to print logs to, or NULL
+ * if it is desired to print logs to stdout.
+ * @param level The minimum log level to print logs for.
+ * @returns 0 on success, or -1 if the file could not be opened to write to.
+ */
 int log_init(const char* log_filename, log_level_t level);
+
+
+/** 
+ * Prints the given `printf`-formatted message to logs with log level \p level.
+ * If the log level isn't greater than or equal to the minimum set in 
+ * `log_init`, then no message will be print.
+ * @param level The level of the log to print out.
+ * @param format The `printf`-formatted error message to print out.
+ */
 void log_printf(log_level_t level, const char* format, ...);
+
+
+/**
+ * Prints the given address \p addr to the log files.
+ * @param addr The address to be printed out.
+ */
 void log_printf_addr(struct sockaddr *addr);
+
+
+/**
+ * Closes the log file being written to.
+ */
 void log_close(void);
 #else
 #define noop

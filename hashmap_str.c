@@ -36,9 +36,14 @@ typedef struct hsnode {
 	void* value;
 } hsnode_t;
 
-static int hash(hsmap_t* map, char* key);
 
-int hash(hsmap_t* map, char* key) {
+/**
+ * Creates an integer hash of the given string \p key and returns an index
+ * suitable for insertion of an element into \p map.
+ * @param map The map to hash the given key into.
+ * @param key A unique null-terminated string to be used as the identifier.
+ */
+static int hash(hsmap_t* map, char* key) {
 	int i;
 	int hash_val = 0;
 	
@@ -48,7 +53,13 @@ int hash(hsmap_t* map, char* key) {
 	return hash_val % map->num_buckets;
 }
 
-
+/**
+ * Creates a new string hashmap that is \p num_buckets in size. Note that 
+ * the hashmap will be capable of storing much more than \p num_buckets;
+ * it is simply the array size for the hashmap.
+ * @param num_buckets the size of the hashmap.
+ * @returns A new string hashmap pointer, or NULL on failure.
+ */
 hsmap_t* str_hashmap_create(int num_buckets) {
 	hsmap_t* map = (hsmap_t*)malloc(sizeof(hsmap_t));
 	if (map == NULL) {
@@ -63,6 +74,13 @@ hsmap_t* str_hashmap_create(int num_buckets) {
 	return map;
 }
 
+
+/**
+ * Frees all entries from the given string hashmap \p map, and frees
+ * the values of each entry using \p free_func.
+ * @param map The map to free.
+ * @param free_func The function used to free each value from the hashmap.
+ */
 void str_hashmap_deep_free(hsmap_t* map, void (*free_func)(void*)) {
 	hsnode_t* cur = NULL;
 	hsnode_t* tmp = NULL;
@@ -87,11 +105,25 @@ void str_hashmap_deep_free(hsmap_t* map, void (*free_func)(void*)) {
 	return;
 }
 
+/**
+ * Frees all entries from the given string hashmap \p map, but leaves the 
+ * values of each entry alone.
+ * @param map The map to be freed.
+ */
 void str_hashmap_free(hsmap_t* map) {
 	str_hashmap_deep_free(map, NULL);
 	return;
 }
 
+
+/**
+ * Adds the given key:value pair to \p map.
+ * @param map The map to add a new element to.
+ * @param key The null-terminated string used to lookup the value in \p map.
+ * @param value A pointer to a data structure to be stored in \p map.
+ * @returns 0 on success; 1 if the entry could not be found; or -1 on 
+ * malloc failure.
+ */
 int str_hashmap_add(hsmap_t* map, char* key, void* value) {
 	int index;
 	hsnode_t* cur;
@@ -133,6 +165,12 @@ int str_hashmap_add(hsmap_t* map, char* key, void* value) {
 	return 0;
 }
 
+/**
+ * Deletes the entry associated with \p key from \p map.
+ * @param map The map to delete an entry from.
+ * @param key A null-terminated string that identifies the entry to delete.
+ * @returns 0 on success, or 1 if no entry exists for \p key.
+ */
 int str_hashmap_del(hsmap_t* map, char* key) {
 	int index;
 	hsnode_t* cur;
@@ -168,6 +206,14 @@ int str_hashmap_del(hsmap_t* map, char* key) {
 	return 1;
 }
 
+
+/**
+ * Retrieves the value associated with \p key from \p map.
+ * @param map The string hashmap to retrieve a value from.
+ * @param key The key associated with the value to retrieve.
+ * @returns A pointer to the value associated with \p key, 
+ * or NULL if no entry exists in the hashmap for \p key.
+ */
 void* str_hashmap_get(hsmap_t* map, char* key) {
 	int index;
 	hsnode_t* cur;
@@ -195,6 +241,10 @@ void* str_hashmap_get(hsmap_t* map, char* key) {
 }
 
 
+/**
+ * Prints the entire contents of the hashmap to stdout.
+ * @param map The map to print.
+ */
 void str_hashmap_print(hsmap_t* map) {
 	int i;
 	hsnode_t* cur;

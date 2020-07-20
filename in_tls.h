@@ -9,36 +9,72 @@
 #define IPPROTO_TLS     (715 % 255)
 
 /* Options */
+
+/** The remote hostname of a server a client intends to connect to */
 #define TLS_REMOTE_HOSTNAME               85
+
+/** The hostname a server intends to use */
 #define TLS_HOSTNAME                      86
+
+/** The CA certificates that a connection will consider as trusted */
 #define TLS_TRUSTED_PEER_CERTIFICATES     87
+
+/** The certificate chain to present to a peer during a handshake */
 #define TLS_CERTIFICATE_CHAIN             88
+
+/** The private key that goes with the certificate chain used */
 #define TLS_PRIVATE_KEY                   89
+
+/** The Aplication-Layer Protocols set to be negotiated for the given socket */
 #define TLS_ALPN                          90
+
+/** The maximum time that a session will be considered valid for */
 #define TLS_SESSION_TTL                   91
+
+/** A cipher to be marked as unusable for connections */
 #define TLS_DISABLE_CIPHER                92
+
+/** The identity of the peer currently connected to (as shown on certificate) */
 #define TLS_PEER_IDENTITY                 93
+
+/** Whether or not a certificate will be requested from connecting clients */
 #define TLS_REQUEST_PEER_AUTH             94
 
-/* Internal use only */
-#define TLS_PEER_CERTIFICATE_CHAIN        95
-#define TLS_ID                            96
-
+/** The ciphers that the socket will accept a TLS connection with */
 #define TLS_TRUSTED_CIPHERS               97
+
+/** The cipher in use for the current connection */
 #define TLS_CHOSEN_CIPHER                 98
+
+/** The error string reported for the last call on the socket */
 #define TLS_ERROR                        100
+
+/** Whether or not TLS compression is disabled for the socket */
 #define TLS_DISABLE_COMPRESSION          101
 
+/** Whether or not revocation checks are enabled for the socket */
 #define TLS_REVOCATION_CHECKS            102
+
+/** Whether or not OCSP stapling are used as part of revocation checks */
 #define TLS_OCSP_STAPLED_CHECKS          103
+
+/** Whether or not OCSP responders are used as part of revocation checks */
 #define TLS_OCSP_CHECKS                  104
+
+/** Whether or not CRL checks are used as part of revocation checks */
 #define TLS_CRL_CHECKS                   105
+
+/** Whether or not cached revocation responses are used as part of checks */
 #define TLS_CACHE_REVOCATION             106
 
 /*
 #define TLS_CONTEXT                      107
 #define TLS_CONTEXT_FREE                 108
 */
+
+/* Internal use only */
+#define TLS_PEER_CERTIFICATE_CHAIN        95
+#define TLS_ID                            96
 
 /* TCP options */
 #define TCP_UPGRADE_TLS         33

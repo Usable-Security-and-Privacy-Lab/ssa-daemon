@@ -340,8 +340,7 @@ int verify_ocsp_basicresp(OCSP_BASICRESP* resp,
  * V_OCSP_CERTSTATUS_REVOKED (1) if the response was properly verified and it
  * contained the REVOKED status for the certificate; and
  * V_OCSP_CERTSTATUS_UNKNOWN (2) if the given ID did not have an entry in the
- * cache, or if 
- * 
+ * cache, OR if the entry in the cache was no longer valid.
  */
 int check_cached_response(revocation_ctx* rev_ctx, OCSP_CERTID* id) {
 
