@@ -684,14 +684,12 @@ void setsockopt_cb(daemon_ctx* daemon, unsigned long id, int level,
         turn_on_cached_checks(sock_ctx->rev_ctx.checks);
         break;
 
-/*
     case TLS_CONTEXT:
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
             break;
         else
             response = set_tls_context(sock_ctx, (char*) value, len);
         break;
-*/
 
 	case TLS_ERROR:
 	case TLS_HOSTNAME:
@@ -805,18 +803,15 @@ void getsockopt_cb(daemon_ctx* daemon,
         data = get_chosen_cipher(sock_ctx, &len);
         break;
 
-/*
-    case TLS_CONTEXT:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0);
-        else
-            response = get_tls_context(sock_ctx, &data, &len);
 
+    case TLS_CONTEXT:
+        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+            break;
+        
+        response = get_tls_context(sock_ctx, &data, &len);
         if (response == 0)
             need_free = 1;
         break;
-    
-    case TLS_CONTEXT_FREE:
-*/
 
 	case TLS_TRUSTED_PEER_CERTIFICATES:
 	case TLS_PRIVATE_KEY:
@@ -979,6 +974,7 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
 	sock_ctx->int_addrlen = int_addrlen;
 	sock_ctx->rem_addr = *rem_addr;
 	sock_ctx->rem_addrlen = rem_addrlen;
+    sock_ctx->local_port = get_port(int_addr);
 
     response = prepare_SSL_connection(sock_ctx, TRUE);
     if (response != 0)
@@ -994,8 +990,6 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
         response = -ECANCELED;
 		goto err;
 	}
-
-    sock_ctx->local_port = get_port(int_addr);
 
     ret = hashmap_add(daemon->sock_map_port, sock_ctx->local_port, sock_ctx);
     if (ret != 0) {

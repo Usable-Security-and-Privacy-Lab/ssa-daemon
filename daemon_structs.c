@@ -18,6 +18,8 @@
 #define HASHMAP_NUM_BUCKETS	100
 #define CACHE_NUM_BUCKETS 20
 
+void free_ssl_session(void* session);
+
 /**
  * Creates a new daemon_ctx to be used throughout the life cycle
  * of a given SSA daemon. This context holds the netlink connection,
@@ -234,6 +236,8 @@ err:
  */
 void socket_shutdown(socket_ctx* sock_ctx) {
 
+    int ret;
+
     revocation_context_cleanup(&sock_ctx->rev_ctx);
 
     if (sock_ctx->ssl != NULL) {
@@ -241,16 +245,12 @@ void socket_shutdown(socket_ctx* sock_ctx) {
         case SOCKET_CONNECTED:
         case SOCKET_FINISHING_CONN:
         case SOCKET_ACCEPTED:
-            SSL_shutdown(sock_ctx->ssl);
+            ret = SSL_shutdown(sock_ctx->ssl);
             break;
         default:
             break;
         }
-
-        SSL_free(sock_ctx->ssl);
     }
-
-    sock_ctx->ssl = NULL;
 
     if (sock_ctx->listener != NULL) 
         evconnlistener_free(sock_ctx->listener);
@@ -293,12 +293,37 @@ void socket_context_free(socket_ctx* sock_ctx) {
 	}
 
 	revocation_context_cleanup(&sock_ctx->rev_ctx);
-	
-    if (sock_ctx->ssl_ctx != NULL)
-        SSL_CTX_free(sock_ctx->ssl_ctx);
 
-    if (sock_ctx->ssl != NULL)
-	    SSL_free(sock_ctx->ssl);
+    if (sock_ctx->ssl_ctx != NULL) {
+        int* cache_ref_cnt = SSL_CTX_get_ex_data(sock_ctx->ssl_ctx, 
+                    SESS_CACHE_REF_CNT_INDEX);
+        if (cache_ref_cnt != NULL) {
+            if (*cache_ref_cnt > 1) {
+                *cache_ref_cnt -= 1;
+
+            } else {
+                /* Free session cache and cache ref count */
+                free(cache_ref_cnt);
+
+                hsmap_t* sess_cache = SSL_CTX_get_ex_data(sock_ctx->ssl_ctx,
+                            SESS_CACHE_INDEX);
+                
+                if (sess_cache != NULL)
+                    str_hashmap_deep_free(sess_cache, free_ssl_session);
+            }
+        }
+
+        SSL_CTX_free(sock_ctx->ssl_ctx);
+    }
+        
+    if (sock_ctx->ssl != NULL) {
+        char* host_port = SSL_get_ex_data(sock_ctx->ssl, HOSTNAME_PORT_INDEX);
+        if (host_port != NULL)
+            free(host_port);
+
+        SSL_free(sock_ctx->ssl);
+    }
+
 	if (sock_ctx->secure.bev != NULL)
 		bufferevent_free(sock_ctx->secure.bev);
 	if (sock_ctx->plain.bev != NULL)
@@ -495,4 +520,8 @@ int get_port(struct sockaddr* addr) {
 		port = (int)ntohs(((struct sockaddr_in*)addr)->sin_port);
 	}
 	return port;
+}
+
+void free_ssl_session(void* session) {
+    SSL_SESSION_free((SSL_SESSION*) session);
 }

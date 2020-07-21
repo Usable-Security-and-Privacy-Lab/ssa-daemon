@@ -54,7 +54,10 @@ int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len);
 int check_key_cert_pair(socket_ctx* sock_ctx);
 int load_certificates(SSL_CTX* ctx, global_config* settings);
 
-
+int add_hostname_to_SSL(socket_ctx* sock_ctx, char* host_port);
+char* get_hostname_port_combo(socket_ctx* sock_ctx);
+int num_digits(int number);
+void set_session_if_available(socket_ctx* sock_ctx, char* host_port);
 
 /**
  * Allocates an SSL_CTX struct and populates it with the settings found in 
@@ -554,6 +557,18 @@ int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
                     "couldn't assign the socket's hostname for validation\n");
             goto err;
         }
+
+        char* host_port = get_hostname_port_combo(sock_ctx);
+        if (host_port == NULL)
+            goto err;
+
+        ret = add_hostname_to_SSL(sock_ctx, host_port);
+        if (ret != 0) {
+            free(host_port);
+            goto err;
+        }
+
+        set_session_if_available(sock_ctx, host_port);
     }
 
     return 0;
@@ -714,7 +729,7 @@ int concat_ciphers(char** list, int num, char** out) {
 	ciphers[len - 1] = '\0';
 
 	if (len != offset) {
-		log_printf(LOG_DEBUG, "load_cipher_list had unexpected results\n");
+		log_printf(LOG_WARNING, "load_cipher_list had unexpected results\n");
 		free(ciphers);
 		return 0;
 	}
@@ -800,3 +815,72 @@ err:
 	return -ECONNABORTED; /* Only happens while client is connecting */
 }
 
+
+int add_hostname_to_SSL(socket_ctx* sock_ctx, char* host_port) {
+
+    SSL* ssl = sock_ctx->ssl;
+    int ret;
+
+    ret = SSL_set_ex_data(ssl, HOSTNAME_PORT_INDEX, host_port);
+    if (ret != 1) {
+        free(host_port);
+        return -ECANCELED;
+    }
+
+    return 0;
+}
+
+
+char* get_hostname_port_combo(socket_ctx* sock_ctx) {
+
+    char* hostname = sock_ctx->rem_hostname;
+    int port = get_port(&sock_ctx->rem_addr);
+    int out_len = strlen(hostname) + num_digits(port) + 2;
+    int ret;
+    char* out;
+    
+    out = calloc(1, out_len);
+    if (out == NULL)
+        return NULL;
+
+    ret = snprintf(out, out_len, "%s:%i", hostname, port);
+    if (ret < 0) {
+        free(out);
+        return NULL;
+    }
+
+    return out;
+}
+
+int num_digits(int number) {
+    
+    int num_digits = 1;
+
+    while (number / 10 != 0) {
+        num_digits++;
+        number /= 10;
+    }
+
+    return num_digits;
+}
+
+void set_session_if_available(socket_ctx* sock_ctx, char* host_port) {
+
+    SSL_SESSION* session;
+    hsmap_t* session_cache;
+
+    session_cache = SSL_CTX_get_ex_data(sock_ctx->ssl_ctx, SESS_CACHE_INDEX);
+    if (session_cache == NULL)
+        return;
+
+    session = str_hashmap_get(session_cache, host_port);
+    if (session == NULL)
+        return;
+
+    if (SSL_SESSION_is_resumable(session))
+        SSL_set_session(sock_ctx->ssl, session);
+    
+
+    str_hashmap_del(session_cache, host_port);
+    SSL_SESSION_free(session);
+}

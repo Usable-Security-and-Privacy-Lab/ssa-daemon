@@ -277,7 +277,8 @@ void handle_client_event_connected(socket_ctx* sock_ctx,
 
     sock_ctx->state = SOCKET_FINISHING_CONN;
 
-    if (has_revocation_checks(sock_ctx->rev_ctx.checks))
+    if (has_revocation_checks(sock_ctx->rev_ctx.checks) && 
+                !SSL_session_reused(sock_ctx->ssl))
         do_cert_chain_revocation_checks(sock_ctx);
     else
         netlink_handshake_notify_kernel(daemon, id, NOTIFY_SUCCESS);

@@ -14,9 +14,7 @@ int get_enabled_ciphers(socket_ctx* sock_ctx,
             const char** data, unsigned int* len);
 const char* get_chosen_cipher(socket_ctx* sock_ctx, unsigned int* len);
 
-/*
-int get_tls_context(socket_ctx* sock_ctx, const char** data, int* len);
-*/
+int get_tls_context(socket_ctx* sock_ctx, const char** out, unsigned int* len);
 
 /* setsockopt */
 int set_connection_client(socket_ctx* conn, daemon_ctx* daemon);
@@ -27,9 +25,7 @@ int set_certificate_chain(socket_ctx* sock_ctx, char* path);
 int set_private_key(socket_ctx* sock_ctx, char* path);
 void set_no_compression(socket_ctx* sock_ctx);
 
-/*
 int set_tls_context(socket_ctx* sock_ctx, char *data, long len);
-*/
 
 int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, long len);
 

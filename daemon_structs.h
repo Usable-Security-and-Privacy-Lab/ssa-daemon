@@ -10,10 +10,12 @@
 #include "hashmap.h"
 #include "hashmap_str.h"
 
-/*
-#define SESSION_CACHE_INDEX 1
+
+#define SESS_CACHE_INDEX 1
+#define SESS_CACHE_REF_CNT_INDEX 2
+#define HOSTNAME_PORT_INDEX 3
 #define SESSION_CACHE_NUM_BUCKETS 255
-*/
+
 
 /** The maximum length that an error string may be (not including '\0') */
 #define MAX_ERR_STRING 128

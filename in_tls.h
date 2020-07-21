@@ -67,10 +67,7 @@
 /** Whether or not cached revocation responses are used as part of checks */
 #define TLS_CACHE_REVOCATION             106
 
-/*
 #define TLS_CONTEXT                      107
-#define TLS_CONTEXT_FREE                 108
-*/
 
 /* Internal use only */
 #define TLS_PEER_CERTIFICATE_CHAIN        95
