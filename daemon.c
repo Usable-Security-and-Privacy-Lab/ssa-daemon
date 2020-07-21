@@ -434,7 +434,7 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	if (getsockname(ifd, (struct sockaddr*)&int_addr, &intaddr_len) == -1)
 		goto err;
 
-    ret = prepare_SSL_connection(new_ctx, FALSE);
+    ret = prepare_SSL_server(new_ctx);
     if (ret != 0)
         goto err;
 
@@ -687,8 +687,7 @@ void setsockopt_cb(daemon_ctx* daemon, unsigned long id, int level,
     case TLS_CONTEXT:
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
             break;
-        else
-            response = set_tls_context(sock_ctx, (char*) value, len);
+        response = set_tls_context(sock_ctx, (char*) value, len);
         break;
 
 	case TLS_ERROR:
@@ -696,6 +695,7 @@ void setsockopt_cb(daemon_ctx* daemon, unsigned long id, int level,
 	case TLS_TRUSTED_CIPHERS:
     case TLS_CHOSEN_CIPHER:
 	case TLS_ID:
+    case TLS_RESUMED_SESSION:
 		response = -ENOPROTOOPT; /* all get only */
 		break;
 	default:
@@ -799,18 +799,22 @@ void getsockopt_cb(daemon_ctx* daemon,
         if ((response = check_socket_state(sock_ctx, 2, 
                     SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
             break;
-
         data = get_chosen_cipher(sock_ctx, &len);
         break;
-
 
     case TLS_CONTEXT:
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
             break;
-        
         response = get_tls_context(sock_ctx, &data, &len);
         if (response == 0)
             need_free = 1;
+        break;
+
+    case TLS_RESUMED_SESSION:
+        if ((response = check_socket_state(sock_ctx, 2, 
+                    SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
+            break;
+        response = get_session_resumed(sock_ctx, &data, &len);
         break;
 
 	case TLS_TRUSTED_PEER_CERTIFICATES:
@@ -976,7 +980,7 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
 	sock_ctx->rem_addrlen = rem_addrlen;
     sock_ctx->local_port = get_port(int_addr);
 
-    response = prepare_SSL_connection(sock_ctx, TRUE);
+    response = prepare_SSL_client(sock_ctx);
     if (response != 0)
         goto err;
 

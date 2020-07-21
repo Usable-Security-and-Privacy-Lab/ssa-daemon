@@ -67,11 +67,20 @@
 /** Whether or not cached revocation responses are used as part of checks */
 #define TLS_CACHE_REVOCATION             106
 
+/** The settings and sessions associated with a given file descriptor */
 #define TLS_CONTEXT                      107
+
+/** Whether or not previous session keys will be cached and reused */ 
+#define TLS_SESSION_REUSE                108
+
+/** Whether or not the current connection is based off of a resumed session */
+#define TLS_RESUMED_SESSION              109
+
 
 /* Internal use only */
 #define TLS_PEER_CERTIFICATE_CHAIN        95
 #define TLS_ID                            96
+
 
 /* TCP options */
 #define TCP_UPGRADE_TLS         33

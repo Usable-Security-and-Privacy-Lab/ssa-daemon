@@ -13,12 +13,12 @@
 #include "error.h"
 #include "log.h"
 #include "netlink.h"
+#include "sessions.h"
 #include "socket_setup.h"
 
 #define HASHMAP_NUM_BUCKETS	100
 #define CACHE_NUM_BUCKETS 20
 
-void free_ssl_session(void* session);
 
 /**
  * Creates a new daemon_ctx to be used throughout the life cycle
@@ -151,7 +151,7 @@ void daemon_context_free(daemon_ctx* daemon) {
  * @param id The ID assigned to the given socket_ctx.
  * @returns 0 on success, or -ECANCELED if an error occurred.
  */
-int socket_context_new(socket_ctx** new_sock_ctx, int fd,  
+int socket_context_new(socket_ctx** new_sock_ctx, int fd,
 		daemon_ctx* daemon, unsigned long id) {
 
     socket_ctx* sock_ctx = (socket_ctx*)calloc(1, sizeof(socket_ctx));
@@ -163,11 +163,11 @@ int socket_context_new(socket_ctx** new_sock_ctx, int fd,
         goto err;
 
     sock_ctx->daemon = daemon;
+    sock_ctx->rev_ctx.daemon = daemon;
     sock_ctx->id = id;
+    sock_ctx->rev_ctx.id = id;
     sock_ctx->sockfd = fd;
     sock_ctx->state = SOCKET_NEW;
-    sock_ctx->rev_ctx.daemon = daemon;
-    sock_ctx->rev_ctx.id = id;
 
     /* transfer over revocation check flags */
     sock_ctx->rev_ctx.checks = daemon->settings->revocation_checks;
@@ -236,8 +236,6 @@ err:
  */
 void socket_shutdown(socket_ctx* sock_ctx) {
 
-    int ret;
-
     revocation_context_cleanup(&sock_ctx->rev_ctx);
 
     if (sock_ctx->ssl != NULL) {
@@ -245,7 +243,7 @@ void socket_shutdown(socket_ctx* sock_ctx) {
         case SOCKET_CONNECTED:
         case SOCKET_FINISHING_CONN:
         case SOCKET_ACCEPTED:
-            ret = SSL_shutdown(sock_ctx->ssl);
+            SSL_shutdown(sock_ctx->ssl);
             break;
         default:
             break;
@@ -286,41 +284,22 @@ void socket_context_free(socket_ctx* sock_ctx) {
 		return;
 	}
 
-	if (sock_ctx->listener != NULL) {
+	if (sock_ctx->listener != NULL)
 		evconnlistener_free(sock_ctx->listener);
-	} else if (sock_ctx->sockfd != -1) { 
+	else if (sock_ctx->sockfd != -1)
 		EVUTIL_CLOSESOCKET(sock_ctx->sockfd);
-	}
+	
 
 	revocation_context_cleanup(&sock_ctx->rev_ctx);
 
     if (sock_ctx->ssl_ctx != NULL) {
-        int* cache_ref_cnt = SSL_CTX_get_ex_data(sock_ctx->ssl_ctx, 
-                    SESS_CACHE_REF_CNT_INDEX);
-        if (cache_ref_cnt != NULL) {
-            if (*cache_ref_cnt > 1) {
-                *cache_ref_cnt -= 1;
-
-            } else {
-                /* Free session cache and cache ref count */
-                free(cache_ref_cnt);
-
-                hsmap_t* sess_cache = SSL_CTX_get_ex_data(sock_ctx->ssl_ctx,
-                            SESS_CACHE_INDEX);
-                
-                if (sess_cache != NULL)
-                    str_hashmap_deep_free(sess_cache, free_ssl_session);
-            }
-        }
-
+        if (has_session_cache(sock_ctx->ssl_ctx))
+            session_cache_free(sock_ctx->ssl_ctx);
         SSL_CTX_free(sock_ctx->ssl_ctx);
     }
         
     if (sock_ctx->ssl != NULL) {
-        char* host_port = SSL_get_ex_data(sock_ctx->ssl, HOSTNAME_PORT_INDEX);
-        if (host_port != NULL)
-            free(host_port);
-
+        session_resumption_cleanup(sock_ctx->ssl);
         SSL_free(sock_ctx->ssl);
     }
 
@@ -506,6 +485,32 @@ int check_socket_state(socket_ctx* sock_ctx, int num, ...) {
 
 
 /**
+ * Creates a string of the format "<hostname>:<port>".
+ * @param sock_ctx The socket to retrieve hostname and port information from.
+ * @returns A newly allocated null-terminated string.
+ */
+char* get_hostname_port_str(socket_ctx* sock_ctx) {
+
+    char* hostname = sock_ctx->rem_hostname;
+    int port = get_port(&sock_ctx->rem_addr);
+    int out_len = strlen(hostname) + 10; /* short max is < 10 digits */
+    int ret;
+
+    char* out = calloc(1, out_len);
+    if (out == NULL)
+        return NULL;
+
+    ret = snprintf(out, out_len, "%s:%i", hostname, port);
+    if (ret < 0) {
+        free(out);
+        return NULL;
+    }
+
+    return out;
+}
+
+
+/**
  * Retrieves an integer port number from a given sockaddr struct.
  * @param addr The sockaddr struct to retrieve the port number of.
  * @returns The port number.
@@ -520,8 +525,4 @@ int get_port(struct sockaddr* addr) {
 		port = (int)ntohs(((struct sockaddr_in*)addr)->sin_port);
 	}
 	return port;
-}
-
-void free_ssl_session(void* session) {
-    SSL_SESSION_free((SSL_SESSION*) session);
 }

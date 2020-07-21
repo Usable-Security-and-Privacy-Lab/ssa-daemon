@@ -9,6 +9,7 @@
 
 #include "error.h"
 #include "log.h"
+#include "sessions.h"
 #include "sockopt_functions.h"
 
 /*
@@ -21,6 +22,7 @@ int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist);
 int check_key_cert_pair(socket_ctx* sock_ctx);
 
 int new_session_cb(SSL* ssl, SSL_SESSION* session);
+void remove_session_cb(SSL_CTX *ctx, SSL_SESSION *sess);
 
 /*
  *******************************************************************************
@@ -201,11 +203,11 @@ const char* get_chosen_cipher(socket_ctx* sock_ctx, unsigned int* len) {
 int get_tls_context(socket_ctx* sock_ctx, const char** out, unsigned int* len) {
 
     SSL_CTX* ssl_ctx = sock_ctx->ssl_ctx;
-    hsmap_t* session_hashmap = NULL;
     uint64_t id = sock_ctx->id;
-    int* cache_ref_cnt = NULL;
     char* data = NULL;
-    int ret;
+    int ret = 0;
+
+    log_printf(LOG_DEBUG, "ID being got: %lu\n", id);
 
     data = malloc(sizeof(id));
     if (data == NULL)
@@ -213,32 +215,11 @@ int get_tls_context(socket_ctx* sock_ctx, const char** out, unsigned int* len) {
 
     memcpy(data, &id, sizeof(id));
 
-    if (SSL_CTX_get_ex_data(ssl_ctx, SESS_CACHE_INDEX) == NULL) {
-
-        SSL_CTX_set_session_cache_mode(ssl_ctx, 
-                SSL_SESS_CACHE_CLIENT | SSL_SESS_CACHE_NO_INTERNAL);
-        SSL_CTX_sess_set_new_cb(ssl_ctx, new_session_cb);
-
-        session_hashmap = str_hashmap_create(SESSION_CACHE_NUM_BUCKETS);
-        if (session_hashmap == NULL)
+    if (client_session_resumption_enabled(ssl_ctx) 
+                && !has_session_cache(ssl_ctx)) {
+        ret = session_cache_new(ssl_ctx);
+        if (ret != 0)
             goto err;
-
-        ret = SSL_CTX_set_ex_data(ssl_ctx,
-                    SESS_CACHE_INDEX, session_hashmap);
-        if (ret != 1)
-            goto err;
-
-        cache_ref_cnt = malloc(sizeof(int));
-        if (cache_ref_cnt == NULL)
-            goto err;
-
-        *cache_ref_cnt = 1;
-
-        ret = SSL_CTX_set_ex_data(ssl_ctx, 
-                    SESS_CACHE_REF_CNT_INDEX, cache_ref_cnt);
-        if (ret != 1)
-            goto err;
-
     }
 
     *out = data;
@@ -247,22 +228,30 @@ int get_tls_context(socket_ctx* sock_ctx, const char** out, unsigned int* len) {
 err:
     if (data != NULL)
         free(data);
-
-    if (session_hashmap != NULL)
-        str_hashmap_free(session_hashmap);
-
-    if (cache_ref_cnt != NULL)
-        free(cache_ref_cnt);
-
+    
     return -ECANCELED;
 }
 
+int get_session_resumed(socket_ctx* sock_ctx, 
+            const char **data, unsigned int *len) {
+                
+    char* tmp = malloc(sizeof(int));
+    if (tmp == NULL)
+        return -ECANCELED;
+    
+    int is_reused = SSL_session_reused(sock_ctx->ssl);
 
-/*
- *******************************************************************************
+    memcpy(tmp, &is_reused, sizeof(int));
+    *data = tmp;
+    *len = sizeof(int);
+    return 0;
+}
+
+
+
+/*******************************************************************************
  *                           SETSOCKOPT FUNCTIONS
- *******************************************************************************
- */
+ ******************************************************************************/
 
 
 /**
@@ -465,27 +454,36 @@ void set_no_compression(socket_ctx* sock_ctx) {
 }
 
 
+/**
+ * Sets the SSL context of the given socket to be identical to another
+ * socket. The other socket is retrieved via its ID, which is passed in 
+ * through \p data.
+ * @param sock_ctx The context of the socket to set the SSL context for.
+ * @param data A byte stream of data representing the ID of the socket
+ * to clone the SSL context of.
+ * @param len The size of \p data.
+ * @returns 0 on success, or a negative errno value on failure.
+ */
 int set_tls_context(socket_ctx* sock_ctx, char* data, long len) {
 
     uint64_t id = 0;
-    int *ref_cnt;
 
     memcpy(&id, data, sizeof(uint64_t));
+    log_printf(LOG_DEBUG, "ID to set for context: %lu\n", id);
 
     socket_ctx* old_sock_ctx = hashmap_get(sock_ctx->daemon->sock_map, id);
     if (old_sock_ctx == NULL)
-        return -EINVAL;
+        return -ECONNABORTED;
+
+    if (client_session_resumption_enabled(old_sock_ctx->ssl_ctx)) {
+        int response = session_cache_up_ref(old_sock_ctx->ssl_ctx);
+        if (response != 0)
+            return response;
+    }
 
     SSL_CTX_free(sock_ctx->ssl_ctx);
     sock_ctx->ssl_ctx = old_sock_ctx->ssl_ctx;
     SSL_CTX_up_ref(sock_ctx->ssl_ctx);
-
-    ref_cnt = SSL_CTX_get_ex_data(sock_ctx->ssl_ctx, SESS_CACHE_REF_CNT_INDEX);
-    if (ref_cnt == NULL) {
-        sock_ctx->state = SOCKET_ERROR;
-        return -ECANCELED;
-    }
-    (*ref_cnt) += 1;
 
     return 0;
 }
@@ -599,35 +597,4 @@ int check_key_cert_pair(socket_ctx* sock_ctx) {
 	return 0;
 err:
 	return -EPROTO; /* Protocol err--key didn't match or chain didn't build */
-}
-
-
-int new_session_cb(SSL* ssl, SSL_SESSION* session) {
-
-    hsmap_t* session_cache;
-    SSL_CTX* ctx;
-    char* host_port;
-    int ret;
-        
-    ctx = SSL_get_SSL_CTX(ssl);
-    if (ctx == NULL)
-        return 0;
-
-    host_port = SSL_get_ex_data(ssl, HOSTNAME_PORT_INDEX);
-    if (host_port == NULL)
-        return 0;
-
-    host_port = strdup(host_port);
-    if (host_port == NULL)
-        return 0;
-
-    session_cache = (hsmap_t*) SSL_CTX_get_ex_data(ctx, SESS_CACHE_INDEX);
-    if (session_cache == NULL)
-        return 0;
-
-    ret = str_hashmap_add(session_cache, host_port, session);
-    if (ret != 0)
-        return 0;
-
-    return 1;
 }

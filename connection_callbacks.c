@@ -277,6 +277,12 @@ void handle_client_event_connected(socket_ctx* sock_ctx,
 
     sock_ctx->state = SOCKET_FINISHING_CONN;
 
+    if (SSL_session_reused(sock_ctx->ssl))
+        log_printf(LOG_DEBUG, "Session reused!\n");
+    else
+        log_printf(LOG_DEBUG, "Session not reused...\n");
+    
+
     if (has_revocation_checks(sock_ctx->rev_ctx.checks) && 
                 !SSL_session_reused(sock_ctx->ssl))
         do_cert_chain_revocation_checks(sock_ctx);
@@ -418,5 +424,3 @@ void handle_event_timeout(socket_ctx* sock_ctx) {
 
     return;
 }
-
-

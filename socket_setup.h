@@ -36,25 +36,11 @@
 SSL_CTX* SSL_CTX_create(global_config* settings);
 
 
-/**
- * Attempts to create a new SSL struct and attach it to the given connection.
- * If unsuccessful, the connection's state will not be altered--if it
- * contained an SSL struct prior to this call, that struct will remain.
- * @param conn The connection to assign a new client SSL struct to.
- * @returns 0 on success; -errno otherwise.
- */
-int client_SSL_new(socket_ctx* sock_ctx);
+
+int prepare_SSL_client(socket_ctx* sock_ctx);
 
 
-
-/**
- * Prepares the SSL object for the given connection.
- * @param sock_ctx The context of the socket to prepare the SSL object for.
- * @param is_client A boolean value indicating whether the SSL object is
- * being prepared for a client or for a server.
- * @returns 0 on success, and -ECANCELED on error.
- */
-int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client);
+int prepare_SSL_server(socket_ctx* sock_ctx);
 
 
 /**

@@ -15,6 +15,7 @@
 #include "connection_callbacks.h"
 #include "error.h"
 #include "log.h"
+#include "sessions.h"
 
 #define UBUNTU_DEFAULT_CA "/etc/ssl/certs/ca-certificates.crt"
 #define FEDORA_DEFAULT_CA "/etc/pki/tls/certs/ca-bundle.crt"
@@ -54,11 +55,6 @@ int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len);
 int check_key_cert_pair(socket_ctx* sock_ctx);
 int load_certificates(SSL_CTX* ctx, global_config* settings);
 
-int add_hostname_to_SSL(socket_ctx* sock_ctx, char* host_port);
-char* get_hostname_port_combo(socket_ctx* sock_ctx);
-int num_digits(int number);
-void set_session_if_available(socket_ctx* sock_ctx, char* host_port);
-
 /**
  * Allocates an SSL_CTX struct and populates it with the settings found in 
  * \p settings. 
@@ -77,6 +73,11 @@ SSL_CTX* SSL_CTX_create(global_config* settings) {
 		goto err;
 
 	SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
+
+    if (settings->session_resumption)
+        SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_BOTH);
+    else 
+        SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_OFF);
 
 	if (!settings->tls_compression)
 		SSL_CTX_set_options(ctx, 
@@ -412,23 +413,9 @@ int load_certificates(SSL_CTX* ctx, global_config* settings) {
 	return 1;
 }
 
-/**
- * Attempts to create a new SSL struct and attach it to the given connection.
- * If unsuccessful, the connection's state will not be altered--if it
- * contained an SSL struct prior to this call, that struct will remain.
- * @param conn The connection to assign a new client SSL struct to.
- * @returns 0 on success; -errno otherwise.
- */
-int client_SSL_new(socket_ctx* sock_ctx) {
 
-	sock_ctx->ssl = SSL_new(sock_ctx->ssl_ctx);
-	if (sock_ctx->ssl == NULL)
-		return determine_and_set_error(sock_ctx);
 
-    SSL_set_verify(sock_ctx->ssl, SSL_VERIFY_PEER, NULL);
 
-	return 0;
-}
 
 /**
  * Allocates and sets the correct settings for the bufferevents of a given 
@@ -506,69 +493,54 @@ err:
 }
 
 
-/**
- * Prepares the SSL object for the given connection.
- * @param sock_ctx The context of the socket to prepare the SSL object for.
- * @param is_client A boolean value indicating whether the SSL object is
- * being prepared for a client or for a server.
- * @returns 0 on success, and -ECANCELED on error.
- */
-int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
+int prepare_SSL_client(socket_ctx* sock_ctx) {
 
     int ret;
 
-    clear_global_and_socket_errors(sock_ctx);
-
-    if (is_client && has_revocation_checks(sock_ctx->rev_ctx.checks)) {
-
+    if (has_revocation_checks(sock_ctx->rev_ctx.checks))
         ret = SSL_CTX_set_tlsext_status_type(sock_ctx->ssl_ctx, 
                     TLSEXT_STATUSTYPE_ocsp);
-        if (ret != 1)
-            goto err;
-    } else {
-
+    else
         ret = SSL_CTX_set_tlsext_status_type(sock_ctx->ssl_ctx, 0);
-        if (ret != 1)
-            goto err;
-    }
 
-    ret = client_SSL_new(sock_ctx);
+    if (ret != 1)
+        goto err;
+
+    sock_ctx->ssl = SSL_new(sock_ctx->ssl_ctx);
     if (sock_ctx->ssl == NULL)
         goto err;
-    
 
-    if (is_client) {
-        if (strlen(sock_ctx->rem_hostname) <= 0) {
-            set_err_string(sock_ctx, "TLS error: "
+
+    if (strlen(sock_ctx->rem_hostname) <= 0) {
+        set_err_string(sock_ctx, "TLS error: "
                     "hostname required for verification (via setsockopt())");
-                goto err;
-        }
+        goto err;
+    }
 
-        ret = SSL_set_tlsext_host_name(sock_ctx->ssl, sock_ctx->rem_hostname);
-        if (ret != 1) {
-            log_printf(LOG_ERROR, "Connection setup error: "
-                    "couldn't assign the socket's hostname for SNI\n");
-            goto err;
-        }
+    ret = SSL_set_tlsext_host_name(sock_ctx->ssl, sock_ctx->rem_hostname);
+    if (ret != 1) {
+        log_printf(LOG_ERROR, "Connection setup error: "
+                "couldn't assign the socket's hostname for SNI\n");
+        goto err;
+    }
 
-        ret = SSL_set1_host(sock_ctx->ssl, sock_ctx->rem_hostname);
-        if (ret != 1) {
-            log_printf(LOG_ERROR, "Connection setup error: "
-                    "couldn't assign the socket's hostname for validation\n");
-            goto err;
-        }
+    ret = SSL_set1_host(sock_ctx->ssl, sock_ctx->rem_hostname);
+    if (ret != 1) {
+        log_printf(LOG_ERROR, "Connection setup error: "
+                "couldn't assign the socket's hostname for validation\n");
+        goto err;
+    }
 
-        char* host_port = get_hostname_port_combo(sock_ctx);
+    if (has_session_cache(sock_ctx->ssl_ctx)) {
+        char* host_port = get_hostname_port_str(sock_ctx);
         if (host_port == NULL)
             goto err;
 
-        ret = add_hostname_to_SSL(sock_ctx, host_port);
+        ret = session_resumption_setup(sock_ctx->ssl, host_port);
         if (ret != 0) {
             free(host_port);
             goto err;
         }
-
-        set_session_if_available(sock_ctx, host_port);
     }
 
     return 0;
@@ -576,11 +548,23 @@ err:
 
     if (sock_ctx->ssl != NULL)
         SSL_free(sock_ctx->ssl);
+    sock_ctx->ssl = NULL;
 
     if (has_error_string(sock_ctx))
         return -EPROTO;
 
     return -ECANCELED;
+}
+
+
+
+int prepare_SSL_server(socket_ctx* sock_ctx) {
+
+    sock_ctx->ssl = SSL_new(sock_ctx->ssl_ctx);
+    if (sock_ctx->ssl == NULL)
+        return -ECANCELED;
+
+    return 0;
 }
 
 
@@ -813,74 +797,4 @@ int associate_fd(socket_ctx* sock_ctx, evutil_socket_t ifd) {
 err:
 	log_printf(LOG_ERROR, "associate_fd failed.\n");
 	return -ECONNABORTED; /* Only happens while client is connecting */
-}
-
-
-int add_hostname_to_SSL(socket_ctx* sock_ctx, char* host_port) {
-
-    SSL* ssl = sock_ctx->ssl;
-    int ret;
-
-    ret = SSL_set_ex_data(ssl, HOSTNAME_PORT_INDEX, host_port);
-    if (ret != 1) {
-        free(host_port);
-        return -ECANCELED;
-    }
-
-    return 0;
-}
-
-
-char* get_hostname_port_combo(socket_ctx* sock_ctx) {
-
-    char* hostname = sock_ctx->rem_hostname;
-    int port = get_port(&sock_ctx->rem_addr);
-    int out_len = strlen(hostname) + num_digits(port) + 2;
-    int ret;
-    char* out;
-    
-    out = calloc(1, out_len);
-    if (out == NULL)
-        return NULL;
-
-    ret = snprintf(out, out_len, "%s:%i", hostname, port);
-    if (ret < 0) {
-        free(out);
-        return NULL;
-    }
-
-    return out;
-}
-
-int num_digits(int number) {
-    
-    int num_digits = 1;
-
-    while (number / 10 != 0) {
-        num_digits++;
-        number /= 10;
-    }
-
-    return num_digits;
-}
-
-void set_session_if_available(socket_ctx* sock_ctx, char* host_port) {
-
-    SSL_SESSION* session;
-    hsmap_t* session_cache;
-
-    session_cache = SSL_CTX_get_ex_data(sock_ctx->ssl_ctx, SESS_CACHE_INDEX);
-    if (session_cache == NULL)
-        return;
-
-    session = str_hashmap_get(session_cache, host_port);
-    if (session == NULL)
-        return;
-
-    if (SSL_SESSION_is_resumable(session))
-        SSL_set_session(sock_ctx->ssl, session);
-    
-
-    str_hashmap_del(session_cache, host_port);
-    SSL_SESSION_free(session);
 }

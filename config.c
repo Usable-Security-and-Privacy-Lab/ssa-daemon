@@ -35,6 +35,7 @@
 #define OCSP_CHECKS     "revocation-ocsp"
 #define CRL_CHECKS      "revocation-crl"
 #define CACHED_CHECKS   "revocation-cached"
+#define SESSION_REUSE   "session-resumption"
 
 
 /* different values that we accept in place of just 'true' or 'false' */
@@ -238,6 +239,9 @@ int parse_next_setting(yaml_parser_t* parser, global_config* config) {
 
     } else if (strcmp(label, SESSION_TICKETS) == 0) {
         ret = parse_boolean(parser, &config->session_tickets);
+
+    } else if (strcmp(label, SESSION_REUSE) == 0) {
+        ret = parse_boolean(parser, &config->session_resumption);
 
     } else if (strcmp(label, REV_CHECKS) == 0) {
         int has_checks;

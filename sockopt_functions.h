@@ -16,6 +16,9 @@ const char* get_chosen_cipher(socket_ctx* sock_ctx, unsigned int* len);
 
 int get_tls_context(socket_ctx* sock_ctx, const char** out, unsigned int* len);
 
+int get_session_resumed(socket_ctx* sock_ctx, 
+            const char **data, unsigned int *len);
+
 /* setsockopt */
 int set_connection_client(socket_ctx* conn, daemon_ctx* daemon);
 int set_connection_server(socket_ctx* conn, daemon_ctx* daemon);
