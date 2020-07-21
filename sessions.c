@@ -2,8 +2,9 @@
 
 #include <openssl/ssl.h>
 
-#include "sessions.h"
 #include "hashmap_str.h"
+#include "log.h"
+#include "sessions.h"
 
 
 #define SESS_CACHE_INDEX 1
@@ -256,7 +257,7 @@ int new_session_cb(SSL* ssl, SSL_SESSION* session) {
     if (ret != 1)
         goto err;
 
-    ret = str_hashmap_add(session_cache, host_port, session);
+    ret = str_hashmap_queue_add(session_cache, host_port, session);
     if (ret != 0)
         goto err;
 
@@ -293,8 +294,9 @@ void remove_session_cb(SSL_CTX *ctx, SSL_SESSION *session) {
     if (host_port == NULL)
         return;
 
-    str_hashmap_del(session_cache, host_port);
-
+    int ret = str_hashmap_queue_del(session_cache, host_port, session);
+    if (ret != 0)
+        log_printf(LOG_WARNING, "queue_del didn't work on session\n");
     SSL_SESSION_free(session);
     free(host_port);
 }

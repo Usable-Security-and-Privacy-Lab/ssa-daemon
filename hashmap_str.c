@@ -125,6 +125,7 @@ void str_hashmap_free(hsmap_t* map) {
  * malloc failure.
  */
 int str_hashmap_add(hsmap_t* map, char* key, void* value) {
+
 	int index;
 	hsnode_t* cur;
 	hsnode_t* next;
@@ -172,6 +173,7 @@ int str_hashmap_add(hsmap_t* map, char* key, void* value) {
  * @returns 0 on success, or 1 if no entry exists for \p key.
  */
 int str_hashmap_del(hsmap_t* map, char* key) {
+
 	int index;
 	hsnode_t* cur;
 	hsnode_t* tmp;
@@ -259,4 +261,101 @@ void str_hashmap_print(hsmap_t* map) {
 		}
 	}
 	return;
+}
+
+
+/**
+ * Adds the given key:value pair to \p map, even if \p key already exists
+ * as a key to one of the elements in the hashmap. It should be warned that 
+ * this partially breaks the API of a hashmap; subsequent lookups and 
+ * deletions will only return the first element added, leaving the rest 
+ * invisible. This function is used in tandem with `str_hashmap_mult_del`
+ * as a hack to allow session caching to cache multiple sessions and then remove
+ * one at a time.
+ * @param map The map to add the given key:value pair to.
+ * @param key The *non*-unique null-terminated string for the element.
+ * @param value A unique pointer to the desired data to store.
+ * @returns 0 on success; or -1 on malloc failure.
+ */
+int str_hashmap_queue_add(hsmap_t* map, char* key, void* value) {
+
+    int index;
+	hsnode_t* cur;
+	hsnode_t* new_node;
+    
+    if (key == NULL)
+        return 1;
+
+    new_node = (hsnode_t*)malloc(sizeof(hsnode_t));
+    if (new_node == NULL)
+        return -1;
+
+    new_node->key = key;
+    new_node->value = value;
+    new_node->next = NULL;
+
+    index = hash(map, key);
+
+	cur = map->buckets[index];
+	if (cur == NULL) {
+		map->buckets[index] = new_node;
+		map->item_count++;
+		return 0;
+	}
+
+    while (cur->next != NULL)
+        cur = cur->next;
+
+    cur->next = new_node;
+	map->item_count++;
+	return 0;
+
+}
+
+
+/**
+ * In maps where `str_hashmap_mult_add` has been used, this function may
+ * be used to delete a specific instance of a node when several nodes exist
+ * with the same key. It does so by iterating through each element containing 
+ * \p key as its key and checking to see if the pointer \p value matches the 
+ * element's value.
+ * @param map The map to delete the given key:value pair from.
+ * @param key A *non*-unique null-terminated string to identify the element.
+ * @param value The specific value of the element to be deleted.
+ * @returns 0 on success, or 1 if no element with the given key:value pair
+ * could be found.
+ */
+int str_hashmap_queue_del(hsmap_t* map, char* key, void* value) {
+
+	int index;
+	hsnode_t* cur;
+	hsnode_t* tmp;
+	index = hash(map, key);
+
+	cur = map->buckets[index];
+	if (cur == NULL)
+		return 1; /* Not found */
+
+	if (STR_MATCH(cur->key,key) && cur->value == value) {
+		map->buckets[index] = cur->next;
+        free(cur->key);
+		free(cur);
+		map->item_count--;
+		return 0;
+	}
+	while (cur->next != NULL) {
+        tmp = cur->next;
+
+		if (STR_MATCH(tmp->key,key) && cur->value == value) {
+			cur->next = tmp->next;
+            free(tmp->key);
+			free(tmp);
+			map->item_count--;
+			return 0;
+		}
+		cur = tmp;
+	}
+
+	/* Not found */
+	return 1;
 }
