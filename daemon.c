@@ -40,11 +40,12 @@
 #include "daemon.h"
 #include "daemon_structs.h"
 #include "error.h"
+#include "getsockopt.h"
 #include "in_tls.h"
 #include "log.h"
 #include "netlink.h"
+#include "setsockopt.h"
 #include "socket_setup.h"
-#include "sockopt_functions.h"
 
 
 #define MAX_UPGRADE_SOCKET  18
@@ -617,94 +618,16 @@ void setsockopt_cb(daemon_ctx* daemon, unsigned long id, int level,
 
 	clear_global_and_socket_errors(sock_ctx);
 
-	switch (option) {
-	case TLS_REMOTE_HOSTNAME:
-		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-			break;
-		response = set_remote_hostname(sock_ctx, (char*) value, len);
-		break;
-
-	case TLS_DISABLE_CIPHER:
-		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-			break;
-		response = disable_cipher(sock_ctx, (char*) value);
-		break;
-
-	case TLS_TRUSTED_PEER_CERTIFICATES:
-		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-			break;
-		response = set_trusted_CA_certificates(sock_ctx, (char*) value);
-		break;
-
-	case TLS_CERTIFICATE_CHAIN:
-		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-			break;
-		response = set_certificate_chain(sock_ctx, (char*) value);
-		break;
-
-	case TLS_PRIVATE_KEY:
-		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-			break;
-		response = set_private_key(sock_ctx, value);
-		break;
-
-    case TLS_DISABLE_COMPRESSION:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-            break;
-        set_no_compression(sock_ctx);
-        break;
-
-    case TLS_REVOCATION_CHECKS:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-            break;
-        turn_on_revocation_checks(sock_ctx->rev_ctx.checks);
-        break;
-
-    case TLS_OCSP_STAPLED_CHECKS:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-            break;
-        turn_on_stapled_checks(sock_ctx->rev_ctx.checks);
-        break;
-
-    case TLS_OCSP_CHECKS:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-            break;
-        turn_on_ocsp_checks(sock_ctx->rev_ctx.checks);
-        break;
-
-    case TLS_CRL_CHECKS:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-            break;
-        turn_on_crl_checks(sock_ctx->rev_ctx.checks);
-        break;
-
-    case TLS_CACHE_REVOCATION:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-            break;
-        turn_on_cached_checks(sock_ctx->rev_ctx.checks);
-        break;
-
-    case TLS_CONTEXT:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-            break;
-        response = set_tls_context(sock_ctx, (char*) value, len);
-        break;
-
-	case TLS_ERROR:
-	case TLS_HOSTNAME:
-	case TLS_TRUSTED_CIPHERS:
-    case TLS_CHOSEN_CIPHER:
-	case TLS_ID:
-    case TLS_RESUMED_SESSION:
-		response = -ENOPROTOOPT; /* all get only */
-		break;
-	default:
-		if (setsockopt(sock_ctx->sockfd, level, option, value, len) == -1) {
+    if (level == IPPROTO_TLS) {
+        response = do_setsockopt_action(sock_ctx, option, value, len);
+    
+    } else {
+        int ret = setsockopt(sock_ctx->sockfd, level, option, value, len);
+        if (ret == -1) {
 			response = -errno;
 			set_err_string(sock_ctx, "Daemon error: internal fd setsockopt failed");
 		}
-		break;
-	}
+    }
 
 	netlink_notify_kernel(daemon, id, response);
 	return;
@@ -740,103 +663,8 @@ void getsockopt_cb(daemon_ctx* daemon,
 
     if (option != TLS_ERROR)
         clear_global_and_socket_errors(sock_ctx);
-
-    switch (option) {
-	case TLS_ERROR:
-		if (!has_error_string(sock_ctx)) {
-			response = -EINVAL;
-			break;
-		}
-
-		data = sock_ctx->err_string;
-		len = strlen(sock_ctx->err_string) + 1;
-		break;
-
-	case TLS_REMOTE_HOSTNAME:
-		if ((response = check_socket_state(sock_ctx,
-				2, SOCKET_NEW, SOCKET_CONNECTED)) != 0)
-			break;
-
-		if (strlen(sock_ctx->rem_hostname) > 0) {
-			data = sock_ctx->rem_hostname;
-			len = strlen(sock_ctx->rem_hostname) + 1;
-		}
-		break;
-
-	case TLS_HOSTNAME:
-		if ((response = check_socket_state(sock_ctx, 
-				1, SOCKET_ACCEPTED)) != 0)
-			break;
-
-		response = get_hostname(sock_ctx, &data, &len);
-		break;
-
-	case TLS_PEER_IDENTITY:
-		if ((response = check_socket_state(sock_ctx, 2,
-				SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
-			break;
-
-		response = get_peer_identity(sock_ctx, &data, &len);
-		if (response == 0)
-			need_free = 1;
-		break;
-
-	case TLS_PEER_CERTIFICATE_CHAIN:
-		if ((response = check_socket_state(sock_ctx, 1, SOCKET_CONNECTED)) != 0)
-			break;
-		response = get_peer_certificate(sock_ctx, &data, &len);
-		if (response == 0)
-			need_free = 1;
-		break;
-
-	case TLS_TRUSTED_CIPHERS:
-		response = get_enabled_ciphers(sock_ctx, &data, &len);
-		if (response == 0)
-			need_free = 1;
-		break;
-
-    case TLS_CHOSEN_CIPHER:
-        if ((response = check_socket_state(sock_ctx, 2, 
-                    SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
-            break;
-        data = get_chosen_cipher(sock_ctx, &len);
-        break;
-
-    case TLS_CONTEXT:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-            break;
-        response = get_tls_context(sock_ctx, &data, &len);
-        if (response == 0)
-            need_free = 1;
-        break;
-
-    case TLS_RESUMED_SESSION:
-        if ((response = check_socket_state(sock_ctx, 2, 
-                    SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
-            break;
-        response = get_session_resumed(sock_ctx, &data, &len);
-        break;
-
-	case TLS_TRUSTED_PEER_CERTIFICATES:
-	case TLS_PRIVATE_KEY:
-	case TLS_DISABLE_CIPHER:
-	case TLS_REQUEST_PEER_AUTH:
-		response = -ENOPROTOOPT; /* all set only */
-		break;
-
-	case TLS_ID:
-		/* This case is handled directly by the kernel.
-		 * If we want to change that, uncomment the lines below */
-		/* data = &id;
-		len = sizeof(id);
-		break; */
-	default:
-		log_printf(LOG_ERROR,
-				"Default case for getsockopt hit: should never happen\n");
-		response = -EBADF;
-		break;
-	}
-
+    
+    response = do_getsockopt_action(sock_ctx, option, &need_free, &data, &len);
 	if (response != 0) {
 		netlink_notify_kernel(daemon, id, response);
 		return;
