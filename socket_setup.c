@@ -510,6 +510,7 @@ int prepare_SSL_client(socket_ctx* sock_ctx) {
     if (sock_ctx->ssl == NULL)
         goto err;
 
+    SSL_set_verify(sock_ctx->ssl, SSL_VERIFY_PEER, NULL);
 
     if (strlen(sock_ctx->rem_hostname) <= 0) {
         set_err_string(sock_ctx, "TLS error: "
