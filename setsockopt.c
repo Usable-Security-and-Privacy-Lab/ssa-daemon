@@ -43,7 +43,7 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
     int response = 0;
 
     switch (option) {
-	case TLS_REMOTE_HOSTNAME:
+	case TLS_HOSTNAME:
 		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
 			break;
 		response = set_remote_hostname(sock_ctx, (char*) value, len);

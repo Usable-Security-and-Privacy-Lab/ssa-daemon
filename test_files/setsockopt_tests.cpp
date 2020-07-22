@@ -48,7 +48,7 @@ TEST(SetsockoptTests, SetHostnameCorrect) {
     
     ASSERT_GE(fd, 0);
     
-    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_REMOTE_HOSTNAME, 
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_HOSTNAME, 
                 "google.com", strlen("google.com")+1);
 
     EXPECT_EQ(setsockopt_ret, 0);
@@ -73,7 +73,7 @@ TEST(SetsockoptTests, SetHostnameNull) {
     
     ASSERT_NE(fd, -1);
     
-    int ret = setsockopt(fd, IPPROTO_TLS, TLS_REMOTE_HOSTNAME, 
+    int ret = setsockopt(fd, IPPROTO_TLS, TLS_HOSTNAME, 
                 NULL, 0);
 
     EXPECT_EQ(ret, -1);

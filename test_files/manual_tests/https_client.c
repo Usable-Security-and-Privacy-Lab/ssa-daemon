@@ -49,8 +49,8 @@ int main(int argc, char* argv[]) {
 		}
 
         //set the correct hostname for correct handshake
-        if (setsockopt(sock_fd, IPPROTO_TLS, TLS_REMOTE_HOSTNAME, host, strlen(host)+1) == -1) {
-			perror("setsockopt: TLS_REMOTE_HOSTNAME");
+        if (setsockopt(sock_fd, IPPROTO_TLS, TLS_HOSTNAME, host, strlen(host)+1) == -1) {
+			perror("setsockopt: TLS_HOSTNAME");
 			close(sock_fd);
 			continue;
 		}

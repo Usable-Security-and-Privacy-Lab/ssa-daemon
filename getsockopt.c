@@ -57,7 +57,7 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
 		*len = strlen(sock_ctx->err_string) + 1;
 		break;
 
-	case TLS_REMOTE_HOSTNAME:
+	case TLS_HOSTNAME:
 		if ((response = check_socket_state(sock_ctx,
 				2, SOCKET_NEW, SOCKET_CONNECTED)) != 0)
 			break;

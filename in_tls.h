@@ -11,10 +11,7 @@
 /* Options */
 
 /** The remote hostname of a server a client intends to connect to */
-#define TLS_REMOTE_HOSTNAME               85
-
-/** The hostname a server intends to use */
-#define TLS_HOSTNAME                      86
+#define TLS_HOSTNAME                      85
 
 /** The CA certificates that a connection will consider as trusted */
 #define TLS_TRUSTED_PEER_CERTIFICATES     87

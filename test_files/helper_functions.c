@@ -89,7 +89,7 @@ int run_client(const char *host, const char *port,
     fprintf(stderr, "Setting hostname setsockopt()...\n");
 
     ret = setsockopt(clientfd, IPPROTO_TLS, 
-            TLS_REMOTE_HOSTNAME, host, strlen(host) + 1);
+            TLS_HOSTNAME, host, strlen(host) + 1);
     if (ret != 0) {
         fprintf(stderr, "REM_HOSTNAME setsockopt() returned an error\n");
         error = E_SETSOCKOPT;
@@ -198,7 +198,7 @@ int run_http_client(const char *host, const char *port, char **out, int *out_len
     fprintf(stderr, "Setting hostname setsockopt()...\n");
 
     ret = setsockopt(clientfd, IPPROTO_TLS, 
-            TLS_REMOTE_HOSTNAME, host, strlen(host) + 1);
+            TLS_HOSTNAME, host, strlen(host) + 1);
     if (ret != 0) {
         fprintf(stderr, "REM_HOSTNAME setsockopt() returned an error\n");
         error = E_SETSOCKOPT;
