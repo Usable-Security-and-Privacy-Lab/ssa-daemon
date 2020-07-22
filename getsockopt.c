@@ -13,19 +13,15 @@
 
 
 /* setsockopt */
-int get_peer_certificate(socket_ctx* sock_ctx, 
-            const char** data, unsigned int* len);
-int get_peer_identity(socket_ctx* sock_ctx, 
-            const char** data, unsigned int* len);
-int get_hostname(socket_ctx* sock_ctx, 
-            const char** data, unsigned int* len);
-int get_enabled_ciphers(socket_ctx* sock_ctx, 
-            const char** data, unsigned int* len);
-const char* get_chosen_cipher(socket_ctx* sock_ctx, unsigned int* len);
-int get_tls_context(socket_ctx* sock_ctx, const char** out, unsigned int* len);
-int get_session_resumed(socket_ctx* sock_ctx, 
-            const char **data, unsigned int *len);
-
+int get_peer_certificate(socket_ctx* sock_ctx, char** data, unsigned int* len);
+int get_peer_identity(socket_ctx* sock_ctx, char** data, unsigned int* len);
+int get_hostname(socket_ctx* sock_ctx, char** data, unsigned int* len);
+int get_enabled_ciphers(socket_ctx* sock_ctx, char** data, unsigned int* len);
+int get_chosen_cipher(socket_ctx* sock_ctx, char** data, unsigned int* len);
+int get_session_resumed(socket_ctx* sock_ctx, int** data, unsigned int *len);
+int get_tls_compression(socket_ctx* sock_ctx, int** data, unsigned int* len);
+int get_tls_context(socket_ctx* sock_ctx, 
+            unsigned long** data, unsigned int* len);
 
 int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len);
 int get_ciphers_strlen(STACK_OF(SSL_CIPHER)* ciphers);
@@ -41,8 +37,8 @@ int get_ciphers_strlen(STACK_OF(SSL_CIPHER)* ciphers);
  * @param len The size of \p data.
  * @returns 0 on success, or a negative errno value on failure.
  */
-int do_getsockopt_action(socket_ctx* sock_ctx,
-            int option, int* need_free, const char** data, unsigned int* len) {
+int do_getsockopt_action(socket_ctx* sock_ctx, 
+            int option, void** data, unsigned int* len) {
 
     int response = 0;
     
@@ -53,27 +49,17 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
 			break;
 		}
 
-		*data = sock_ctx->err_string;
-		*len = strlen(sock_ctx->err_string) + 1;
-		break;
-
-	case TLS_HOSTNAME:
-		if ((response = check_socket_state(sock_ctx,
-				2, SOCKET_NEW, SOCKET_CONNECTED)) != 0)
-			break;
-
-		if (strlen(sock_ctx->rem_hostname) > 0) {
-			*data = sock_ctx->rem_hostname;
-			*len = strlen(sock_ctx->rem_hostname) + 1;
-		}
+        *len = strlen(sock_ctx->err_string) + 1;
+		*data = strdup(sock_ctx->err_string);
+        if (*data == NULL)
+            response = -ECANCELED;
 		break;
 
 	case TLS_HOSTNAME:
 		if ((response = check_socket_state(sock_ctx, 
-				1, SOCKET_ACCEPTED)) != 0)
+				3, SOCKET_NEW, SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
 			break;
-
-		response = get_hostname(sock_ctx, data, len);
+		response = get_hostname(sock_ctx, (char**) data, len);
 		break;
 
 	case TLS_PEER_IDENTITY:
@@ -81,45 +67,41 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
 				SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
 			break;
 
-		response = get_peer_identity(sock_ctx, data, len);
-		if (response == 0)
-			*need_free = 1;
+		response = get_peer_identity(sock_ctx, (char**) data, len);
 		break;
 
 	case TLS_PEER_CERTIFICATE_CHAIN:
 		if ((response = check_socket_state(sock_ctx, 1, SOCKET_CONNECTED)) != 0)
 			break;
-		response = get_peer_certificate(sock_ctx, data, len);
-		if (response == 0)
-			*need_free = 1;
+		response = get_peer_certificate(sock_ctx, (char**) data, len);
 		break;
 
 	case TLS_TRUSTED_CIPHERS:
-		response = get_enabled_ciphers(sock_ctx, data, len);
-		if (response == 0)
-			*need_free = 1;
+		response = get_enabled_ciphers(sock_ctx, (char**) data, len);
 		break;
 
     case TLS_CHOSEN_CIPHER:
         if ((response = check_socket_state(sock_ctx, 2, 
                     SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
             break;
-        *data = get_chosen_cipher(sock_ctx, len);
+        get_chosen_cipher(sock_ctx, (char**) data, len);
+        break;
+
+    case TLS_COMPRESSION:
+        response = get_tls_compression(sock_ctx, (int**) data, len);
         break;
 
     case TLS_CONTEXT:
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
             break;
-        response = get_tls_context(sock_ctx, data, len);
-        if (response == 0)
-            *need_free = 1;
+        response = get_tls_context(sock_ctx, (unsigned long**) data, len);
         break;
 
     case TLS_RESUMED_SESSION:
         if ((response = check_socket_state(sock_ctx, 2, 
                     SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
             break;
-        response = get_session_resumed(sock_ctx, data, len);
+        response = get_session_resumed(sock_ctx, (int**) data, len);
         break;
 
 	case TLS_TRUSTED_PEER_CERTIFICATES:
@@ -156,7 +138,7 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
  * @returns 0 on success; -errno otherwise.
  */
 int get_peer_certificate(socket_ctx* sock_ctx, 
-            const char** data, unsigned int* len) {
+            char** data, unsigned int* len) {
 	X509* cert = NULL;
 	BIO* bio = NULL;
 	char* bio_data = NULL;
@@ -203,17 +185,17 @@ end:
 }
 
 /**
- * Retrieves the identity of the peer currently connected to in conn. The
- * identity is stored in the X509 certificate that the peer had sent to us
+ * Retrieves the identity of the peer currently connected to in conn. The 
+ * identity is stored in the X509 certificate that the peer had sent to use 
  * in the TLS handshake.
  * @param conn The connection to retrieve peer identity information for.
- * @param identity An area to allocate the ASCII representation of the peer's
+ * @param identity An area to allocate the ASCII representation of the peer's 
  * identity to.
  * @param len The length of identity.
  * @returns 0 on success; or -errno if an error occurred.
  */
 int get_peer_identity(socket_ctx* sock_ctx, 
-            const char** identity, unsigned int* len) {
+            char** identity, unsigned int* len) {
 	
 	X509_NAME* subject_name;
 	X509* cert;
@@ -254,7 +236,7 @@ int get_peer_identity(socket_ctx* sock_ctx,
  * @param len The length of hostname (including the null-terminating character).
  * @returns 0 on success, or -errno if an error has occurred.
  */
-int get_hostname(socket_ctx* sock_ctx, const char** data, unsigned int* len) {
+int get_hostname(socket_ctx* sock_ctx, char** data, unsigned int* len) {
 
 	const char* hostname;
 
@@ -265,9 +247,12 @@ int get_hostname(socket_ctx* sock_ctx, const char** data, unsigned int* len) {
 		return -EINVAL;
 	}
 
-	*data = hostname;
 	*len = strlen(hostname)+1;
-	return 0;
+	*data = strdup(hostname);
+    if (*data == NULL)
+        return -ECANCELED;
+
+    return 0;
 }
 
 /**
@@ -279,7 +264,7 @@ int get_hostname(socket_ctx* sock_ctx, const char** data, unsigned int* len) {
  * @returns 0 on success; -errno otherwise.
  */
 int get_enabled_ciphers(socket_ctx* sock_ctx, 
-            const char** data, unsigned int* len) {
+            char** data, unsigned int* len) {
 	
 	char* ciphers_str = NULL;
 
@@ -299,7 +284,7 @@ int get_enabled_ciphers(socket_ctx* sock_ctx,
 	}
 
 	if (get_ciphers_string(ciphers, ciphers_str, ciphers_len + 1) != 0)
-		log_printf(LOG_ERROR, "Buffer had to be truncated.\n");
+		log_printf(LOG_ERROR, "Buffer had to be truncated--shouldn't happen\n");
 
 	*len = ciphers_len + 1;
 end:
@@ -315,12 +300,45 @@ end:
  * @param len The ouptut length of the cipher.
  * @returns A null-terminated string representing the cipher in current use.
  */
-const char* get_chosen_cipher(socket_ctx* sock_ctx, unsigned int* len) {
+int get_chosen_cipher(socket_ctx* sock_ctx, char** data, unsigned int* len) {
+    
+    const char* cipher = SSL_get_cipher(sock_ctx->ssl);
+    if (cipher == NULL)
+        return -EINVAL;
 
-    const char* data = SSL_get_cipher(sock_ctx->ssl);
-    *len = strlen(data) + 1;
+    *len = strlen(*data) + 1;
+    *data = strdup(cipher);
+    if (*data == NULL)
+        return -ECANCELED;
 
-    return data;
+    return 0;
+}
+
+
+
+/**
+ * Determines whether compression is enabled or disabled for a given socket.
+ * @param sock_ctx The context of the socket to check TLS compression for.
+ * @returns 0 on success, or -ECANCELED if a fatal error occurred.
+ */
+int get_tls_compression(socket_ctx* sock_ctx, int** data, unsigned int* len) {
+
+    int opts = SSL_CTX_get_options(sock_ctx->ssl_ctx);
+    int* compression_enabled;
+
+    compression_enabled = malloc(sizeof(int));
+    if (compression_enabled == NULL)
+        return -ECANCELED;
+
+    if (opts & SSL_OP_NO_COMPRESSION)
+        *compression_enabled = 0;
+    else
+        *compression_enabled = 1;
+
+    *data = compression_enabled;
+    *len = sizeof(int);
+
+    return 0;
 }
 
 
@@ -333,20 +351,18 @@ const char* get_chosen_cipher(socket_ctx* sock_ctx, unsigned int* len) {
  * @param len The output length of \p out.
  * @returns 0 on success, or a negative errno on failure.
  */
-int get_tls_context(socket_ctx* sock_ctx, const char** out, unsigned int* len) {
+int get_tls_context(socket_ctx* sock_ctx, 
+            unsigned long** data, unsigned int* len) {
 
     SSL_CTX* ssl_ctx = sock_ctx->ssl_ctx;
-    uint64_t id = sock_ctx->id;
-    char* data = NULL;
+    unsigned long* context_id;
     int ret = 0;
 
-    log_printf(LOG_DEBUG, "ID being got: %lu\n", id);
-
-    data = malloc(sizeof(id));
+    context_id = malloc(sizeof(unsigned long));
     if (data == NULL)
         goto err;
 
-    memcpy(data, &id, sizeof(id));
+    *context_id = sock_ctx->id;
 
     if (client_session_resumption_enabled(ssl_ctx) 
                 && !has_session_cache(ssl_ctx)) {
@@ -355,8 +371,8 @@ int get_tls_context(socket_ctx* sock_ctx, const char** out, unsigned int* len) {
             goto err;
     }
 
-    *out = data;
-    *len = sizeof(id);
+    *data = context_id;
+    *len = sizeof(unsigned long);
     return 0;
 err:
     if (data != NULL)
@@ -365,17 +381,24 @@ err:
     return -ECANCELED;
 }
 
-int get_session_resumed(socket_ctx* sock_ctx, 
-            const char **data, unsigned int *len) {
+
+/**
+ * Determines whether the given socket established its current TLS handshake 
+ * by resuming a former session.
+ * @param sock_ctx The context of the socket to check.
+ * @param data Whether the session was resumed (1) or not (0).
+ * @param len The output length of \p data.
+ * @returns 0 on success, or a negative errno on failure.
+ */
+int get_session_resumed(socket_ctx* sock_ctx, int** data, unsigned int *len) {
                 
-    char* tmp = malloc(sizeof(int));
-    if (tmp == NULL)
+    int* is_resumed = malloc(sizeof(int));
+    if (is_resumed == NULL)
         return -ECANCELED;
     
-    int is_reused = SSL_session_reused(sock_ctx->ssl);
+    *is_resumed = SSL_session_reused(sock_ctx->ssl);
 
-    memcpy(tmp, &is_reused, sizeof(int));
-    *data = tmp;
+    *data = is_resumed;
     *len = sizeof(int);
     return 0;
 }

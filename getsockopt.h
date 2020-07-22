@@ -14,8 +14,8 @@
  * @param len The size of \p data.
  * @returns 0 on success, or a negative errno value on failure.
  */
-int do_getsockopt_action(socket_ctx* sock_ctx,
-            int option, int* need_free, const char** data, unsigned int* len);
+int do_getsockopt_action(socket_ctx* sock_ctx, 
+            int option, void** data, unsigned int* len);
 
 
 #endif

@@ -47,7 +47,7 @@
 #define TLS_ERROR                        100
 
 /** Whether or not TLS compression is disabled for the socket */
-#define TLS_DISABLE_COMPRESSION          101
+#define TLS_COMPRESSION                  101
 
 /** Whether or not revocation checks are enabled for the socket */
 #define TLS_REVOCATION_CHECKS            102

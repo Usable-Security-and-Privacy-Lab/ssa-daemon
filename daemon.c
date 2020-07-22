@@ -647,13 +647,12 @@ void setsockopt_cb(daemon_ctx* daemon, unsigned long id, int level,
  * @returns (via Netlink) a notification of 0 on success, or -errno on failure.
  */
 void getsockopt_cb(daemon_ctx* daemon, 
-		unsigned long id, int level, int option) {
+		    unsigned long id, int level, int option) {
 
 	socket_ctx* sock_ctx;
 	int response = 0;
-	const char* data = NULL;
+	void* data = NULL;
 	unsigned int len = 0;
-	int need_free = 0;
 
 	sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);
 	if (sock_ctx == NULL) {
@@ -664,15 +663,14 @@ void getsockopt_cb(daemon_ctx* daemon,
     if (option != TLS_ERROR)
         clear_global_and_socket_errors(sock_ctx);
     
-    response = do_getsockopt_action(sock_ctx, option, &need_free, &data, &len);
+    response = do_getsockopt_action(sock_ctx, option, &data, &len);
 	if (response != 0) {
 		netlink_notify_kernel(daemon, id, response);
 		return;
 	}
 
-	netlink_send_and_notify_kernel(daemon, id, data, len);
-	if (need_free == 1)
-		free((void*) data);
+    netlink_send_and_notify_kernel(daemon, id, data, len);
+    free(data);
 	
 	return;
 }

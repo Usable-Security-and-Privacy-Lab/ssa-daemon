@@ -12,15 +12,13 @@
 
 
 /* functions used for each option */
-int set_connection_client(socket_ctx* conn, daemon_ctx* daemon);
-int set_connection_server(socket_ctx* conn, daemon_ctx* daemon);
-int set_trusted_CA_certificates(socket_ctx *sock_ctx, char* path);
-int disable_cipher(socket_ctx* sock_ctx, char* cipher);
-int set_certificate_chain(socket_ctx* sock_ctx, char* path);
-int set_private_key(socket_ctx* sock_ctx, char* path);
-void set_no_compression(socket_ctx* sock_ctx);
-int set_tls_context(socket_ctx* sock_ctx, char *data, long len);
-int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, long len);
+int set_CA_certificates(socket_ctx *sock_ctx, char* path, socklen_t len);
+int disable_cipher(socket_ctx* sock_ctx, char* cipher, socklen_t len);
+int set_certificate_chain(socket_ctx* sock_ctx, char* path, socklen_t len);
+int set_private_key(socket_ctx* sock_ctx, char* path, socklen_t len);
+int set_tls_compression(socket_ctx* sock_ctx, int* value, socklen_t len);
+int set_tls_context(socket_ctx* sock_ctx, unsigned long* data, socklen_t len);
+int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, socklen_t len);
 
 
 /* helper functions */
@@ -52,31 +50,31 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
 	case TLS_DISABLE_CIPHER:
 		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
 			break;
-		response = disable_cipher(sock_ctx, (char*) value);
+		response = disable_cipher(sock_ctx, (char*) value, len);
 		break;
 
 	case TLS_TRUSTED_PEER_CERTIFICATES:
 		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
 			break;
-		response = set_trusted_CA_certificates(sock_ctx, (char*) value);
+		response = set_CA_certificates(sock_ctx, (char*) value, len);
 		break;
 
 	case TLS_CERTIFICATE_CHAIN:
 		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
 			break;
-		response = set_certificate_chain(sock_ctx, (char*) value);
+		response = set_certificate_chain(sock_ctx, (char*) value, len);
 		break;
 
 	case TLS_PRIVATE_KEY:
 		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
 			break;
-		response = set_private_key(sock_ctx, value);
+		response = set_private_key(sock_ctx, (char*) value, len);
 		break;
 
-    case TLS_DISABLE_COMPRESSION:
+    case TLS_COMPRESSION:
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
             break;
-        set_no_compression(sock_ctx);
+        set_tls_compression(sock_ctx, (int*) value, len);
         break;
 
     case TLS_REVOCATION_CHECKS:
@@ -112,7 +110,7 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
     case TLS_CONTEXT:
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
             break;
-        response = set_tls_context(sock_ctx, (char*) value, len);
+        response = set_tls_context(sock_ctx, (unsigned long*) value, len);
         break;
 
 	default:
@@ -125,18 +123,22 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
 
 
 /**
- * Sets the certificate chain to be used for a given connection conn using
+ * Sets the certificate chain to be used for a given connection conn using 
  * the file/directory pointed to by path. 
  * @param conn The connection to load the certificate chain into.
  * @param path The path to the certificate chain directory/file.
+ * @param len The length of \p path.
  * @returns 0 on success, or a negative errno if an error occurred.
  */
-int set_certificate_chain(socket_ctx* sock_ctx, char* path) {
+int set_certificate_chain(socket_ctx* sock_ctx, char* path, socklen_t len) {
 
 	struct stat file_stats;
 	int ret, response, ssl_err;
 
-	ret = stat(path, &file_stats);
+    if (strlen(path)+1 != len)
+        return -EINVAL;
+
+    ret = stat(path, &file_stats);
 	if (ret != 0) {
 		response = -EINVAL;
 		goto err;
@@ -182,28 +184,32 @@ err:
  * Sets a private key for the given connection conn using the key located 
  * by path, and verifies that the given key matches the last loaded 
  * certificate chain. An SSL* can have multiple private key/cert chain pairs, 
- * so care should be taken to make sure they are loaded in the right sequence
+ * so care should be taken to make sure they are loaded in the right sequence 
  * or else this function will fail.
  * @param conn The connection to add the given private key to.
  * @param path The location of the Private Key file.
+ * @param len The length of \p path.
  * @returns 0 on success, or -errno if an error occurred.
  */
-int set_private_key(socket_ctx* sock_ctx, char* path) {
+int set_private_key(socket_ctx* sock_ctx, char* path, socklen_t len) {
 
 	struct stat file_stats;
 	int ret;
 
-	ret = stat(path, &file_stats);
-	if (ret != 0) {
-		ret = -errno;
-		goto err;
-	}
-	if (!S_ISREG(file_stats.st_mode)) {
-		ret = -EBADF;
-		goto err;
-	}
+    if (strlen(path)+1 != len)
+        return -EINVAL;
 
-	ret = SSL_CTX_use_PrivateKey_file(sock_ctx->ssl_ctx, 
+    ret = stat(path, &file_stats);
+    if (ret != 0) {
+        ret = -errno;
+        goto err;
+    }
+    if (!S_ISREG(file_stats.st_mode)) {
+        ret = -EBADF;
+        goto err;
+    }
+
+    ret = SSL_CTX_use_PrivateKey_file(sock_ctx->ssl_ctx, 
                 path, SSL_FILETYPE_PEM);
 	if (ret == 1) /* pem key loaded */
 		return check_key_cert_pair(sock_ctx); 
@@ -241,17 +247,21 @@ err:
 }
 
 /**
- * Sets the trusted Certificate Authority certificates for the given
+ * Sets the trusted Certificate Authority certificates for the given 
  * connection conn to those found in the file specified by path.
  * @param conn The connection to modify CA trusts on.
  * @param path The path to a file containing .pem encoded CA's.
- * @returns 0 on success, or a negative errno if an error occurred. 
+ * @param len The length of \p path.
+ * @returns 0 on success, or a negative errno if an error occurred.
  */
-int set_trusted_CA_certificates(socket_ctx *sock_ctx, char* path) {
+int set_CA_certificates(socket_ctx *sock_ctx, char* path, socklen_t len) {
 	
     /* TODO: modify this to load client CAs from a folder as well */
 	struct stat file_stats;
     int ret;
+
+    if (strlen(path)+1 != len)
+        return -EINVAL;
 
     if (stat(path, &file_stats) != 0) {
         set_err_string(sock_ctx, "Error: unable to open specified file");
@@ -283,20 +293,24 @@ int set_trusted_CA_certificates(socket_ctx *sock_ctx, char* path) {
  * Removes a given cipher from the set of enabled ciphers for a connection.
  * @param sock_ctx The socket context to remove a cipher from.
  * @param cipher A string representation of the cipher to be removed.
- * @returns 0 on success; -errno otherwise. EINVAL means the cipher to be
+ * @param len The length of \p cipher.
+ * @returns 0 on success; -errno otherwise. EINVAL means the cipher to be 
  * removed was not found.
  */
-int disable_cipher(socket_ctx* sock_ctx, char* cipher) {
+int disable_cipher(socket_ctx* sock_ctx, char* cipher, socklen_t len) {
 
 	STACK_OF(SSL_CIPHER)* cipherlist = SSL_CTX_get_ciphers(sock_ctx->ssl_ctx);
 	if (cipherlist == NULL)
-		goto err;
+		return -EINVAL;
 
-	int ret = clear_from_cipherlist(cipher, cipherlist);
-	if (ret != 0)
-		goto err;
+    if (strlen(cipher)+1 != len)
+        return -EINVAL;
 
-	return 0;
+    int ret = clear_from_cipherlist(cipher, cipherlist);
+    if (ret != 0)
+        goto err;
+
+    return 0;
 err:
 	set_err_string(sock_ctx, "TLS error: cipher already disabled");
 	return -EINVAL;
@@ -304,15 +318,15 @@ err:
 
 
 /**
- * Sets the hostname of the server that the calling program intends to connect
+ * Sets the hostname of the server that the calling program intends to connect 
  * to.
  * @param sock_ctx The context of the socket for the hostname to be set.
  * @param hostname The hostname that will be connected to.
  * @param len The length of \p hostname.
  */
-int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, long len) {
+int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, socklen_t len) {
 
-    if (len > MAX_HOSTNAME || len <= 0)
+    if (len > MAX_HOSTNAME || len != strlen(hostname)+1)
         return -EINVAL;
 
     memcpy(sock_ctx->rem_hostname, hostname, len);
@@ -324,36 +338,58 @@ int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, long len) {
 
 
 /**
- * Disables TLS compression for the given socket.
+ * Enables or disables compression for a given socket.
  * @param sock_ctx The context of the socket to disable compression for.
+ * @param value a '1' to enable compression, or '0' to disable it.
+ * @param len The size of \p value (should be sizeof(int)).
+ * @returns 0 on success, or -EINVAL on failure.
  */
-void set_no_compression(socket_ctx* sock_ctx) {
+int set_tls_compression(socket_ctx* sock_ctx, int* value, socklen_t len) {
 
-    int prev_opts = SSL_CTX_get_options(sock_ctx->ssl_ctx);
-    SSL_CTX_set_options(sock_ctx->ssl_ctx, prev_opts | SSL_OP_NO_COMPRESSION);
+    global_config* settings = sock_ctx->daemon->settings;
+    int opts = SSL_CTX_get_options(sock_ctx->ssl_ctx);
+    int compression_enabled = *value;
+
+    if (len != sizeof(int))
+        return -EINVAL;
+
+    if (compression_enabled == 1 && settings->tls_compression == 0)
+        return -EINVAL;
+
+    if (compression_enabled == 1)
+        opts &= ~SSL_OP_NO_COMPRESSION;
+    else if (compression_enabled == 0)
+        opts |= SSL_OP_NO_COMPRESSION;
+    else
+        return -EINVAL;
+    
+    SSL_CTX_set_options(sock_ctx->ssl_ctx, opts);
+
+    return 0;
 }
 
 
 /**
- * Sets the SSL context of the given socket to be identical to another
+ * Sets the SSL context of the given socket to be identical to another 
  * socket. The other socket is retrieved via its ID, which is passed in 
  * through \p data.
  * @param sock_ctx The context of the socket to set the SSL context for.
- * @param data A byte stream of data representing the ID of the socket
+ * @param data A byte stream of data representing the ID of the socket 
  * to clone the SSL context of.
  * @param len The size of \p data.
  * @returns 0 on success, or a negative errno value on failure.
  */
-int set_tls_context(socket_ctx* sock_ctx, char* data, long len) {
+int set_tls_context(socket_ctx* sock_ctx, unsigned long* data, socklen_t len) {
 
-    uint64_t id = 0;
+    unsigned long id = *data;
+    socket_ctx* old_sock_ctx;
 
-    memcpy(&id, data, sizeof(uint64_t));
-    log_printf(LOG_DEBUG, "ID to set for context: %lu\n", id);
+    if (len != sizeof(unsigned long))
+        return -EINVAL;
 
-    socket_ctx* old_sock_ctx = hashmap_get(sock_ctx->daemon->sock_map, id);
+    old_sock_ctx = hashmap_get(sock_ctx->daemon->sock_map, id);
     if (old_sock_ctx == NULL)
-        return -ECONNABORTED;
+        return -EINVAL;
 
     if (client_session_resumption_enabled(old_sock_ctx->ssl_ctx)) {
         int response = session_cache_up_ref(old_sock_ctx->ssl_ctx);
