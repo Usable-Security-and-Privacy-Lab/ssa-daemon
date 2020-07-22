@@ -4,45 +4,69 @@
 #include <stdlib.h>
 #include <string>
 
+#include "timeouts.h"
+
 extern "C" { // To indicate that the code is C code when linking--important
+
 #include "helper_functions.h"
-}
 
-#define TEST_TIMEOUT_BEGIN  std::promise<bool> promisedFinished; \
-                            auto futureResult = promisedFinished.get_future(); \
-                            std::thread([&](std::promise<bool>& finished) {
-
-/// X is in milliseconds
-#define TEST_TIMEOUT_FAIL_END(X)  finished.set_value(true); \
-                                  }, std::ref(promisedFinished)).detach(); \
-                                  bool testTimedOut = futureResult.wait_for(std::chrono::milliseconds(X)) == std::future_status::timeout; \
-                                  EXPECT_FALSE(testTimedOut);
-
-#define TEST_TIMEOUT_SUCCESS_END(X) finished.set_value(true); \
-                                    }, std::ref(promisedFinished)).detach(); \
-                                    bool testTimedOut = futureResult.wait_for(std::chrono::milliseconds(X)) == std::future_status::timeout; \
-                                    EXPECT_TRUE(testTimedOut);
-
-// Each connection should DEFINITELY take less than 4 seconds to run
-#define TIMEOUT 4000 
-
-
-extern "C" {
-
+const char* ERR_SOURCE_CONNECT = "connect()";
+const char* ERR_SOURCE_HOSTNAME = "TLS_HOSTNAME getsockopt()";
 #define HTTPS_PORT "443"
 
 }
 
-#define RUN_TEST(test_label, hostname)                                          \
-    TEST_F(Top500WebsitesTest, test_label) {                                    \
-                                                                                \
-        TEST_TIMEOUT_BEGIN                                                      \
-        std::string str = hostname;                                             \
-        result = run_http_client(str.c_str(), HTTPS_PORT, &resp, &resp_len);    \
-        EXPECT_EQ(result, (int) E_SUCCESS);                                     \
-                                                                                \
-        TEST_TIMEOUT_FAIL_END(TIMEOUT)                                          \
-    }                                                                   
+#define RUN_TEST(testname, hostname_str)                            \
+    TEST(BadSSLTests, testname) {                                   \
+                                                                    \
+        TEST_TIMEOUT_BEGIN                                          \
+                                                                    \
+        const int NO_ERRNO = 0;                                     \
+        struct sockaddr* addr;                                      \
+        socklen_t addrlen;                                          \
+        std::string hostname = hostname_str;                        \
+        std::string port = HTTPS_PORT;                              \
+        int dns_failed;                                             \
+        int fd;                                                     \
+                                                                    \
+                                                                    \
+        dns_failed = resolve_dns(hostname.c_str(),                  \
+                    port.c_str(), &addr, &addrlen);                 \
+        ASSERT_EQ(dns_failed, 0);                                   \
+                                                                    \
+        fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);             \
+        int socket_errno = errno;                                   \
+        if (fd == -1)                                               \
+            perror("socket creation failed");                       \
+                                                                    \
+        EXPECT_EQ(socket_errno, 0);                                 \
+        ASSERT_GE(fd, 0);                                           \
+                                                                    \
+        int hostname_ret = setsockopt(fd, IPPROTO_TLS,              \
+                TLS_HOSTNAME, hostname.c_str(), hostname.size()+1); \
+        int hostname_errno = errno;                                 \
+        if (hostname_ret != 0)                                      \
+            print_socket_error(fd, ERR_SOURCE_HOSTNAME);            \
+                                                                    \
+        EXPECT_EQ(hostname_errno, 0);                               \
+        ASSERT_EQ(hostname_ret, 0);                                 \
+                                                                    \
+        int connect_ret = connect(fd, addr, addrlen);               \
+        int connect_errno = errno;                                  \
+                                                                    \
+        if (connect_ret != 0)                                       \
+            print_socket_error(fd, ERR_SOURCE_CONNECT);             \
+                                                                    \
+        EXPECT_EQ(connect_errno, NO_ERRNO);                         \
+        ASSERT_EQ(connect_ret, 0);                                  \
+                                                                    \
+        free(addr);                                                 \
+        close(fd);                                                  \
+                                                                    \
+        TEST_TIMEOUT_FAIL_END(TIMEOUT_LONG)                         \
+                                                                    \
+    }
+
 
 
 
