@@ -6,8 +6,6 @@
 
 #include "timeouts.h"
 
-using namespace std;
-
 extern "C" {
 #include <netdb.h>
 
@@ -28,8 +26,8 @@ const char* ERR_SOURCE_HOSTNAME = "TLS_HOSTNAME getsockopt()";
         const int EPROTO_ERRNO = EPROTO;                            \
         struct sockaddr* addr;                                      \
         socklen_t addrlen;                                          \
-        string hostname = hostname_str;                             \
-        string port = port_str;                                     \
+        std::string hostname = hostname_str;                        \
+        std::string port = port_str;                                \
         int dns_failed;                                             \
         int fd;                                                     \
                                                                     \
@@ -79,8 +77,8 @@ const char* ERR_SOURCE_HOSTNAME = "TLS_HOSTNAME getsockopt()";
         const int NO_ERRNO = 0;                                     \
         struct sockaddr* addr;                                      \
         socklen_t addrlen;                                          \
-        string hostname = hostname_str;                             \
-        string port = port_str;                                     \
+        std::string hostname = hostname_str;                        \
+        std::string port = port_str;                                \
         int dns_failed;                                             \
         int fd;                                                     \
                                                                     \
