@@ -1,6 +1,7 @@
 #ifndef SSA_HELPER_FUNCTIONS_H
 #define SSA_HELPER_FUNCTIONS_H
 
+#include <sys/socket.h>
 #include "../in_tls.h"
 
 enum client_err_code {
@@ -18,6 +19,28 @@ enum client_err_code {
    E_WRITE,
    E_NOERRORSTRING
 };
+
+/**
+ * Prints all error information available for the given socket (errno and 
+ * potentially TLS_ERROR string).
+ * @param fd The file descriptor to print error information for.
+ * @param source A string declaring the system call that caused the error.
+ */
+void print_socket_error(int fd, const char* source);
+
+
+
+
+/**
+ * Performs `getaddrinfo()` DNS resolution on the given host and populates 
+ * \p addr and \p addrlen with a viable address to connect to. The address 
+ * will be an IPv4 address suitable for a TCP connection.
+ * @param host The hostname to perform DNS resolution on.
+ * @param addr The returned address of hostname.
+ * @param addrlen The length of \p addr.
+ */
+int resolve_dns(const char* host, const char* port, 
+            struct sockaddr** addr, socklen_t* addrlen);
 
 
 /**
