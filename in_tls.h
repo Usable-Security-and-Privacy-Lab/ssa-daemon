@@ -71,6 +71,8 @@
 #define TLS_CONTEXT                      107
 #define TLS_CONTEXT_FREE                 108
 */
+/** A cipher marked as usable for connections */
+#define TLS_ENABLE_CIPHER                109
 
 /* Internal use only */
 #define TLS_PEER_CERTIFICATE_CHAIN        95
@@ -83,7 +85,7 @@
 #define AF_HOSTNAME     43
 
 
-/** 
+/**
  * The SSA_context can be utilized to use the same settings across multiple
  * connections and take full advantage of client-side session caching. It can
  * be retrieved from an SSL connection via the TLS_CONTEXT getsockopt function,
@@ -108,4 +110,3 @@ struct sockaddr_host {
 
 
 #endif
-

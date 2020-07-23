@@ -3,15 +3,18 @@
 
 #include "daemon_structs.h"
 
+/*helper*/
+int get_ciphers_strlen(STACK_OF(SSL_CIPHER)* ciphers);
+
 /* setsockopt */
-int get_peer_certificate(socket_ctx* sock_ctx, 
+int get_peer_certificate(socket_ctx* sock_ctx,
             const char** data, unsigned int* len);
-int get_peer_identity(socket_ctx* sock_ctx, 
+int get_peer_identity(socket_ctx* sock_ctx,
             const char** data, unsigned int* len);
-int get_hostname(socket_ctx* sock_ctx, 
+int get_hostname(socket_ctx* sock_ctx,
             const char** data, unsigned int* len);
-int get_enabled_ciphers(socket_ctx* sock_ctx, 
-            const char** data, unsigned int* len);
+int get_enabled_ciphers(socket_ctx* sock_ctx,
+             const char** data, unsigned int* len);
 const char* get_chosen_cipher(socket_ctx* sock_ctx, unsigned int* len);
 
 /*

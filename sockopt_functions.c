@@ -34,7 +34,7 @@ int check_key_cert_pair(socket_ctx* sock_ctx);
  * @param len The string length of the certificate.
  * @returns 0 on success; -errno otherwise.
  */
-int get_peer_certificate(socket_ctx* sock_ctx, 
+int get_peer_certificate(socket_ctx* sock_ctx,
             const char** data, unsigned int* len) {
 	X509* cert = NULL;
 	BIO* bio = NULL;
@@ -91,9 +91,9 @@ end:
  * @param len The length of identity.
  * @returns 0 on success; or -errno if an error occurred.
  */
-int get_peer_identity(socket_ctx* sock_ctx, 
+int get_peer_identity(socket_ctx* sock_ctx,
             const char** identity, unsigned int* len) {
-	
+
 	X509_NAME* subject_name;
 	X509* cert;
 
@@ -124,7 +124,7 @@ int get_peer_identity(socket_ctx* sock_ctx,
 
 /**
  * Retrieves the given connection's assigned hostname (as used in SNI
- * indication). Note that this does not retrieve the hostname of a server a 
+ * indication). Note that this does not retrieve the hostname of a server a
  * client has connected to; rather, this retrieves the hostname that has
  * been assigned to the given connection, assuming that the given connection
  * is a server.
@@ -157,9 +157,9 @@ int get_hostname(socket_ctx* sock_ctx, const char** data, unsigned int* len) {
  * This should be freed after use.
  * @returns 0 on success; -errno otherwise.
  */
-int get_enabled_ciphers(socket_ctx* sock_ctx, 
-            const char** data, unsigned int* len) {
-	
+int get_enabled_ciphers(socket_ctx* sock_ctx,
+             const char** data, unsigned int* len) { //changed buffer to nonconst
+
 	char* ciphers_str = NULL;
 
 	STACK_OF(SSL_CIPHER)* ciphers = SSL_get_ciphers(sock_ctx->ssl);
@@ -214,12 +214,12 @@ int get_tls_context(socket_ctx* sock_ctx, const char** data, int* len) {
     SSL_CTX_sess_set_new_cb(ssl_ctx)
 
     ret = hashmap_add(sock_ctx->daemon->ssl_ctx_cache, key, ssl_ctx);
-    if (ret == 0) { 
+    if (ret == 0) {
         session_hashmap = str_hashmap_create(SESSION_CACHE_NUM_BUCKETS);
         if (session_hashmap == NULL)
             goto err;
 
-        ret = SSL_CTX_set_ex_data(ssl_ctx, 
+        ret = SSL_CTX_set_ex_data(ssl_ctx,
                     SESSION_CACHE_INDEX, session_hashmap);
         if (ret != 1)
             goto err;
@@ -254,7 +254,7 @@ err:
 
 /**
  * Sets the certificate chain to be used for a given connection conn using
- * the file/directory pointed to by path. 
+ * the file/directory pointed to by path.
  * @param conn The connection to load the certificate chain into.
  * @param path The path to the certificate chain directory/file.
  * @returns 0 on success, or -errno if an error occurred.
@@ -296,7 +296,7 @@ int set_certificate_chain(socket_ctx* sock_ctx, char* path) {
 err:
     ssl_err = ERR_get_error();
 
-    log_printf(LOG_ERROR, "Failed to load certificate chain: %s\n", 
+    log_printf(LOG_ERROR, "Failed to load certificate chain: %s\n",
             ssl_err ? ERR_error_string(ssl_err, NULL) : "not a file or folder");
 
 	set_err_string(sock_ctx, "TLS error: couldn't set certificate chain - %s",
@@ -307,12 +307,12 @@ err:
 
 
 /**
- * Sets a private key for the given connection conn using the key located 
- * by path, and verifies that the given key matches the last loaded 
- * certificate chain. An SSL* can have multiple private key/cert chain pairs, 
+ * Sets a private key for the given connection conn using the key located
+ * by path, and verifies that the given key matches the last loaded
+ * certificate chain. An SSL* can have multiple private key/cert chain pairs,
  * so care should be taken to make sure they are loaded in the right sequence
  * or else this function will fail.
- * 
+ *
  * @param conn The connection to add the given private key to.
  * @param path The location of the Private Key file.
  * @returns 0 on success, or -errno if an error occurred.
@@ -334,19 +334,19 @@ int set_private_key(socket_ctx* sock_ctx, char* path) {
 
 	ret = SSL_CTX_use_PrivateKey_file(sock_ctx->ssl_ctx, path, SSL_FILETYPE_PEM);
 	if (ret == 1) /* pem key loaded */
-		return check_key_cert_pair(sock_ctx); 
+		return check_key_cert_pair(sock_ctx);
 	else
 		clear_global_errors();
 
 	ret = SSL_CTX_use_PrivateKey_file(sock_ctx->ssl_ctx, path, SSL_FILETYPE_ASN1);
 	if (ret == 1) /* ASN.1 key loaded */
-		return check_key_cert_pair(sock_ctx);  
+		return check_key_cert_pair(sock_ctx);
 	else
 		clear_global_errors();
 
 	ret = SSL_CTX_use_PrivateKey_file(sock_ctx->ssl_ctx, path, SSL_FILETYPE_PEM);
 	if (ret == 1) /* pem RSA key loaded */
-		return check_key_cert_pair(sock_ctx); 
+		return check_key_cert_pair(sock_ctx);
 	else
 		clear_global_errors();
 
@@ -358,7 +358,7 @@ int set_private_key(socket_ctx* sock_ctx, char* path) {
 
 	return 0;
 err:
-	log_printf(LOG_ERROR, "Failed to set private key: %s\n", 
+	log_printf(LOG_ERROR, "Failed to set private key: %s\n",
 			ERR_reason_error_string(ERR_GET_REASON(ERR_peek_error())));
 	set_err_string(sock_ctx, "TLS error: failed to set private key - %s",
 			ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
@@ -370,10 +370,10 @@ err:
  * connection conn to those found in the file specified by path.
  * @param conn The connection to modify CA trusts on.
  * @param path The path to a file containing .pem encoded CA's.
- * @returns 0 on success, or -ernno if an error occurred. 
+ * @returns 0 on success, or -ernno if an error occurred.
  */
 int set_trusted_CA_certificates(socket_ctx *sock_ctx, char* path) {
-	
+
     /* TODO: modify this to load client CAs from a folder as well */
 	struct stat file_stats;
     int ret;
@@ -382,13 +382,13 @@ int set_trusted_CA_certificates(socket_ctx *sock_ctx, char* path) {
         set_err_string(sock_ctx, "Error: unable to open specified file");
 		return -EINVAL;
     }
-	
+
 	if (S_ISREG(file_stats.st_mode)) { /* is a file */
 		ret = SSL_CTX_load_verify_locations(sock_ctx->ssl_ctx, path, NULL);
 
     } else if (S_ISDIR(file_stats.st_mode)) { /* is a directory */
 		ret = SSL_CTX_load_verify_locations(sock_ctx->ssl_ctx, NULL, path);
-    
+
     } else {
         set_err_string(sock_ctx, "Error: path is not a file/directory");
         return -EINVAL;
@@ -430,7 +430,7 @@ err:
 
 /**
  *
- * 
+ *
  */
 int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, long len) {
 
@@ -468,7 +468,7 @@ int set_tls_context(socket_ctx* sock_ctx, char* data, long len) {
 
     SSL_CTX_free(sock_ctx->ssl_ctx);
     sock_ctx->ssl_ctx = new_ctx;
-    
+
     return 0;
 }
 */
@@ -555,13 +555,13 @@ int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist) {
 		return -1;
 }
 
-/** 
+/**
  * Verifies that the loaded private key and certificate match each other.
  * @pre The Private Key and Certificate chain have already been loaded into
  * tls.
  * @param tls The SSL object containing the certificate chain and private key
  * for which to check.
- * @returns 0 if the checks succeeded; -EPROTO otherwise. 
+ * @returns 0 if the checks succeeded; -EPROTO otherwise.
  */
 int check_key_cert_pair(socket_ctx* sock_ctx) {
 	if (SSL_CTX_check_private_key(sock_ctx->ssl_ctx) != 1) {
@@ -589,7 +589,7 @@ int new_session_cb(SSL* ssl, SSL_SESSION* session) {
     hsmap_t* session_cache;
     SSL_CTX* ctx;
     int ret;
-        
+
     ctx = SSL_get_SSL_CTX(ssl);
     if (ctx == NULL)
         return 0;
@@ -610,6 +610,3 @@ int remove_session_cb(SSL* ssl, SSL_SESSION* session) {
 }
 
 */
-
-
-
