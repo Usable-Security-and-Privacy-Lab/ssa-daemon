@@ -40,4 +40,4 @@
 
  /* getsockopt */
  //int get_enabled_ciphers(socket_ctx* conn, char** data, unsigned int* len);
- int get_last_negotiated(socket_ctx* conn, char** data, unsigned int* len);
+ int get_last_negotiated(socket_ctx* conn, const char** data, unsigned int* len);

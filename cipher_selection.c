@@ -1,5 +1,6 @@
 #include "config.h"
 #include "log.h"
+#include "error.h"
 #include "sockopt_functions.h"
 #include "daemon_structs.h"
 #include "cipher_selection.h"
@@ -9,7 +10,13 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/stat.h>
 
+#include <openssl/ssl.h>
 #include <openssl/err.h>
 
 #define UBUNTU_DEFAULT_CA "/etc/ssl/certs/ca-certificates.crt"
@@ -17,76 +24,37 @@
 #define MAX_NUM_CIPHERS 37
 #define MAX_CIPHERSUITE_STRINGLEN 150
 #define DISABLE_INSECURE_CIPHERS ":!SSLv3:!TLSv1:!TLSv1.1:!eNULL:!aNULL:!RC4:!MD4:!MD5"
-/*
- *******************************************************************************
- *                            GETSOCKOPT FUNCTIONS
- *******************************************************************************
- */
- /**
-  * Allocates a string list of enabled ciphers to data.
-  * @param conn The specified connection context to retrieve the ciphers from
-  * @param data A pointer to a char pointer where the cipherlist string will be
-  * allocated to, or NULL if no ciphers were available from the given connection.
-  * This should be freed after use.
-  * @returns 0 on success; -errno otherwise.
-  */
- /*int get_enabled_ciphers(socket_ctx* conn, char** data, unsigned int* len) {
- 	char* ciphers_str = "";
 
- 	STACK_OF(SSL_CIPHER)* ciphers = SSL_get1_supported_ciphers(conn->ssl);
- 	if (ciphers == NULL)
- 		goto end; / no ciphers available; just return NULL. /
-
- 	int ciphers_len = get_ciphers_strlen(ciphers);
- 	if (ciphers_len == 0)
- 		goto end;
-
- 	ciphers_str = (char*) malloc(ciphers_len + 1);
- 	if (ciphers_str == NULL)
- 		return -errno;
-
- 	if (get_ciphers_string(ciphers, ciphers_str, ciphers_len + 1) != 0) {
- 		log_printf(LOG_ERROR, "Buffer wasn't big enough; had to be truncated.\n");
- 	}
-
- 	*len = ciphers_len + 1;
-  end:
- 	log_printf(LOG_DEBUG, "Trusted ciphers:\n%s\n", ciphers_str);
- 	log_printf(LOG_DEBUG, "Cipher length: %i\n", *len);
- 	*data = ciphers_str;
-	//free(ciphers_str); //Check memory
- 	return 0;
-}*/
- /**
- * gets cipher used in connection
- * @param conn connection object
- * @param data stores info to be passed to the user
- * @param data_len length of data
- * @returns last_negotiated last negotiated cipher
- */
- int get_last_negotiated(socket_ctx* conn, char** data, unsigned int* data_len) {
- 	SSL* ssl = (conn->ssl);
- 	const SSL_CIPHER* cipher = SSL_get_current_cipher(ssl);
+/**
+* gets cipher used in connection
+* @param conn connection object
+* @param data stores info to be passed to the user
+* @param data_len length of data
+* @returns last_negotiated last negotiated cipher
+*/
+int get_last_negotiated(socket_ctx* conn, const char** data, unsigned int* data_len) { //maybe delete
+ SSL* ssl = (conn->ssl);
+ const SSL_CIPHER* cipher = SSL_get_current_cipher(ssl);
   const char* cipher_name = SSL_CIPHER_get_name(cipher);
 
- 	if(cipher_name != NULL) {
+ if(cipher_name != NULL) {
 
- 		unsigned int cipher_len = strlen(cipher_name);
- 		char* cipher_str = (char*) malloc(cipher_len + 1);
+   unsigned int cipher_len = strlen(cipher_name);
+   char* cipher_str = (char*) malloc(cipher_len + 1);
 
- 		strcpy(cipher_str, cipher_name);
- 		//free(*data);
- 		*data = cipher_str;
- 		*data_len = cipher_len + 1;
+   strcpy(cipher_str, cipher_name);
+   //free(*data);
+   *data = cipher_str;
+   *data_len = cipher_len + 1;
 
- 		log_printf(LOG_INFO, "Negotiated cipher: %s\n", cipher_str);
+   log_printf(LOG_INFO, "Negotiated cipher: %s\n", cipher_str);
 
- 		return 0;
- 	}
- 	else {
- 		return -1;
- 	}
+   return 0;
  }
+ else {
+   return -1;
+ }
+}
 /*
  *******************************************************************************
  *                           SETSOCKOPT FUNCTIONS
@@ -101,7 +69,7 @@
  */
  int disable_ciphers(socket_ctx* conn, char* cipher) {
 	 log_printf(LOG_DEBUG, "Received disable cipher notification %s\n", cipher);
- 	SSL* ssl = (conn->ssl);
+ 	SSL_CTX* ctx = (conn->ssl_ctx);
  	char* cipherlist;
  	unsigned int len;
  	int ret;
@@ -114,7 +82,7 @@
 			 log_printf(LOG_DEBUG, "Unable to remove name\n");
        return -1;
      }
- 		if(SSL_set_ciphersuites(ssl, cipherlist) == 1) {
+ 		if(SSL_CTX_set_ciphersuites(ctx, cipherlist) == 1) {
 			log_printf(LOG_DEBUG, "Successful SSL ciphersuite update %s\n", cipherlist);
  			ret = 0;
  		}
@@ -126,14 +94,14 @@
  	else {
 
  		get_cipher_list_string(conn, &cipherlist, &len);
-		log_printf(LOG_DEBUG, "finished receiving list string %s\n", cipherlist);
+
  		char* blacklist = DISABLE_INSECURE_CIPHERS;
 
  		ret = deletion_loop(cipher, &cipherlist);
 
  		strcat(cipherlist, blacklist);
-
- 		if(SSL_set_cipher_list(ssl, cipherlist) == 1) {
+    log_printf(LOG_DEBUG, "appended blacklist\n");
+ 		if(SSL_CTX_set_cipher_list(ctx, cipherlist) == 1) {
 			log_printf(LOG_DEBUG, "Successful SSL cipherlist update %s\n", cipherlist);
  			ret = 0;
  		}
@@ -153,7 +121,7 @@
  */
  int enable_cipher(socket_ctx* conn, char* cipher) {
 	 log_printf(LOG_DEBUG, "Received enable cipher notification%s\n", cipher);
- 	SSL* ssl = (conn->ssl);
+ 	SSL_CTX* ctx = (conn->ssl_ctx);
  	char* cipherlist;
  	unsigned int cipherlist_len; //is length necessary
  	int ret;
@@ -163,7 +131,7 @@
 
  		get_ciphersuite_string(conn, &cipherlist, &cipherlist_len);
  		append_to_cipherstring(cipher, &cipherlist);
- 		if(SSL_set_ciphersuites(ssl, cipherlist) == 1) {
+ 		if(SSL_CTX_set_ciphersuites(ctx, cipherlist) == 1) {
  			log_printf(LOG_DEBUG, "Successful SSL ciphersuite update %s\n", cipherlist);
  			ret = 0;
  		}
@@ -178,7 +146,7 @@
  		char* blacklist = DISABLE_INSECURE_CIPHERS;
  		strcat(cipherlist, blacklist);
 		log_printf(LOG_DEBUG, "appended blacklist\n");
- 		if(SSL_set_cipher_list(ssl, cipherlist) == 1) {
+ 		if(SSL_CTX_set_cipher_list(ctx, cipherlist) == 1) {
  			log_printf(LOG_DEBUG, "Successful SSL cipherlist update\n %s\n", cipherlist);
  			ret = 0;
  		}
@@ -213,7 +181,7 @@
  * buf_len keeps track of string length
  */
  int get_ciphersuite_string(socket_ctx* conn, char** buf, unsigned int* buf_len) { //FIXME rename buf
-   STACK_OF(SSL_CIPHER)* cipherlist = SSL_get1_supported_ciphers(conn->ssl);
+   STACK_OF(SSL_CIPHER)* cipherlist = SSL_CTX_get_ciphers(conn->ssl_ctx);
  	*buf = "";
  	*buf = malloc(MAX_CIPHERSUITE_STRINGLEN);
    int index = 0;
@@ -229,7 +197,7 @@
  		//if (version == "TLSv1.3")
  		if (strcmp(get_string_version(namecpy), "TLSv1.3") == 0) {
 
- 			strcpy(&ciphersuites[index], name);
+ 			strcpy(&ciphersuites[index], name); //CHECKME
 			log_printf(LOG_DEBUG, "Cipher2 %s\n", name);
  			index += strlen(name);
  			ciphersuites[index] = ':';
@@ -248,7 +216,7 @@
 	strcpy(*buf, ciphersuites);
  	*buf_len = strlen(ciphersuites) + 1;
 	log_printf(LOG_DEBUG, "len: %d\n", *buf_len);
-	log_printf(LOG_DEBUG, "Finished name retrieval1 %s\n", *buf);
+	log_printf(LOG_DEBUG, "Finished forming ciphersuites %s\n", *buf);
  	return 0;
  }
 
@@ -260,13 +228,16 @@
  * @returns 0 on success -1 on failure
  */
  int get_cipher_list_string(socket_ctx* conn, char** buf, unsigned int* buf_len) {
- 	STACK_OF(SSL_CIPHER)* cipherlist = SSL_get1_supported_ciphers(conn->ssl);
- 	int ciphers_len = get_ciphers_strlen(cipherlist);
+ 	STACK_OF(SSL_CIPHER)* cipherstack = SSL_CTX_get_ciphers(conn->ssl_ctx);
+
+ 	int ciphers_len = get_ciphers_strlen(cipherstack);
  	*buf = ""; //empties buffer //free?
  	*buf = malloc(ciphers_len);
- 	int i = 0;
- 	while (i < sk_SSL_CIPHER_num(cipherlist)) { //change to for loop
- 		const SSL_CIPHER* curr_cipher = sk_SSL_CIPHER_value(cipherlist, i);
+  int index = 0;
+  char* cipherlist = *buf;
+  log_printf(LOG_DEBUG, "Num ciphers: %d\n", sk_SSL_CIPHER_num(cipherstack));
+  for(int i = 0; i < sk_SSL_CIPHER_num(cipherstack); i++) {
+ 		const SSL_CIPHER* curr_cipher = sk_SSL_CIPHER_value(cipherstack, i);
  		const char* name = SSL_CIPHER_get_name(curr_cipher);
  		char* cipher_name = malloc(50);
  		strcpy(cipher_name, name);
@@ -275,16 +246,22 @@
 
  		if (strcmp(version, "TLSv1.3") != 0) {
 
- 			const char* data;
- 			unsigned int len;
- 			get_enabled_ciphers(conn, &data, &len);
- 			strcpy(*buf, strstr(data, name));
- 			*buf_len = strlen(*buf) + 1;
- 			return 0;
- 		}
- 		i++;
- 	}
 
+ 			strcpy(&cipherlist[index], name);
+      log_printf(LOG_DEBUG, "Successfullly received: %s\n", name);
+      index += strlen(name);
+ 			cipherlist[index] = ':';
+ 			index += 1;
+
+ 		}
+
+ 	}
+  cipherlist[index - 1] = '\0'; /* change last ':' to '\0' */
+	log_printf(LOG_DEBUG, "Cipher3 %s\n", cipherlist);
+	strcpy(*buf, cipherlist);
+ 	*buf_len = strlen(cipherlist) + 1;
+	log_printf(LOG_DEBUG, "len: %d\n", *buf_len);
+	log_printf(LOG_DEBUG, "Finished forming cipherlist %s\n", *buf);
  	return -1;
  }
  /**

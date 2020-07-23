@@ -44,7 +44,7 @@
 
 
 /**
- * Disables any revocation checks from being performed, and passes all TLS 
+ * Disables any revocation checks from being performed, and passes all TLS
  * handshakes (even if a revoked certificate is in use)
  */
 #define turn_off_revocation_checks(checks) (checks |= NO_REVOCATION_CHECKS)
@@ -216,11 +216,11 @@ struct revocation_ctx_st {
 
 	unsigned int checks; /** bitmap of rev checks; options #define'd above */
 
-    /** The number of active, authoritative responders performing revocation 
-     * checks for the certificate at the corresponding index in the cert chain. 
-     * For example, responders_at[0] would represent the number of responders 
-     * checking the leaf certificate of a chain, responders_at[1] would be the 
-     * number of responders checking the certificate that signed the leaf 
+    /** The number of active, authoritative responders performing revocation
+     * checks for the certificate at the corresponding index in the cert chain.
+     * For example, responders_at[0] would represent the number of responders
+     * checking the leaf certificate of a chain, responders_at[1] would be the
+     * number of responders checking the certificate that signed the leaf
      * certificate, and so on. An `authoritative` responder would be any one
      * OCSP responder for a certificate; CRL responders can collectively be
      * considered as one authoritative responder, but individually they are not.
@@ -229,10 +229,10 @@ struct revocation_ctx_st {
      */
     int *responders_at;
 
-    /** The number of active CRL responders peforming revocation check for the 
+    /** The number of active CRL responders peforming revocation check for the
      * certificate at the corresponding index in the cert chain.
-     * For example, crl_responders_at[0] would return the number of CRL 
-     * responders checking the leaf certificate of a chain. 
+     * For example, crl_responders_at[0] would return the number of CRL
+     * responders checking the leaf certificate of a chain.
      * @see responders_at.
      */
     int *crl_responders_at;
@@ -273,7 +273,7 @@ struct crl_responder_st {
     struct bufferevent* bev; /** Bufferevent reading/writing CRL response */
     crl_responder* next;     /** Pointer to the next responder in the list */
 };
- 
+
 
 struct socket_ctx_st {
 
@@ -283,7 +283,7 @@ struct socket_ctx_st {
 
     enum socket_state state; /** The socket's current state @see socket_state */
 
-    SSL_CTX* ssl_ctx;   /** The context of the SSL object (useful for server) */
+  SSL_CTX* ssl_ctx;   /** The context of the SSL object (useful for server) */
 	SSL* ssl;           /** The SSL instance associated with \p sockfd */
 
 
@@ -317,7 +317,7 @@ struct socket_ctx_st {
 daemon_ctx *daemon_context_new(char* config_path, int port);
 void daemon_context_free(daemon_ctx* daemon);
 
-int socket_context_new(socket_ctx** sock, int fd, 
+int socket_context_new(socket_ctx** sock, int fd,
             daemon_ctx* ctx, unsigned long id);
 socket_ctx* accepting_socket_ctx_new(socket_ctx* listener_ctx, int fd);
 void socket_shutdown(socket_ctx* sock_ctx);

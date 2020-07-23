@@ -87,23 +87,24 @@ int connect_to_host(char* host, char* service) {
 		char two_ciphers[] = "TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256";
 		char good_and_bad[] = "NULL-MD5:ECDHE-RSA-AES256-GCM-SHA384";
 
-    if (setsockopt(sock, IPPROTO_TLS, TLS_DISABLE_CIPHER, cipher1, strlen(cipher1)+1) == -1) {
+		if (setsockopt(sock, IPPROTO_TLS, TLS_DISABLE_CIPHER, cipher1, strlen(cipher1)+1) == -1) {
       perror("setsockopt: TLS_DISABLE_CIPHER");
       //close(sock);
       continue;
     }
 
-    /*if (setsockopt(sock, IPPROTO_TLS, TLS_ENABLE_CIPHER, cipher1, strlen(cipher1) + 1) == -1) {
+    if (setsockopt(sock, IPPROTO_TLS, TLS_ENABLE_CIPHER, cipher1, strlen(cipher1) + 1) == -1) {
       perror("setsockopt: TLS_ENABLE_CIPHER");
       //close(sock);
       continue;
-    }*/
+    }
 
 		if (connect(sock, addr_ptr->ai_addr, addr_ptr->ai_addrlen) == -1) {
 			perror("connect");
 			close(sock);
 			continue;
 		}
+
 
 		print_identity(sock);
 		break;
@@ -126,16 +127,17 @@ void print_identity(int fd) {
 
 	data_len = sizeof(data);
 	data[0] = '\0'; //empty
-  if (getsockopt(fd, IPPROTO_TLS, TLS_TRUSTED_CIPHERS, data, &data_len) == -1) { //myTest
+  if (getsockopt(fd, IPPROTO_TLS, TLS_TRUSTED_CIPHERS, data, &data_len) == -1) {
 		perror("TLS_TRUSTED_CIPHERS");
 	}
 	printf("Trusted ciphers:\n%s\n", data);
 	data_len = sizeof(data);
-
-  if (getsockopt(fd, IPPROTO_TLS, TLS_CHOSEN_CIPHER, data, &data_len) == -1) { //myTest //should use data?
+	char data1[200];
+	socklen_t data_len1 = sizeof(data1);
+  if (getsockopt(fd, IPPROTO_TLS, TLS_CHOSEN_CIPHER, data1, &data_len1) == -1) {
 		perror("TLS_CHOSEN_CIPHER");
 	}
-	//data[data_len] = '\0';
-	printf("Negotiated cipher:\n%s\n", data);
+	data[data_len] = '\0';
+	printf("Negotiated cipher:\n%s\n Length: %d", data1, data_len1);
 
 }
