@@ -98,35 +98,4 @@ void* str_hashmap_get(hsmap_t* map, char* key);
 void str_hashmap_print(hsmap_t* map);
 
 
-/**
- * Adds the given key:value pair to \p map, even if \p key already exists
- * as a key to one of the elements in the hashmap. It should be warned that 
- * this partially breaks the API of a hashmap; subsequent lookups and 
- * deletions will only return the first element added, leaving the rest 
- * invisible. This function is used in tandem with `str_hashmap_mult_del`
- * as a hack to allow session caching to cache multiple sessions and then remove
- * one at a time in a queue-like manner (hence the name).
- * @param map The map to add the given key:value pair to.
- * @param key The *non*-unique null-terminated string for the element.
- * @param value A unique pointer to the desired data to store.
- * @returns 0 on success; or -1 on malloc failure.
- */
-int str_hashmap_queue_add(hsmap_t* map, char* key, void* value);
-
-
-/**
- * In maps where `str_hashmap_queue_add` has been used, this function may
- * be used to delete a specific instance of a node when several nodes exist
- * with the same key. It does so by iterating through each element containing 
- * \p key as its key and checking to see if the pointer \p value matches the 
- * element's value.
- * @param map The map to delete the given key:value pair from.
- * @param key A *non*-unique null-terminated string to identify the element.
- * @param value The specific value of the element to be deleted.
- * @returns 0 on success, or 1 if no element with the given key:value pair
- * could be found.
- */
-int str_hashmap_queue_del(hsmap_t* map, char* key, void* value);
-
-
 #endif

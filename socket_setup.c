@@ -531,8 +531,7 @@ int prepare_SSL_client(socket_ctx* sock_ctx) {
                 "couldn't assign the socket's hostname for validation\n");
         goto err;
     }
-
-    if (has_session_cache(sock_ctx->ssl_ctx)) {
+    if (session_resumption_enabled(sock_ctx->ssl_ctx)) {
         char* host_port = get_hostname_port_str(sock_ctx);
         if (host_port == NULL)
             goto err;

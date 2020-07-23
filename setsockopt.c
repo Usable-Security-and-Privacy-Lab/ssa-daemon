@@ -19,6 +19,7 @@ int set_private_key(socket_ctx* sock_ctx, char* path, socklen_t len);
 int set_tls_compression(socket_ctx* sock_ctx, int* value, socklen_t len);
 int set_tls_context(socket_ctx* sock_ctx, unsigned long* data, socklen_t len);
 int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, socklen_t len);
+int set_session_resumption(socket_ctx* sock_ctx, int* reuse, socklen_t len);
 
 
 /* helper functions */
@@ -111,6 +112,10 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
             break;
         response = set_tls_context(sock_ctx, (unsigned long*) value, len);
+        break;
+
+    case TLS_SESSION_REUSE:
+        response = set_session_resumption(sock_ctx, (int*) value, len);
         break;
 
 	default:
@@ -391,7 +396,7 @@ int set_tls_context(socket_ctx* sock_ctx, unsigned long* data, socklen_t len) {
     if (old_sock_ctx == NULL)
         return -EINVAL;
 
-    if (client_session_resumption_enabled(old_sock_ctx->ssl_ctx)) {
+    if (has_session_cache(old_sock_ctx->ssl_ctx)) {
         int response = session_cache_up_ref(old_sock_ctx->ssl_ctx);
         if (response != 0)
             return response;
@@ -408,6 +413,23 @@ int set_tls_context(socket_ctx* sock_ctx, unsigned long* data, socklen_t len) {
 }
 
 
+int set_session_resumption(socket_ctx* sock_ctx, int* reuse, socklen_t len) {
+
+    if (len != sizeof(int))
+        return -EINVAL;
+
+    if (*reuse == 1)
+        SSL_CTX_set_session_cache_mode(sock_ctx->ssl_ctx, SSL_SESS_CACHE_BOTH);
+    else if (*reuse == 0) 
+        SSL_CTX_set_session_cache_mode(sock_ctx->ssl_ctx, SSL_SESS_CACHE_OFF);
+    else
+        return -EINVAL;
+    
+    /* BUG: Servers with these settings may still *send* tickets; they just 
+     * won't accept them as valid once presented. See `SSL_CTX_set_num_tickets`
+     */
+    return 0;
+}
 
 /*******************************************************************************
  *                             HELPER FUNCTIONS

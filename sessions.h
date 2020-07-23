@@ -11,7 +11,7 @@
  * @param ctx The SSL context to check.
  * @returns 1 if client-side session caching is enabled, or 0 otherwise.
  */
-int client_session_resumption_enabled(SSL_CTX* ctx);
+int session_resumption_enabled(SSL_CTX* ctx);
 
 
 /**

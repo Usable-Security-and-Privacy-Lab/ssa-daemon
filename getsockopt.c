@@ -19,6 +19,7 @@ int get_hostname(socket_ctx* sock_ctx, char** data, unsigned int* len);
 int get_enabled_ciphers(socket_ctx* sock_ctx, char** data, unsigned int* len);
 int get_chosen_cipher(socket_ctx* sock_ctx, char** data, unsigned int* len);
 int get_session_resumed(socket_ctx* sock_ctx, int** data, unsigned int *len);
+int get_session_reuse(socket_ctx* sock_ctx, int** data, unsigned int* len);
 int get_tls_compression(socket_ctx* sock_ctx, int** data, unsigned int* len);
 int get_tls_context(socket_ctx* sock_ctx, 
             unsigned long** data, unsigned int* len);
@@ -102,6 +103,10 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
                     SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
             break;
         response = get_session_resumed(sock_ctx, (int**) data, len);
+        break;
+    
+    case TLS_SESSION_REUSE:
+        response = get_session_reuse(sock_ctx, (int**) data, len);
         break;
 
 	case TLS_TRUSTED_PEER_CERTIFICATES:
@@ -364,7 +369,7 @@ int get_tls_context(socket_ctx* sock_ctx,
 
     *context_id = sock_ctx->id;
 
-    if (client_session_resumption_enabled(ssl_ctx) 
+    if (session_resumption_enabled(ssl_ctx) 
                 && !has_session_cache(ssl_ctx)) {
         ret = session_cache_new(ssl_ctx);
         if (ret != 0)
@@ -400,7 +405,29 @@ int get_session_resumed(socket_ctx* sock_ctx, int** data, unsigned int *len) {
 
     *data = is_resumed;
     *len = sizeof(int);
+
     return 0;
+}
+
+
+
+int get_session_reuse(socket_ctx* sock_ctx, int** data, unsigned int* len) {
+
+    int cache_mode = SSL_CTX_get_session_cache_mode(sock_ctx->ssl_ctx);
+    int* reuse_sessions = malloc(sizeof(int));
+    if (reuse_sessions == NULL)
+        return -ECANCELED;
+
+    if ((cache_mode & SSL_SESS_CACHE_CLIENT) 
+                && (cache_mode & SSL_SESS_CACHE_SERVER))
+        *reuse_sessions = 1;
+    else
+        *reuse_sessions = 0;
+
+    *data = reuse_sessions;
+    *len = sizeof(int);
+
+    return 0;   
 }
 
 
