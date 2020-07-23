@@ -87,3 +87,49 @@ TEST(SetsockoptTests, SetHostnameNull) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
+TEST(SetsockoptTests, SetCertChainCorrect) {
+
+    TEST_TIMEOUT_BEGIN
+
+    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (fd < 0) 
+        fprintf(stderr, "Socket failed to be created: %s\n", strerror(errno));
+    
+    ASSERT_GE(fd, 0);
+    
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/server_chain.pem", strlen("certs/server_chain.pem")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    close(fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
+}
+
+TEST(SetsockoptTests, SetCertChainWrongPath) {
+
+    TEST_TIMEOUT_BEGIN
+
+    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (fd < 0) 
+        fprintf(stderr, "Socket failed to be created: %s\n", strerror(errno));
+    
+    ASSERT_GE(fd, 0);
+    
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "fake/path/cert.pem", strlen("fake/path/cert.pem")+1);
+
+    EXPECT_EQ(setsockopt_ret, -1);
+    EXPECT_EQ(errno, EINVAL);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    close(fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
+}
