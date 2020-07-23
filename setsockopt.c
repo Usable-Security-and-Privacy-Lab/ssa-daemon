@@ -401,6 +401,9 @@ int set_tls_context(socket_ctx* sock_ctx, unsigned long* data, socklen_t len) {
     sock_ctx->ssl_ctx = old_sock_ctx->ssl_ctx;
     SSL_CTX_up_ref(sock_ctx->ssl_ctx);
 
+    /* copy in the hostname */
+    strcpy(sock_ctx->rem_hostname, old_sock_ctx->rem_hostname);
+
     return 0;
 }
 
