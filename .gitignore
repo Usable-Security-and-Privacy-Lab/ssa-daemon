@@ -63,6 +63,8 @@ test_files/*
 !test_files/*/
 !test_files/*.*
 
+test_files/*.o
+
 test_files/https_client/https_client
 test_files/https_server/https_server
 test_files/simple_test/https_client
