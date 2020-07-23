@@ -24,15 +24,18 @@ void print_socket_error(int fd, const char* source) {
 
     char buf[256] = {0};
     socklen_t buf_len = 255;
+    int errno_err = errno;
     int ret;
+
+    fprintf(stderr, "%s failed--returned errno %i: %s\n", 
+                source, errno_err, strerror(errno_err));
 
     ret = getsockopt(fd, IPPROTO_TLS, TLS_ERROR, buf, &buf_len);
     if (ret == 0)
-        fprintf(stderr, "%s failed--errno %i, err string: %s\n",
-                    source, errno, buf);
-    else
-        fprintf(stderr, "%s failed with errno %i: %s\n", 
-                    source, errno, strerror(errno));
+        fprintf(stderr, "Daemon err string: %s\n",
+                    buf);
+
+    errno = errno_err;
 }
 
 /**
