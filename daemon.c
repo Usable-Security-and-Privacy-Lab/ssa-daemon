@@ -418,7 +418,7 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	int ret = 0;
 
 	new_ctx = accepting_socket_ctx_new(listening_ctx, efd);
-	if (new_ctx != NULL)
+	if (new_ctx == NULL)
 		goto err;
 
 	new_ctx->int_addr = listening_ctx->int_addr;
@@ -450,7 +450,8 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
         goto err;
 
     return;
-err:
+err:    
+    log_printf(LOG_WARNING, "Incoming connection dropped due to listener_accept_cb() failure\n");
 
 	if (new_ctx != NULL)
 		socket_context_free(new_ctx);
@@ -714,13 +715,6 @@ void bind_cb(daemon_ctx* daemon, unsigned long id,
 	if (bind(sock_ctx->sockfd, ext_addr, ext_addrlen) != 0) {
 		response = -errno;
 		set_err_string(sock_ctx, "Bind error: SSA daemon socket failed to bind");
-		goto err;
-	}
-
-    if (evutil_make_listen_socket_reuseable(sock_ctx->sockfd) != 0) {
-        log_printf(LOG_ERROR, "Failed to make socket nonblocking (errno %i): %s",
-                    EVUTIL_SOCKET_ERROR(), strerror(EVUTIL_SOCKET_ERROR()));
-		response = -ECANCELED;
 		goto err;
 	}
 
