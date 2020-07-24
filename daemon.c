@@ -402,7 +402,7 @@ void accept_error_cb(struct evconnlistener *listener, void *ctx) {
  * @param addrlen The length of the address info sent by the connecting client.
  */
 void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
-	struct sockaddr *address, int addrlen, void *arg) {
+	        struct sockaddr* address, int addrlen, void *arg) {
 
     struct sockaddr_in int_addr = {
 		.sin_family = AF_INET,
@@ -414,7 +414,7 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	daemon_ctx* daemon = listening_ctx->daemon;
 	socket_ctx* new_ctx = NULL;
 	socklen_t intaddr_len = sizeof(int_addr);
-	evutil_socket_t ifd = -1;
+	evutil_socket_t ifd = NO_FD;
 	int ret = 0;
 
 	new_ctx = accepting_socket_ctx_new(listening_ctx, efd);
@@ -425,11 +425,16 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	new_ctx->int_addrlen = listening_ctx->int_addrlen;
 
     ifd = socket(PF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
-	if (ifd == -1)
+	if (ifd == NO_FD) {
+        LOG_E("socket() failed in listener_accept_cb (listener ID: %lu)\n", 
+                    listening_ctx->id);
 		goto err;
+    }
 
-	if (bind(ifd, (struct sockaddr*)&int_addr, sizeof(int_addr)) == -1)
+	if (bind(ifd, (struct sockaddr*)&int_addr, sizeof(int_addr)) == -1) {
+        LOG_E("bind() failed with code %i: %s\n", errno, strerror(errno));
 		goto err;
+    }
 
 	/* refresh the sockaddr info to get the port the kernel assigned us */
 	if (getsockname(ifd, (struct sockaddr*)&int_addr, &intaddr_len) == -1)
@@ -440,8 +445,10 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
         goto err;
 
     ret = prepare_bufferevents(new_ctx, ifd);
-    if (ret != 0)
+    if (ret != 0) {
+        ifd = NO_FD;
         goto err;
+    }
 
     new_ctx->local_port = get_port((struct sockaddr*) &int_addr);
     ret = hashmap_add(daemon->sock_map_port, 
@@ -451,12 +458,12 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 
     return;
 err:    
-    log_printf(LOG_WARNING, "Incoming connection dropped due to listener_accept_cb() failure\n");
+    LOG_W("Incoming connection dropped due to listener_accept_cb() failure\n");
 
 	if (new_ctx != NULL)
 		socket_context_free(new_ctx);
 
-	if (ifd != -1)
+	if (ifd != NO_FD)
 		EVUTIL_CLOSESOCKET(ifd);
 
 	return;
@@ -964,6 +971,7 @@ err:
  * @param id The id of the socket to be closed.
  */
 void close_cb(daemon_ctx* daemon, unsigned long id) {
+
 	socket_ctx* sock_ctx;
 
 	sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);

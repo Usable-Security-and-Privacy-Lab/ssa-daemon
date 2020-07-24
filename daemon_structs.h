@@ -129,7 +129,7 @@ enum socket_state {
     SOCKET_ERROR = 0,      /** Socket unrecoverably failed operation */
     SOCKET_NEW,            /** Fresh socket ready for `connect` or `listen` */
     SOCKET_CONNECTING,     /** Performing TCP or TLS handshake */
-    SOCKET_FINISHING_CONN, /** revocation checks, connecting internally */
+    SOCKET_FINISHING_CONN, /** revocation checks/connecting internally */
     SOCKET_CONNECTED,      /** Both endpoints connected (client) */
     SOCKET_LISTENING,      /** Socket listening/accepting connections */
     SOCKET_ACCEPTED,       /** Both endpoints connected (server) */

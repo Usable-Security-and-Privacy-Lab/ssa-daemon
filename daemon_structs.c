@@ -236,37 +236,61 @@ err:
  */
 void socket_shutdown(socket_ctx* sock_ctx) {
 
+    if (sock_ctx == NULL) {
+        LOG_F("Tried to shutdown NULL socket context reference\n");
+        return;
+    }
+
     revocation_context_cleanup(&sock_ctx->rev_ctx);
 
     if (sock_ctx->ssl != NULL) {
         switch (sock_ctx->state) {
-        case SOCKET_CONNECTED:
         case SOCKET_FINISHING_CONN:
+        case SOCKET_CONNECTED:
         case SOCKET_ACCEPTED:
             SSL_shutdown(sock_ctx->ssl);
-            break;
+
+            /* FALL THROUGH */
         default:
+            session_cleanup(sock_ctx->ssl);
             break;
         }
     }
 
-    if (sock_ctx->listener != NULL) 
+    if (sock_ctx->listener != NULL) {
         evconnlistener_free(sock_ctx->listener);
-    sock_ctx->listener = NULL;
+        sock_ctx->sockfd = NO_FD;
+        sock_ctx->listener = NULL;
+    }
 
-    if (sock_ctx->secure.bev != NULL)
+    if (sock_ctx->secure.bev != NULL) {
         bufferevent_free(sock_ctx->secure.bev);
-    sock_ctx->secure.bev = NULL;
-	sock_ctx->secure.closed = 1;
-	
-	if (sock_ctx->plain.bev != NULL)
-		bufferevent_free(sock_ctx->plain.bev);
-	sock_ctx->plain.bev = NULL;
-	sock_ctx->plain.closed = 1;
+        sock_ctx->secure.bev = NULL;
+        sock_ctx->secure.closed = 1; /* why do we even have this lever?? */
+        
+        sock_ctx->ssl = NULL;
+        sock_ctx->sockfd = NO_FD;
 
-	if (sock_ctx->sockfd != -1)
-		close(sock_ctx->sockfd);
-	sock_ctx->sockfd = -1;
+    }
+	
+	if (sock_ctx->plain.bev != NULL) {
+		bufferevent_free(sock_ctx->plain.bev);
+        sock_ctx->plain.bev = NULL;
+        sock_ctx->plain.closed = 1;
+    }
+
+	if (sock_ctx->sockfd != NO_FD) {
+        int ret = shutdown(sock_ctx->sockfd, SHUT_WR);
+        if (ret < 0)
+            LOG_W("shutdown() failed");
+
+		ret = close(sock_ctx->sockfd);
+        if (ret < 0)
+            LOG_W("close() returned %i:%s (likely double-closing fd)\n", 
+                        errno, strerror(errno));
+        
+        sock_ctx->sockfd = NO_FD;
+    }
 
 	return;
 }
@@ -279,37 +303,57 @@ void socket_shutdown(socket_ctx* sock_ctx) {
  */
 void socket_context_free(socket_ctx* sock_ctx) {
 
-	if (sock_ctx == NULL) {
-		log_printf(LOG_WARNING, "Tried to free a null sock_ctx reference\n");
-		return;
-	}
+    if (sock_ctx == NULL) {
+        LOG_F("Tried to free NULL socket context reference\n");
+        return;
+    }
 
-	if (sock_ctx->listener != NULL)
-		evconnlistener_free(sock_ctx->listener);
-	else if (sock_ctx->sockfd != -1)
-		EVUTIL_CLOSESOCKET(sock_ctx->sockfd);
-	
+    revocation_context_cleanup(&sock_ctx->rev_ctx);
+    
+    if (sock_ctx->ssl != NULL)
+        session_cleanup(sock_ctx->ssl);
 
-	revocation_context_cleanup(&sock_ctx->rev_ctx);
+    if (sock_ctx->listener != NULL) {
+        evconnlistener_free(sock_ctx->listener);
+        sock_ctx->sockfd = NO_FD;
+        sock_ctx->listener = NULL;
+    }
+
+    if (sock_ctx->secure.bev != NULL) {
+        bufferevent_free(sock_ctx->secure.bev);
+        sock_ctx->secure.bev = NULL;
+        sock_ctx->ssl = NULL;
+        sock_ctx->sockfd = NO_FD;
+    }
+
+    if (sock_ctx->plain.bev != NULL) {
+        bufferevent_free(sock_ctx->plain.bev);
+        sock_ctx->plain.bev = NULL;
+    }
 
     if (sock_ctx->ssl_ctx != NULL) {
         if (has_session_cache(sock_ctx->ssl_ctx))
             session_cache_free(sock_ctx->ssl_ctx);
         SSL_CTX_free(sock_ctx->ssl_ctx);
-    }
-        
-    if (sock_ctx->ssl != NULL) {
-        session_resumption_cleanup(sock_ctx->ssl);
-        SSL_free(sock_ctx->ssl);
+        sock_ctx->ssl_ctx = NULL;
     }
 
-	if (sock_ctx->secure.bev != NULL)
-		bufferevent_free(sock_ctx->secure.bev);
-	if (sock_ctx->plain.bev != NULL)
-		bufferevent_free(sock_ctx->plain.bev);
+    if (sock_ctx->ssl != NULL) {
+        SSL_free(sock_ctx->ssl);
+        sock_ctx->ssl = NULL;
+    }
+
+    if (sock_ctx->sockfd != NO_FD) {
+		int ret = close(sock_ctx->sockfd);
+        if (ret < 0)
+            LOG_W("close() returned %i:%s (likely double-closing fd)\n", 
+                        errno, strerror(errno));
+        
+        sock_ctx->sockfd = NO_FD;
+    }
 
     free(sock_ctx);
-	return;
+    return;
 }
 
 

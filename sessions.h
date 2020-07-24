@@ -69,7 +69,7 @@ int session_resumption_setup(SSL* ssl, char* hostname_port);
  * Clears any data associated with session resumption from \p ssl.
  * @param ssl The SSL connection to free session resumption info from.
  */
-void session_resumption_cleanup(SSL* ssl);
+void session_cleanup(SSL* ssl);
 
 
 #endif

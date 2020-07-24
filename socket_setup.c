@@ -431,63 +431,63 @@ int load_certificates(SSL_CTX* ctx, global_config* settings) {
 int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
 
     daemon_ctx* daemon = sock_ctx->daemon;
+    enum bufferevent_ssl_state state;
+    bufferevent_event_cb event_cb;
     int ret;
 
-    enum bufferevent_ssl_state state = (plain_fd == NO_FD)
-            ? BUFFEREVENT_SSL_CONNECTING : BUFFEREVENT_SSL_ACCEPTING;
-
-    bufferevent_event_cb event_cb = (plain_fd == NO_FD)
-            ? client_bev_event_cb : server_bev_event_cb;
+    if (plain_fd == NO_FD) {
+        state = BUFFEREVENT_SSL_CONNECTING;
+        event_cb = client_bev_event_cb;
+    
+    } else {
+        state = BUFFEREVENT_SSL_ACCEPTING;
+        event_cb = server_bev_event_cb;
+    }
 
     clear_global_and_socket_errors(sock_ctx);
 
     sock_ctx->secure.bev = bufferevent_openssl_socket_new(daemon->ev_base,
-            sock_ctx->sockfd, sock_ctx->ssl, state, 0);
+                sock_ctx->sockfd, sock_ctx->ssl, state, BEV_OPT_CLOSE_ON_FREE);
     if (sock_ctx->secure.bev == NULL)
         goto err;
 
-    bufferevent_setcb(sock_ctx->secure.bev, common_bev_read_cb,
-			common_bev_write_cb, event_cb, sock_ctx);
+    bufferevent_openssl_set_allow_dirty_shutdown(sock_ctx->secure.bev, 1);
 
     ret = bufferevent_enable(sock_ctx->secure.bev, EV_READ | EV_WRITE);
 	if (ret < 0)
 		goto err;
 
-    /*
-	#if LIBEVENT_VERSION_NUMBER >= 0x02010000
-	bufferevent_openssl_set_allow_dirty_shutdown(sock_ctx->secure.bev, 1);
-	#endif
-    */
-
     sock_ctx->plain.bev = bufferevent_socket_new(daemon->ev_base,
-			plain_fd, BEV_OPT_CLOSE_ON_FREE);
+                plain_fd, BEV_OPT_CLOSE_ON_FREE);
     if (sock_ctx->plain.bev == NULL)
         goto err;
 
+    bufferevent_setcb(sock_ctx->secure.bev, common_bev_read_cb,
+			common_bev_write_cb, event_cb, sock_ctx);
     bufferevent_setcb(sock_ctx->plain.bev, common_bev_read_cb,
             common_bev_write_cb, event_cb, sock_ctx);
 
-
-    /*
-    struct timeval read_timeout = {
-			.tv_sec = EXT_CONN_TIMEOUT,
-			.tv_usec = 0,
-	};
-    
-	ret = bufferevent_set_timeouts(sock_ctx->secure.bev, &read_timeout, NULL);
-    */
-
-    return 0;
+     return 0;
 err:
     log_global_error(LOG_ERROR, "Failed to set up bufferevents for connection");
 
-    if (sock_ctx->plain.bev != NULL)
+    if (sock_ctx->plain.bev != NULL) {
         bufferevent_free(sock_ctx->plain.bev);
-    else if (plain_fd != NO_FD)
-        close(plain_fd);
+        sock_ctx->plain.bev = NULL;
 
-    if (sock_ctx->secure.bev != NULL)
-        bufferevent_free(sock_ctx->plain.bev);
+    } else if (plain_fd != NO_FD) {
+        close(plain_fd);
+    }
+
+    if (sock_ctx->secure.bev != NULL) {
+        bufferevent_free(sock_ctx->secure.bev);
+
+        sock_ctx->secure.bev = NULL;
+        sock_ctx->ssl = NULL;
+        sock_ctx->sockfd = NO_FD;
+    }
+    
+    sock_ctx->state = SOCKET_ERROR;
 
     return -ECANCELED;
 }

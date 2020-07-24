@@ -222,7 +222,7 @@ err:
  * Clears any data associated with session resumption from \p ssl.
  * @param ssl The SSL connection to free session resumption info from.
  */
-void session_resumption_cleanup(SSL* ssl) {
+void session_cleanup(SSL* ssl) {
 
     char* host_port = SSL_get_ex_data(ssl, HOSTNAME_PORT_INDEX);
     if (host_port != NULL)
