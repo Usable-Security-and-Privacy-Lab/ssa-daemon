@@ -132,7 +132,6 @@ enum socket_state {
     SOCKET_FINISHING_CONN, /** revocation checks/connecting internally */
     SOCKET_CONNECTED,      /** Both endpoints connected (client) */
     SOCKET_LISTENING,      /** Socket listening/accepting connections */
-    SOCKET_ACCEPTED,       /** Both endpoints connected (server) */
     SOCKET_DISCONNECTED    /** Both endpoints closed cleanly (client/server) */
 };
 

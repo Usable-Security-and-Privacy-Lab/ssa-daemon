@@ -247,7 +247,6 @@ void socket_shutdown(socket_ctx* sock_ctx) {
         switch (sock_ctx->state) {
         case SOCKET_FINISHING_CONN:
         case SOCKET_CONNECTED:
-        case SOCKET_ACCEPTED:
             SSL_shutdown(sock_ctx->ssl);
 
             /* FALL THROUGH */

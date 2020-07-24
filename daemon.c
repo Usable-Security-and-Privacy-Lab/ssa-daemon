@@ -946,7 +946,7 @@ void associate_cb(daemon_ctx* daemon, unsigned long id,
 		goto err;
 
 	sock_ctx->id = id;
-	sock_ctx->state = SOCKET_ACCEPTED;
+	sock_ctx->state = SOCKET_CONNECTED;
 
 	int ret = hashmap_add(daemon->sock_map, id, (void*)sock_ctx);
     if (ret != 0)
@@ -983,7 +983,6 @@ void close_cb(daemon_ctx* daemon, unsigned long id) {
 	switch (sock_ctx->state) {
 	case SOCKET_FINISHING_CONN:
 	case SOCKET_CONNECTED:
-	case SOCKET_ACCEPTED:
 		socket_shutdown(sock_ctx);
 		break;
 	default:

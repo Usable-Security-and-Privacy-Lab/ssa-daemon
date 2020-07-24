@@ -154,13 +154,12 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 
 	/* Connection closed--usually due to error, EOF or timeout */
 	if (endpoint->closed == 1 && startpoint->closed == 1) {
+        if (ssl_err != 0)
+            set_socket_error(sock_ctx, ssl_err);
         socket_shutdown(sock_ctx);
 
 		switch (sock_ctx->state) {
 		case SOCKET_CONNECTING:
-            if (ssl_err != 0)
-			    set_socket_error(sock_ctx, ssl_err);
-			
 			sock_ctx->state = SOCKET_ERROR;
 			netlink_handshake_notify_kernel(daemon, id, -EPROTO);
 			return;
@@ -221,7 +220,7 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
         socket_shutdown(sock_ctx);
 
         switch(sock_ctx->state) {
-        case SOCKET_ACCEPTED:
+        case SOCKET_CONNECTED:
             if (events & BEV_EVENT_ERROR)
                 sock_ctx->state = SOCKET_ERROR;
             else 
@@ -229,16 +228,15 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
             break;
         
         default:
-			if (ssl_err != X509_V_OK)
-				log_printf(LOG_ERROR, 
-                        "TLS handshake error %li on incoming connection: %s",
-						ssl_err, X509_verify_cert_error_string(ssl_err));
+            if (ssl_err != X509_V_OK)
+                LOG_E("TLS handshake error %li on incoming connection: %s",
+                            ssl_err, X509_verify_cert_error_string(ssl_err));
 
             hashmap_del(sock_ctx->daemon->sock_map_port, sock_ctx->local_port);
-			socket_context_free(sock_ctx);
+            socket_context_free(sock_ctx);
             break;
         }
-	}
+    }
     return;
 }
 

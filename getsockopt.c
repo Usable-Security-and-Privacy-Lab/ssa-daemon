@@ -57,15 +57,13 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
 		break;
 
 	case TLS_HOSTNAME:
-		if ((response = check_socket_state(sock_ctx, 
-				3, SOCKET_NEW, SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
+		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
 			break;
 		response = get_hostname(sock_ctx, (char**) data, len);
 		break;
 
 	case TLS_PEER_IDENTITY:
-		if ((response = check_socket_state(sock_ctx, 2,
-				SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
+		if ((response = check_socket_state(sock_ctx, 1, SOCKET_CONNECTED)) != 0)
 			break;
 
 		response = get_peer_identity(sock_ctx, (char**) data, len);
@@ -82,8 +80,7 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
 		break;
 
     case TLS_CHOSEN_CIPHER:
-        if ((response = check_socket_state(sock_ctx, 2, 
-                    SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
+        if ((response = check_socket_state(sock_ctx, 1, SOCKET_CONNECTED)) != 0)
             break;
         get_chosen_cipher(sock_ctx, (char**) data, len);
         break;
@@ -99,8 +96,7 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
         break;
 
     case TLS_RESUMED_SESSION:
-        if ((response = check_socket_state(sock_ctx, 2, 
-                    SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
+        if ((response = check_socket_state(sock_ctx, 1, SOCKET_CONNECTED)) != 0)
             break;
         response = get_session_resumed(sock_ctx, (int**) data, len);
         break;
