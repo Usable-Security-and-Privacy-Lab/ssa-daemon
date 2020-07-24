@@ -410,19 +410,22 @@ int get_session_resumed(socket_ctx* sock_ctx, int** data, unsigned int *len) {
 }
 
 
-
+/**
+ * Determines whether or not the given socket will attempt to perform session 
+ * resumption on connections using cached sessions.
+ * @param sock_ctx The context of the socket to check for session reuse.
+ * @param data [out] Pointer to whether or not sessions are reused for this 
+ * socket.
+ * @param len [out] The size of \p data.
+ * @returns 0 on success, or a negative errno if an error occurred.
+ */
 int get_session_reuse(socket_ctx* sock_ctx, int** data, unsigned int* len) {
 
-    int cache_mode = SSL_CTX_get_session_cache_mode(sock_ctx->ssl_ctx);
     int* reuse_sessions = malloc(sizeof(int));
     if (reuse_sessions == NULL)
         return -ECANCELED;
 
-    if ((cache_mode & SSL_SESS_CACHE_CLIENT) 
-                && (cache_mode & SSL_SESS_CACHE_SERVER))
-        *reuse_sessions = 1;
-    else
-        *reuse_sessions = 0;
+    *reuse_sessions = session_resumption_enabled(sock_ctx->ssl_ctx);
 
     *data = reuse_sessions;
     *len = sizeof(int);
@@ -442,7 +445,7 @@ int get_session_reuse(socket_ctx* sock_ctx, int** data, unsigned int* len) {
  * Converts a stack of SSL_CIPHER objects into a single string representation
  * of all the ciphers, with each individual cipher separated by a ':'.
  * @param ciphers The stack of ciphers to convert
- * @param buf the provided buffer to put the string into.
+ * @param buf The provided buffer to put the string into.
  * @param buf_len The length of the provided buffer.
  * @returns 0 on success; -1 if the buffer was not big enough to store all of
  * the ciphers and had to be truncated.

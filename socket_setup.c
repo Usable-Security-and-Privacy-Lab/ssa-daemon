@@ -493,6 +493,15 @@ err:
 }
 
 
+/**
+ * Prepares the given socket context for a TLS connection with an endpoint. 
+ * This function mostly has to do with setting up the `SSL` object used by 
+ * the socket--allocation, setting it to perform certificate verification, 
+ * giving it a session to resume (if one exists), and assigning it the hostname 
+ * in \p sock_ctx.
+ * @param sock_ctx The context of the socket to prepare an SSL object for. 
+ * @returns 0 on success, or a negative errno value if an error occurred.
+ */
 int prepare_SSL_client(socket_ctx* sock_ctx) {
 
     int ret;
@@ -557,7 +566,11 @@ err:
 }
 
 
-
+/**
+ * Allocates an SSL object for a connection accepted by a server.
+ * @param sock_ctx The context of the socket to prepare the SSL object for.
+ * @returns 0 on success, or a negative errno on failure.
+ */
 int prepare_SSL_server(socket_ctx* sock_ctx) {
 
     sock_ctx->ssl = SSL_new(sock_ctx->ssl_ctx);

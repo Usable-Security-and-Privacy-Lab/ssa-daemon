@@ -413,6 +413,17 @@ int set_tls_context(socket_ctx* sock_ctx, unsigned long* data, socklen_t len) {
 }
 
 
+/**
+ * Sets the given socket to attempt session resumption and cache sessions 
+ * (or to never attempt resumptions and never cache sessions). 
+ * This function applies these features to both client and server sockets.
+ * @param sock_ctx The context of the socket to turn session resumption on/off 
+ * for.
+ * @param reuse Pointer to whether the socket should use sessions (1) or 
+ * not (0).
+ * @param len the size of \p reuse.
+ * @returns 0 on success, or a negative errno value on failure.
+ */
 int set_session_resumption(socket_ctx* sock_ctx, int* reuse, socklen_t len) {
 
     if (len != sizeof(int))
