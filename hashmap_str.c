@@ -125,6 +125,7 @@ void str_hashmap_free(hsmap_t* map) {
  * malloc failure.
  */
 int str_hashmap_add(hsmap_t* map, char* key, void* value) {
+
 	int index;
 	hsnode_t* cur;
 	hsnode_t* next;
@@ -172,6 +173,7 @@ int str_hashmap_add(hsmap_t* map, char* key, void* value) {
  * @returns 0 on success, or 1 if no entry exists for \p key.
  */
 int str_hashmap_del(hsmap_t* map, char* key) {
+
 	int index;
 	hsnode_t* cur;
 	hsnode_t* tmp;
@@ -260,3 +262,4 @@ void str_hashmap_print(hsmap_t* map) {
 	}
 	return;
 }
+

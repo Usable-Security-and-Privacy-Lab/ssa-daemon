@@ -433,7 +433,6 @@ int add_to_ocsp_cache(OCSP_CERTID* id,
 	
 	ret = str_hashmap_add(rev_cache, id_string, (void*)response);
 	if (ret != 0) {
-		log_printf(LOG_INFO, "Cache entry already exists\n");
         OCSP_BASICRESP_free(response);
 		free(id_string);
 		return -1;

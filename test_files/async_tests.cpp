@@ -109,7 +109,7 @@ TEST_F(AsyncTests, PollSocketConnect) {
     ASSERT_GE(fd, 0);
 
     int hostname_setsockopt_return = setsockopt(fd, 
-                IPPROTO_TLS, TLS_REMOTE_HOSTNAME, HOSTNAME, strlen(HOSTNAME)+1);
+                IPPROTO_TLS, TLS_HOSTNAME, HOSTNAME, strlen(HOSTNAME)+1);
     int hostname_errno = errno;
 
     if (hostname_setsockopt_return != 0)
@@ -174,7 +174,7 @@ TEST_F(AsyncTests, PollSocketConnectRead) {
     ASSERT_GE(socket_fd, 0);
 
     int hostname_setsockopt_return = setsockopt(socket_fd, 
-                IPPROTO_TLS, TLS_REMOTE_HOSTNAME, HOSTNAME, strlen(HOSTNAME)+1);
+                IPPROTO_TLS, TLS_HOSTNAME, HOSTNAME, strlen(HOSTNAME)+1);
     int hostname_errno = errno;
 
     if (hostname_setsockopt_return != 0)

@@ -97,4 +97,5 @@ void* str_hashmap_get(hsmap_t* map, char* key);
  */
 void str_hashmap_print(hsmap_t* map);
 
+
 #endif

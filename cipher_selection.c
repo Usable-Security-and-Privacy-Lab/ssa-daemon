@@ -1,7 +1,6 @@
 #include "config.h"
 #include "log.h"
 #include "error.h"
-#include "sockopt_functions.h"
 #include "daemon_structs.h"
 #include "cipher_selection.h"
 
@@ -24,6 +23,9 @@
 #define MAX_NUM_CIPHERS 37
 #define MAX_CIPHERSUITE_STRINGLEN 150
 #define DISABLE_INSECURE_CIPHERS ":!SSLv3:!TLSv1:!TLSv1.1:!eNULL:!aNULL:!RC4:!MD4:!MD5"
+
+int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len);
+int get_ciphers_strlen(STACK_OF(SSL_CIPHER)* ciphers);
 
 /**
 * gets cipher used in connection
@@ -55,6 +57,51 @@ int get_last_negotiated(socket_ctx* conn, const char** data, unsigned int* data_
    return -1;
  }
 }
+
+
+
+/*******************************************************************************
+ *                            GETSOCKOPT FUNCTIONS
+ ******************************************************************************/
+
+/**
+ * Allocates a string list of enabled ciphers to data.
+ * @param conn The specified connection context to retrieve the ciphers from
+ * @param data A pointer to a char pointer where the cipherlist string will be
+ * allocated to, or NULL if no ciphers were available from the given connection.
+ * This should be freed after use.
+ * @returns 0 on success; -errno otherwise.
+ */
+int get_enabled_ciphers(socket_ctx* sock_ctx, 
+            char** data, unsigned int* len) {
+	
+	char* ciphers_str = NULL;
+
+	STACK_OF(SSL_CIPHER)* ciphers = SSL_get_ciphers(sock_ctx->ssl);
+	/* FEATURE: use SSL_get1_supported_ciphers if connected */
+	if (ciphers == NULL)
+		goto end; /* no ciphers available; just return NULL. */
+
+	int ciphers_len = get_ciphers_strlen(ciphers);
+	if (ciphers_len == 0)
+		goto end;
+
+	ciphers_str = (char*) malloc(ciphers_len + 1);
+	if (ciphers_str == NULL) {
+		set_err_string(sock_ctx, "Daemon error: failed to allocate buffer");
+		return -errno;
+	}
+
+	if (get_ciphers_string(ciphers, ciphers_str, ciphers_len + 1) != 0)
+		log_printf(LOG_ERROR, "Buffer had to be truncated--shouldn't happen\n");
+
+	*len = ciphers_len + 1;
+end:
+	*data = ciphers_str;
+	return 0;
+}
+
+
 /*
  *******************************************************************************
  *                           SETSOCKOPT FUNCTIONS
@@ -158,22 +205,14 @@ int get_last_negotiated(socket_ctx* conn, const char** data, unsigned int* data_
 	free(cipherlist);
  	return ret;
  }
-/**
- * Sets the given connection to be either a client or server connection.
- * @param conn The connection whose state should be modified.
- * @param type The type of connection to change the connection to; should
- * be 0 (SERVER_CONN) to set the connection to a SERVER_NEW state, or 1
- * (CLIENT_CONN) to set the connection to a CLIENT_NEW state.
- *
- * @returns 0 on success, or -errno if an error occurred.
- */
-
 
 /*
  *******************************************************************************
  *                             HELPER FUNCTIONS
  *******************************************************************************
  */
+
+
  /**
  * makes stack of ciphers into a string of ciphersuites
  * ciphers stack of all ciphers associated with ssl object
@@ -392,4 +431,52 @@ int deletion_loop(char* cipher, char** cipherlist) { //return error code from de
 
  free(to_delete);
  return ret;
+}
+
+
+/**
+ * Converts a stack of SSL_CIPHER objects into a single string representation
+ * of all the ciphers, with each individual cipher separated by a ':'.
+ * @param ciphers The stack of ciphers to convert
+ * @param buf The provided buffer to put the string into.
+ * @param buf_len The length of the provided buffer.
+ * @returns 0 on success; -1 if the buffer was not big enough to store all of
+ * the ciphers and had to be truncated.
+ */
+int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len) {
+	int index = 0;
+	for (int i = 0; i < sk_SSL_CIPHER_num(ciphers); i++) {
+		const SSL_CIPHER* curr = sk_SSL_CIPHER_value(ciphers, i);
+		const char* cipher = SSL_CIPHER_get_name(curr);
+
+		if ((index + strlen(cipher) + 1) > buf_len) {
+			buf[index-1] = '\0';
+			return -1; /* buf not big enough */
+		}
+
+		strcpy(&buf[index], cipher);
+		index += strlen(cipher);
+		buf[index] = ':';
+		index += 1;
+	}
+	buf[index - 1] = '\0'; /* change last ':' to '\0' */
+	return 0;
+}
+
+/**
+ * Determines the combined string length of all the cipher strings.
+ * @param ciphers The cipher list to measure string lengths from.
+ * @returns The combined string length of the ciphers in the list (as if
+ * there were ':' characters between each cipher and a terminating
+ * '\0' at the end). Never returns an error code.
+ */
+int get_ciphers_strlen(STACK_OF(SSL_CIPHER)* ciphers) {
+	int len = 0;
+	for (int i = 0; i < sk_SSL_CIPHER_num(ciphers); i++) {
+		const char* curr = SSL_CIPHER_get_name(sk_SSL_CIPHER_value(ciphers, i));
+		len += strlen(curr) + 1; /* add ':' */
+	}
+	if (len != 0)
+		len -= 1; /* removes the last ':' */
+	return len;
 }

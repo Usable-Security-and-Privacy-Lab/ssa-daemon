@@ -15,6 +15,7 @@
 #include "connection_callbacks.h"
 #include "error.h"
 #include "log.h"
+#include "sessions.h"
 
 #define UBUNTU_DEFAULT_CA "/etc/ssl/certs/ca-certificates.crt"
 #define FEDORA_DEFAULT_CA "/etc/pki/tls/certs/ca-bundle.crt"
@@ -54,8 +55,6 @@ int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len);
 int check_key_cert_pair(socket_ctx* sock_ctx);
 int load_certificates(SSL_CTX* ctx, global_config* settings);
 
-
-
 /**
  * Allocates an SSL_CTX struct and populates it with the settings found in 
  * \p settings. 
@@ -74,6 +73,11 @@ SSL_CTX* SSL_CTX_create(global_config* settings) {
 		goto err;
 
 	SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
+
+    if (settings->session_resumption)
+        SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_BOTH);
+    else 
+        SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_OFF);
 
 	if (!settings->tls_compression)
 		SSL_CTX_set_options(ctx, 
@@ -409,23 +413,9 @@ int load_certificates(SSL_CTX* ctx, global_config* settings) {
 	return 1;
 }
 
-/**
- * Attempts to create a new SSL struct and attach it to the given connection.
- * If unsuccessful, the connection's state will not be altered--if it
- * contained an SSL struct prior to this call, that struct will remain.
- * @param conn The connection to assign a new client SSL struct to.
- * @returns 0 on success; -errno otherwise.
- */
-int client_SSL_new(socket_ctx* sock_ctx) {
 
-	sock_ctx->ssl = SSL_new(sock_ctx->ssl_ctx);
-	if (sock_ctx->ssl == NULL)
-		return determine_and_set_error(sock_ctx);
 
-    SSL_set_verify(sock_ctx->ssl, SSL_VERIFY_PEER, NULL);
 
-	return 0;
-}
 
 /**
  * Allocates and sets the correct settings for the bufferevents of a given 
@@ -441,117 +431,123 @@ int client_SSL_new(socket_ctx* sock_ctx) {
 int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
 
     daemon_ctx* daemon = sock_ctx->daemon;
+    enum bufferevent_ssl_state state;
+    bufferevent_event_cb event_cb;
     int ret;
 
-    enum bufferevent_ssl_state state = (plain_fd == NO_FD)
-            ? BUFFEREVENT_SSL_CONNECTING : BUFFEREVENT_SSL_ACCEPTING;
-
-    bufferevent_event_cb event_cb = (plain_fd == NO_FD)
-            ? client_bev_event_cb : server_bev_event_cb;
+    if (plain_fd == NO_FD) {
+        state = BUFFEREVENT_SSL_CONNECTING;
+        event_cb = client_bev_event_cb;
+    
+    } else {
+        state = BUFFEREVENT_SSL_ACCEPTING;
+        event_cb = server_bev_event_cb;
+    }
 
     clear_global_and_socket_errors(sock_ctx);
 
     sock_ctx->secure.bev = bufferevent_openssl_socket_new(daemon->ev_base,
-            sock_ctx->sockfd, sock_ctx->ssl, state, 0);
+                sock_ctx->sockfd, sock_ctx->ssl, state, BEV_OPT_CLOSE_ON_FREE);
     if (sock_ctx->secure.bev == NULL)
         goto err;
 
-    bufferevent_setcb(sock_ctx->secure.bev, common_bev_read_cb,
-			common_bev_write_cb, event_cb, sock_ctx);
+    bufferevent_openssl_set_allow_dirty_shutdown(sock_ctx->secure.bev, 1);
 
     ret = bufferevent_enable(sock_ctx->secure.bev, EV_READ | EV_WRITE);
 	if (ret < 0)
 		goto err;
 
-    /*
-	#if LIBEVENT_VERSION_NUMBER >= 0x02010000
-	bufferevent_openssl_set_allow_dirty_shutdown(sock_ctx->secure.bev, 1);
-	#endif
-    */
-
     sock_ctx->plain.bev = bufferevent_socket_new(daemon->ev_base,
-			plain_fd, BEV_OPT_CLOSE_ON_FREE);
+                plain_fd, BEV_OPT_CLOSE_ON_FREE);
     if (sock_ctx->plain.bev == NULL)
         goto err;
 
+    bufferevent_setcb(sock_ctx->secure.bev, common_bev_read_cb,
+			common_bev_write_cb, event_cb, sock_ctx);
     bufferevent_setcb(sock_ctx->plain.bev, common_bev_read_cb,
             common_bev_write_cb, event_cb, sock_ctx);
 
-
-    /*
-    struct timeval read_timeout = {
-			.tv_sec = EXT_CONN_TIMEOUT,
-			.tv_usec = 0,
-	};
-    
-	ret = bufferevent_set_timeouts(sock_ctx->secure.bev, &read_timeout, NULL);
-    */
-
-    return 0;
+     return 0;
 err:
     log_global_error(LOG_ERROR, "Failed to set up bufferevents for connection");
 
-    if (sock_ctx->plain.bev != NULL)
+    if (sock_ctx->plain.bev != NULL) {
         bufferevent_free(sock_ctx->plain.bev);
-    else if (plain_fd != NO_FD)
-        close(plain_fd);
+        sock_ctx->plain.bev = NULL;
 
-    if (sock_ctx->secure.bev != NULL)
-        bufferevent_free(sock_ctx->plain.bev);
+    } else if (plain_fd != NO_FD) {
+        close(plain_fd);
+    }
+
+    if (sock_ctx->secure.bev != NULL) {
+        bufferevent_free(sock_ctx->secure.bev);
+
+        sock_ctx->secure.bev = NULL;
+        sock_ctx->ssl = NULL;
+        sock_ctx->sockfd = NO_FD;
+    }
+    
+    sock_ctx->state = SOCKET_ERROR;
 
     return -ECANCELED;
 }
 
 
 /**
- * Prepares the SSL object for the given connection.
- * @param sock_ctx The context of the socket to prepare the SSL object for.
- * @param is_client A boolean value indicating whether the SSL object is
- * being prepared for a client or for a server.
- * @returns 0 on success, and -ECANCELED on error.
+ * Prepares the given socket context for a TLS connection with an endpoint. 
+ * This function mostly has to do with setting up the `SSL` object used by 
+ * the socket--allocation, setting it to perform certificate verification, 
+ * giving it a session to resume (if one exists), and assigning it the hostname 
+ * in \p sock_ctx.
+ * @param sock_ctx The context of the socket to prepare an SSL object for. 
+ * @returns 0 on success, or a negative errno value if an error occurred.
  */
-int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
+int prepare_SSL_client(socket_ctx* sock_ctx) {
 
     int ret;
 
-    clear_global_and_socket_errors(sock_ctx);
-
-    if (is_client && has_revocation_checks(sock_ctx->rev_ctx.checks)) {
-
+    if (has_revocation_checks(sock_ctx->rev_ctx.checks))
         ret = SSL_CTX_set_tlsext_status_type(sock_ctx->ssl_ctx, 
                     TLSEXT_STATUSTYPE_ocsp);
-        if (ret != 1)
-            goto err;
-    } else {
-
+    else
         ret = SSL_CTX_set_tlsext_status_type(sock_ctx->ssl_ctx, 0);
-        if (ret != 1)
-            goto err;
-    }
 
-    ret = client_SSL_new(sock_ctx);
+    if (ret != 1)
+        goto err;
+
+    sock_ctx->ssl = SSL_new(sock_ctx->ssl_ctx);
     if (sock_ctx->ssl == NULL)
         goto err;
-    
 
-    if (is_client) {
-        if (strlen(sock_ctx->rem_hostname) <= 0) {
-            set_err_string(sock_ctx, "TLS error: "
+    SSL_set_verify(sock_ctx->ssl, SSL_VERIFY_PEER, NULL);
+
+    if (strlen(sock_ctx->rem_hostname) <= 0) {
+        set_err_string(sock_ctx, "TLS error: "
                     "hostname required for verification (via setsockopt())");
-                goto err;
-        }
+        goto err;
+    }
 
-        ret = SSL_set_tlsext_host_name(sock_ctx->ssl, sock_ctx->rem_hostname);
-        if (ret != 1) {
-            log_printf(LOG_ERROR, "Connection setup error: "
-                    "couldn't assign the socket's hostname for SNI\n");
+    ret = SSL_set_tlsext_host_name(sock_ctx->ssl, sock_ctx->rem_hostname);
+    if (ret != 1) {
+        log_printf(LOG_ERROR, "Connection setup error: "
+                "couldn't assign the socket's hostname for SNI\n");
+        goto err;
+    }
+
+    ret = SSL_set1_host(sock_ctx->ssl, sock_ctx->rem_hostname);
+    if (ret != 1) {
+        log_printf(LOG_ERROR, "Connection setup error: "
+                "couldn't assign the socket's hostname for validation\n");
+        goto err;
+    }
+    if (session_resumption_enabled(sock_ctx->ssl_ctx)) {
+        char* host_port = get_hostname_port_str(sock_ctx);
+        if (host_port == NULL)
             goto err;
-        }
 
-        ret = SSL_set1_host(sock_ctx->ssl, sock_ctx->rem_hostname);
-        if (ret != 1) {
-            log_printf(LOG_ERROR, "Connection setup error: "
-                    "couldn't assign the socket's hostname for validation\n");
+        ret = session_resumption_setup(sock_ctx->ssl, host_port);
+        if (ret != 0) {
+            free(host_port);
             goto err;
         }
     }
@@ -561,11 +557,27 @@ err:
 
     if (sock_ctx->ssl != NULL)
         SSL_free(sock_ctx->ssl);
+    sock_ctx->ssl = NULL;
 
     if (has_error_string(sock_ctx))
         return -EPROTO;
 
     return -ECANCELED;
+}
+
+
+/**
+ * Allocates an SSL object for a connection accepted by a server.
+ * @param sock_ctx The context of the socket to prepare the SSL object for.
+ * @returns 0 on success, or a negative errno on failure.
+ */
+int prepare_SSL_server(socket_ctx* sock_ctx) {
+
+    sock_ctx->ssl = SSL_new(sock_ctx->ssl_ctx);
+    if (sock_ctx->ssl == NULL)
+        return -ECANCELED;
+
+    return 0;
 }
 
 
@@ -714,7 +726,7 @@ int concat_ciphers(char** list, int num, char** out) {
 	ciphers[len - 1] = '\0';
 
 	if (len != offset) {
-		log_printf(LOG_DEBUG, "load_cipher_list had unexpected results\n");
+		log_printf(LOG_WARNING, "load_cipher_list had unexpected results\n");
 		free(ciphers);
 		return 0;
 	}
@@ -799,4 +811,3 @@ err:
 	log_printf(LOG_ERROR, "associate_fd failed.\n");
 	return -ECONNABORTED; /* Only happens while client is connecting */
 }
-

@@ -42,7 +42,7 @@ void netlink_recv(evutil_socket_t fd, short events, void *arg);
 void netlink_notify_kernel(daemon_ctx* ctx, unsigned long id, int response);
 void netlink_error_notify_kernel(daemon_ctx* ctx, unsigned long id);
 void netlink_send_and_notify_kernel(daemon_ctx* ctx, 
-            unsigned long id, const char* data, unsigned int len);
+            unsigned long id, const void* data, unsigned int len);
 void netlink_handshake_notify_kernel(daemon_ctx* ctx, unsigned long id, int response); 
 struct nl_sock* netlink_connect(daemon_ctx* ctx);
 

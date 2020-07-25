@@ -79,6 +79,8 @@ verify-cert-transparency: disabled
 revocation-checks: enabled
 # Default: enabled
 
+session-resumption: enabled
+
 
 # Set the path to the certificate chain to be provided to clients.
 # There are two options for this:

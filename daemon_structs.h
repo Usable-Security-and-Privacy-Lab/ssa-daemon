@@ -10,10 +10,6 @@
 #include "hashmap.h"
 #include "hashmap_str.h"
 
-/*
-#define SESSION_CACHE_INDEX 1
-#define SESSION_CACHE_NUM_BUCKETS 255
-*/
 
 /** The maximum length that an error string may be (not including '\0') */
 #define MAX_ERR_STRING 128
@@ -133,10 +129,9 @@ enum socket_state {
     SOCKET_ERROR = 0,      /** Socket unrecoverably failed operation */
     SOCKET_NEW,            /** Fresh socket ready for `connect` or `listen` */
     SOCKET_CONNECTING,     /** Performing TCP or TLS handshake */
-    SOCKET_FINISHING_CONN, /** revocation checks, connecting internally */
+    SOCKET_FINISHING_CONN, /** revocation checks/connecting internally */
     SOCKET_CONNECTED,      /** Both endpoints connected (client) */
     SOCKET_LISTENING,      /** Socket listening/accepting connections */
-    SOCKET_ACCEPTED,       /** Both endpoints connected (server) */
     SOCKET_DISCONNECTED    /** Both endpoints closed cleanly (client/server) */
 };
 
@@ -193,7 +188,8 @@ struct global_config_st {
     char* private_keys[MAX_CERTS]; /** list of files/folders of keys to use */
     int key_cnt;                   /** Size of \p private_keys list */
 
-    int revocation_checks; /** 1 if revocation checked, 0 if not */
+    int revocation_checks; /** bitmap of various revocation methods/settings */
+    int session_resumption; /** 1 if sockets will reuse sessions, 0 if not */
 };
 
 
@@ -332,6 +328,20 @@ void ocsp_responder_free(ocsp_responder* resp);
 
 int check_socket_state(socket_ctx* sock_ctx, int num, ...);
 
+
+/**
+ * Creates a string of the format "<hostname>:<port>".
+ * @param sock_ctx The socket to retrieve hostname and port information from.
+ * @returns A newly allocated null-terminated string.
+ */
+char* get_hostname_port_str(socket_ctx* sock_ctx);
+
+
+/**
+ * Retrieves an integer port number from a given sockaddr struct.
+ * @param addr The sockaddr struct to retrieve the port number of.
+ * @returns The port number.
+ */
 int get_port(struct sockaddr* addr);
 
 

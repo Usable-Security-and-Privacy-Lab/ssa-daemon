@@ -137,6 +137,9 @@ void level_printf(log_level_t level) {
 		case LOG_ERROR:
 			strcpy(level_str, "ERROR:   ");
 			break;
+        case LOG_FATAL:
+            strcpy(level_str, "FATAL: ");
+            break;
 	}
 	fprintf(g_log_file, "%s", level_str);
 	return;

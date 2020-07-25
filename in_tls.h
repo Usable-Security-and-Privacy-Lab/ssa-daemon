@@ -11,10 +11,7 @@
 /* Options */
 
 /** The remote hostname of a server a client intends to connect to */
-#define TLS_REMOTE_HOSTNAME               85
-
-/** The hostname a server intends to use */
-#define TLS_HOSTNAME                      86
+#define TLS_HOSTNAME                      85
 
 /** The CA certificates that a connection will consider as trusted */
 #define TLS_TRUSTED_PEER_CERTIFICATES     87
@@ -50,7 +47,7 @@
 #define TLS_ERROR                        100
 
 /** Whether or not TLS compression is disabled for the socket */
-#define TLS_DISABLE_COMPRESSION          101
+#define TLS_COMPRESSION                  101
 
 /** Whether or not revocation checks are enabled for the socket */
 #define TLS_REVOCATION_CHECKS            102
@@ -67,16 +64,23 @@
 /** Whether or not cached revocation responses are used as part of checks */
 #define TLS_CACHE_REVOCATION             106
 
-/*
+/** The settings and sessions associated with a given file descriptor */
 #define TLS_CONTEXT                      107
-#define TLS_CONTEXT_FREE                 108
-*/
+
+/** Whether or not previous session keys will be cached and reused */ 
+#define TLS_SESSION_REUSE                108
+
+/** Whether or not the current connection is based off of a resumed session */
+#define TLS_RESUMED_SESSION              109
+
 /** A cipher marked as usable for connections */
-#define TLS_ENABLE_CIPHER                109
+#define TLS_ENABLE_CIPHER                110 /* TODO: used to be 109; fix */
+
 
 /* Internal use only */
 #define TLS_PEER_CERTIFICATE_CHAIN        95
 #define TLS_ID                            96
+
 
 /* TCP options */
 #define TCP_UPGRADE_TLS         33

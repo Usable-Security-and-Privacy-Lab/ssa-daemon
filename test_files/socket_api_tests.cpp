@@ -12,14 +12,11 @@ extern "C" {
 #include <unistd.h>
 #include "../in_tls.h"
 
+#include "helper_functions.h"
+
+#define HOSTNAME "ebay.com"
+#define PORT "443"
 }
-
-extern "C" {
-
-    #define HOSTNAME "www.yahoo.com"
-    #define PORT "443"
-}
-
 
 
 class SocketAPITests : public testing::Test {
@@ -27,34 +24,16 @@ public:
     struct sockaddr* address;
     socklen_t addrlen;
 
-    virtual void SetUp() {
-        struct addrinfo hints = {0};
-
-        result = NULL;
-
-        hints.ai_socktype = SOCK_STREAM;
-        hints.ai_family = AF_INET;
-
-        getaddrinfo(HOSTNAME, PORT, &hints, &result);
-
-        if (result == NULL) {
-            printf("Couldn't resolve DNS.\n");
+    SocketAPITests() {
+        int ret = resolve_dns(HOSTNAME, PORT, &address, &addrlen);
+        if (ret != 0)
             exit(1);
-        }
-
-        address = result->ai_addr;
-        addrlen = result->ai_addrlen;
     }
 
-    virtual void TearDown() {
-        freeaddrinfo(result);
+    ~SocketAPITests() {
+        free(address);
+        address = NULL;
     }
-
-
-private:
-    struct addrinfo* result;
-
-
 };
 
 
@@ -151,7 +130,7 @@ TEST_F(SocketAPITests, ConnectWithNonblockSocket) {
 
 
     int hostname_setsockopt_return = setsockopt(socket_return, 
-                IPPROTO_TLS, TLS_REMOTE_HOSTNAME, HOSTNAME, strlen(HOSTNAME)+1);
+                IPPROTO_TLS, TLS_HOSTNAME, HOSTNAME, strlen(HOSTNAME)+1);
     int hostname_errno = errno;
 
     if (hostname_setsockopt_return != 0) {
@@ -188,7 +167,7 @@ TEST_F(SocketAPITests, DoubleConnectFail) {
 
     ASSERT_GE(fd, 0);
 
-    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_REMOTE_HOSTNAME,
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_HOSTNAME,
                 HOSTNAME, strlen(HOSTNAME) + 1);
     if (setsockopt_ret < 0) {
         print_socket_error(fd);
@@ -229,7 +208,7 @@ TEST_F(SocketAPITests, ConnectThenListenFail) {
 
     ASSERT_GE(fd, 0);
 
-    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_REMOTE_HOSTNAME,
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_HOSTNAME,
                 HOSTNAME, strlen(HOSTNAME) + 1);
     if (setsockopt_ret < 0) {
         print_socket_error(fd);
@@ -271,7 +250,7 @@ TEST_F(SocketAPITests, ConnectThenBindFail) {
 
     ASSERT_GE(fd, 0);
 
-    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_REMOTE_HOSTNAME,
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_HOSTNAME,
                 HOSTNAME, strlen(HOSTNAME) + 1);
     if (setsockopt_ret < 0) {
         print_socket_error(fd);
@@ -321,7 +300,7 @@ TEST_F(SocketAPITests, ConnectThenAcceptFail) {
 
     ASSERT_GE(fd, 0);
 
-    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_REMOTE_HOSTNAME,
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_HOSTNAME,
                 HOSTNAME, strlen(HOSTNAME) + 1);
     if (setsockopt_ret < 0) {
         print_socket_error(fd);
@@ -355,7 +334,98 @@ TEST_F(SocketAPITests, ConnectThenAcceptFail) {
 }
 
 
+TEST_F(SocketAPITests, SessionCaching) {
+ 
+    TEST_TIMEOUT_BEGIN
 
+    uint64_t context_id = 0;
+    socklen_t context_size = sizeof(context_id);
+
+    int context_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (context_fd < 0) 
+        fprintf(stderr, "Socket failed to be created: %s\n", strerror(errno));
+    
+    ASSERT_NE(context_fd, -1);
+    
+    int get_context_ret = getsockopt(context_fd, IPPROTO_TLS, TLS_CONTEXT, &context_id, &context_size);
+    if (get_context_ret < 0)
+        print_socket_error(context_fd);
+
+    EXPECT_EQ(errno, 0);
+    ASSERT_EQ(get_context_ret, 0);
+
+    int fd1 = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (fd1 < 0)
+        fprintf(stderr, "Socket failed to be created: %s\n", strerror(errno));
+    
+    ASSERT_NE(fd1, -1);
+
+    context_size = sizeof(context_id);
+    
+    int fd1_set_hostname_ret = setsockopt(fd1, IPPROTO_TLS, 
+                TLS_HOSTNAME, HOSTNAME, strlen(HOSTNAME)+1);
+
+    if (fd1_set_hostname_ret < 0)
+        print_socket_error(fd1);
+
+    EXPECT_EQ(errno, 0);
+    ASSERT_EQ(fd1_set_hostname_ret, 0);
+
+    int fd1_set_context_ret = setsockopt(fd1, 
+                IPPROTO_TLS, TLS_CONTEXT, &context_id, context_size);
+    if (fd1_set_context_ret < 0)
+        print_socket_error(fd1);
+
+    EXPECT_EQ(errno, 0);
+    ASSERT_EQ(fd1_set_context_ret, 0);
+    
+    int fd1_connect_ret = connect(fd1, address, addrlen);
+    if (fd1_connect_ret != 0) {
+        print_socket_error(fd1);
+        close(fd1);
+    }
+
+    ASSERT_EQ(fd1_connect_ret, 0);
+    close(fd1);
+
+    int fd2 = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (fd2 < 0) 
+        fprintf(stderr, "2nd Socket failed to be created: %s\n", strerror(errno));
+    
+    ASSERT_NE(fd2, -1);
+    
+    int fd2_set_hostname_ret = setsockopt(fd2, IPPROTO_TLS, TLS_HOSTNAME, 
+                HOSTNAME, strlen(HOSTNAME)+1);
+
+    if (fd2_set_hostname_ret < 0)
+        print_socket_error(fd2);
+
+    EXPECT_EQ(errno, 0);
+    ASSERT_EQ(fd2_set_hostname_ret, 0);
+
+    int fd2_set_context_ret = setsockopt(fd2, IPPROTO_TLS, TLS_CONTEXT, &context_id, context_size);
+
+    if (fd2_set_context_ret < 0)
+        print_socket_error(fd2);
+
+    EXPECT_EQ(errno, 0);
+    ASSERT_EQ(fd2_set_context_ret, 0);
+
+    
+    int connect2_ret = connect(fd2, address, addrlen);
+    if (connect2_ret != 0) {
+        print_socket_error(fd2);
+        close(fd2);
+    }
+
+
+    close(fd2);
+    close(context_fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_LONG)   
+
+
+}
 
 
 

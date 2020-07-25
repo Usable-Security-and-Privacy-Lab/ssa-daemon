@@ -13,10 +13,12 @@
 #include "error.h"
 #include "log.h"
 #include "netlink.h"
+#include "sessions.h"
 #include "socket_setup.h"
 
 #define HASHMAP_NUM_BUCKETS	100
 #define CACHE_NUM_BUCKETS 20
+
 
 /**
  * Creates a new daemon_ctx to be used throughout the life cycle
@@ -149,7 +151,7 @@ void daemon_context_free(daemon_ctx* daemon) {
  * @param id The ID assigned to the given socket_ctx.
  * @returns 0 on success, or -ECANCELED if an error occurred.
  */
-int socket_context_new(socket_ctx** new_sock_ctx, int fd,  
+int socket_context_new(socket_ctx** new_sock_ctx, int fd,
 		daemon_ctx* daemon, unsigned long id) {
 
     socket_ctx* sock_ctx = (socket_ctx*)calloc(1, sizeof(socket_ctx));
@@ -161,11 +163,11 @@ int socket_context_new(socket_ctx** new_sock_ctx, int fd,
         goto err;
 
     sock_ctx->daemon = daemon;
+    sock_ctx->rev_ctx.daemon = daemon;
     sock_ctx->id = id;
+    sock_ctx->rev_ctx.id = id;
     sock_ctx->sockfd = fd;
     sock_ctx->state = SOCKET_NEW;
-    sock_ctx->rev_ctx.daemon = daemon;
-    sock_ctx->rev_ctx.id = id;
 
     /* transfer over revocation check flags */
     sock_ctx->rev_ctx.checks = daemon->settings->revocation_checks;
@@ -234,41 +236,60 @@ err:
  */
 void socket_shutdown(socket_ctx* sock_ctx) {
 
+    if (sock_ctx == NULL) {
+        LOG_F("Tried to shutdown NULL socket context reference\n");
+        return;
+    }
+
     revocation_context_cleanup(&sock_ctx->rev_ctx);
 
     if (sock_ctx->ssl != NULL) {
         switch (sock_ctx->state) {
-        case SOCKET_CONNECTED:
         case SOCKET_FINISHING_CONN:
-        case SOCKET_ACCEPTED:
+        case SOCKET_CONNECTED:
             SSL_shutdown(sock_ctx->ssl);
-            break;
+
+            /* FALL THROUGH */
         default:
+            session_cleanup(sock_ctx->ssl);
             break;
         }
-
-        SSL_free(sock_ctx->ssl);
     }
 
-    sock_ctx->ssl = NULL;
-
-    if (sock_ctx->listener != NULL) 
+    if (sock_ctx->listener != NULL) {
         evconnlistener_free(sock_ctx->listener);
-    sock_ctx->listener = NULL;
+        sock_ctx->sockfd = NO_FD;
+        sock_ctx->listener = NULL;
+    }
 
-    if (sock_ctx->secure.bev != NULL)
+    if (sock_ctx->secure.bev != NULL) {
         bufferevent_free(sock_ctx->secure.bev);
-    sock_ctx->secure.bev = NULL;
-	sock_ctx->secure.closed = 1;
-	
-	if (sock_ctx->plain.bev != NULL)
-		bufferevent_free(sock_ctx->plain.bev);
-	sock_ctx->plain.bev = NULL;
-	sock_ctx->plain.closed = 1;
+        sock_ctx->secure.bev = NULL;
+        sock_ctx->secure.closed = 1; /* why do we even have this lever?? */
+        
+        sock_ctx->ssl = NULL;
+        sock_ctx->sockfd = NO_FD;
 
-	if (sock_ctx->sockfd != -1)
-		close(sock_ctx->sockfd);
-	sock_ctx->sockfd = -1;
+    }
+	
+	if (sock_ctx->plain.bev != NULL) {
+		bufferevent_free(sock_ctx->plain.bev);
+        sock_ctx->plain.bev = NULL;
+        sock_ctx->plain.closed = 1;
+    }
+
+	if (sock_ctx->sockfd != NO_FD) {
+        int ret = shutdown(sock_ctx->sockfd, SHUT_WR);
+        if (ret < 0)
+            LOG_W("shutdown() failed");
+
+		ret = close(sock_ctx->sockfd);
+        if (ret < 0)
+            LOG_W("close() returned %i:%s (likely double-closing fd)\n", 
+                        errno, strerror(errno));
+        
+        sock_ctx->sockfd = NO_FD;
+    }
 
 	return;
 }
@@ -281,31 +302,57 @@ void socket_shutdown(socket_ctx* sock_ctx) {
  */
 void socket_context_free(socket_ctx* sock_ctx) {
 
-	if (sock_ctx == NULL) {
-		log_printf(LOG_WARNING, "Tried to free a null sock_ctx reference\n");
-		return;
-	}
+    if (sock_ctx == NULL) {
+        LOG_F("Tried to free NULL socket context reference\n");
+        return;
+    }
 
-	if (sock_ctx->listener != NULL) {
-		evconnlistener_free(sock_ctx->listener);
-	} else if (sock_ctx->sockfd != -1) { 
-		EVUTIL_CLOSESOCKET(sock_ctx->sockfd);
-	}
-
-	revocation_context_cleanup(&sock_ctx->rev_ctx);
-	
-    if (sock_ctx->ssl_ctx != NULL)
-        SSL_CTX_free(sock_ctx->ssl_ctx);
-
+    revocation_context_cleanup(&sock_ctx->rev_ctx);
+    
     if (sock_ctx->ssl != NULL)
-	    SSL_free(sock_ctx->ssl);
-	if (sock_ctx->secure.bev != NULL)
-		bufferevent_free(sock_ctx->secure.bev);
-	if (sock_ctx->plain.bev != NULL)
-		bufferevent_free(sock_ctx->plain.bev);
+        session_cleanup(sock_ctx->ssl);
+
+    if (sock_ctx->listener != NULL) {
+        evconnlistener_free(sock_ctx->listener);
+        sock_ctx->sockfd = NO_FD;
+        sock_ctx->listener = NULL;
+    }
+
+    if (sock_ctx->secure.bev != NULL) {
+        bufferevent_free(sock_ctx->secure.bev);
+        sock_ctx->secure.bev = NULL;
+        sock_ctx->ssl = NULL;
+        sock_ctx->sockfd = NO_FD;
+    }
+
+    if (sock_ctx->plain.bev != NULL) {
+        bufferevent_free(sock_ctx->plain.bev);
+        sock_ctx->plain.bev = NULL;
+    }
+
+    if (sock_ctx->ssl_ctx != NULL) {
+        if (has_session_cache(sock_ctx->ssl_ctx))
+            session_cache_free(sock_ctx->ssl_ctx);
+        SSL_CTX_free(sock_ctx->ssl_ctx);
+        sock_ctx->ssl_ctx = NULL;
+    }
+
+    if (sock_ctx->ssl != NULL) {
+        SSL_free(sock_ctx->ssl);
+        sock_ctx->ssl = NULL;
+    }
+
+    if (sock_ctx->sockfd != NO_FD) {
+		int ret = close(sock_ctx->sockfd);
+        if (ret < 0)
+            LOG_W("close() returned %i:%s (likely double-closing fd)\n", 
+                        errno, strerror(errno));
+        
+        sock_ctx->sockfd = NO_FD;
+    }
 
     free(sock_ctx);
-	return;
+    return;
 }
 
 
@@ -477,6 +524,32 @@ int check_socket_state(socket_ctx* sock_ctx, int num, ...) {
 		set_wrong_state_err_string(sock_ctx);
 		return -EOPNOTSUPP;
 	}
+}
+
+
+/**
+ * Creates a string of the format "<hostname>:<port>".
+ * @param sock_ctx The socket to retrieve hostname and port information from.
+ * @returns A newly allocated null-terminated string.
+ */
+char* get_hostname_port_str(socket_ctx* sock_ctx) {
+
+    char* hostname = sock_ctx->rem_hostname;
+    int port = get_port(&sock_ctx->rem_addr);
+    int out_len = strlen(hostname) + 10; /* short max is < 10 digits */
+    int ret;
+
+    char* out = calloc(1, out_len);
+    if (out == NULL)
+        return NULL;
+
+    ret = snprintf(out, out_len, "%s:%i", hostname, port);
+    if (ret < 0) {
+        free(out);
+        return NULL;
+    }
+
+    return out;
 }
 
 

@@ -40,13 +40,12 @@
 #include "daemon.h"
 #include "daemon_structs.h"
 #include "error.h"
+#include "getsockopt.h"
 #include "in_tls.h"
 #include "log.h"
 #include "netlink.h"
+#include "setsockopt.h"
 #include "socket_setup.h"
-#include "sockopt_functions.h"
-#include "cipher_selection.h"
-
 
 #define MAX_UPGRADE_SOCKET  18
 
@@ -402,7 +401,7 @@ void accept_error_cb(struct evconnlistener *listener, void *ctx) {
  * @param addrlen The length of the address info sent by the connecting client.
  */
 void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
-	struct sockaddr *address, int addrlen, void *arg) {
+	        struct sockaddr* address, int addrlen, void *arg) {
 
     struct sockaddr_in int_addr = {
 		.sin_family = AF_INET,
@@ -414,34 +413,41 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
 	daemon_ctx* daemon = listening_ctx->daemon;
 	socket_ctx* new_ctx = NULL;
 	socklen_t intaddr_len = sizeof(int_addr);
-	evutil_socket_t ifd = -1;
+	evutil_socket_t ifd = NO_FD;
 	int ret = 0;
 
 	new_ctx = accepting_socket_ctx_new(listening_ctx, efd);
-	if (new_ctx != NULL)
+	if (new_ctx == NULL)
 		goto err;
 
 	new_ctx->int_addr = listening_ctx->int_addr;
 	new_ctx->int_addrlen = listening_ctx->int_addrlen;
 
     ifd = socket(PF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
-	if (ifd == -1)
+	if (ifd == NO_FD) {
+        LOG_E("socket() failed in listener_accept_cb (listener ID: %lu)\n", 
+                    listening_ctx->id);
 		goto err;
+    }
 
-	if (bind(ifd, (struct sockaddr*)&int_addr, sizeof(int_addr)) == -1)
+	if (bind(ifd, (struct sockaddr*)&int_addr, sizeof(int_addr)) == -1) {
+        LOG_E("bind() failed with code %i: %s\n", errno, strerror(errno));
 		goto err;
+    }
 
 	/* refresh the sockaddr info to get the port the kernel assigned us */
 	if (getsockname(ifd, (struct sockaddr*)&int_addr, &intaddr_len) == -1)
 		goto err;
 
-    ret = prepare_SSL_connection(new_ctx, FALSE);
+    ret = prepare_SSL_server(new_ctx);
     if (ret != 0)
         goto err;
 
     ret = prepare_bufferevents(new_ctx, ifd);
-    if (ret != 0)
+    if (ret != 0) {
+        ifd = NO_FD;
         goto err;
+    }
 
     new_ctx->local_port = get_port((struct sockaddr*) &int_addr);
     ret = hashmap_add(daemon->sock_map_port,
@@ -450,12 +456,13 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
         goto err;
 
     return;
-err:
+err:    
+    LOG_W("Incoming connection dropped due to listener_accept_cb() failure\n");
 
 	if (new_ctx != NULL)
 		socket_context_free(new_ctx);
 
-	if (ifd != -1)
+	if (ifd != NO_FD)
 		EVUTIL_CLOSESOCKET(ifd);
 
 	return;
@@ -618,101 +625,16 @@ void setsockopt_cb(daemon_ctx* daemon, unsigned long id, int level,
 
 	clear_global_and_socket_errors(sock_ctx);
 
-	switch (option) {
-	case TLS_REMOTE_HOSTNAME:
-		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-			break;
-		response = set_remote_hostname(sock_ctx, (char*) value, len);
-		break;
-
-	case TLS_DISABLE_CIPHER:
-		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-			break;
-		response = disable_ciphers(sock_ctx, (char*) value);
-		break;
-
-	case TLS_ENABLE_CIPHER:
-		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-			break;
-		response = enable_cipher(sock_ctx, (char*) value);
-		break;
-	case TLS_TRUSTED_PEER_CERTIFICATES:
-		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-			break;
-		response = set_trusted_CA_certificates(sock_ctx, (char*) value);
-		break;
-
-	case TLS_CERTIFICATE_CHAIN:
-		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-			break;
-		response = set_certificate_chain(sock_ctx, (char*) value);
-		break;
-
-	case TLS_PRIVATE_KEY:
-		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-			break;
-		response = set_private_key(sock_ctx, value);
-		break;
-
-    case TLS_DISABLE_COMPRESSION:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-            break;
-        set_no_compression(sock_ctx);
-        break;
-
-    case TLS_REVOCATION_CHECKS:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-            break;
-        turn_on_revocation_checks(sock_ctx->rev_ctx.checks);
-        break;
-
-    case TLS_OCSP_STAPLED_CHECKS:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-            break;
-        turn_on_stapled_checks(sock_ctx->rev_ctx.checks);
-        break;
-
-    case TLS_OCSP_CHECKS:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-            break;
-        turn_on_ocsp_checks(sock_ctx->rev_ctx.checks);
-        break;
-
-    case TLS_CRL_CHECKS:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-            break;
-        turn_on_crl_checks(sock_ctx->rev_ctx.checks);
-        break;
-
-    case TLS_CACHE_REVOCATION:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-            break;
-        turn_on_cached_checks(sock_ctx->rev_ctx.checks);
-        break;
-
-/*
-    case TLS_CONTEXT:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-            break;
-        else
-            response = set_tls_context(sock_ctx, (char*) value, len);
-        break;
-*/
-
-	case TLS_ERROR:
-	case TLS_HOSTNAME:
-	case TLS_TRUSTED_CIPHERS:
-    case TLS_CHOSEN_CIPHER:
-	case TLS_ID:
-		response = -ENOPROTOOPT; /* all get only */
-		break;
-	default:
-		if (setsockopt(sock_ctx->sockfd, level, option, value, len) == -1) {
+    if (level == IPPROTO_TLS) {
+        response = do_setsockopt_action(sock_ctx, option, value, len);
+    
+    } else {
+        int ret = setsockopt(sock_ctx->sockfd, level, option, value, len);
+        if (ret == -1) {
 			response = -errno;
 			set_err_string(sock_ctx, "Daemon error: internal fd setsockopt failed");
 		}
-		break;
-	}
+    }
 
 	netlink_notify_kernel(daemon, id, response);
 	return;
@@ -731,14 +653,13 @@ void setsockopt_cb(daemon_ctx* daemon, unsigned long id, int level,
  * @param option The desired socket option to retrieve information on.
  * @returns (via Netlink) a notification of 0 on success, or -errno on failure.
  */
-void getsockopt_cb(daemon_ctx* daemon,
-		unsigned long id, int level, int option) {
+void getsockopt_cb(daemon_ctx* daemon, 
+		    unsigned long id, int level, int option) {
 
 	socket_ctx* sock_ctx;
 	int response = 0;
-	const char* data = NULL;
+	void* data = NULL;
 	unsigned int len = 0;
-	int need_free = 0;
 
 	sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);
 	if (sock_ctx == NULL) {
@@ -748,112 +669,16 @@ void getsockopt_cb(daemon_ctx* daemon,
 
     if (option != TLS_ERROR)
         clear_global_and_socket_errors(sock_ctx);
-
-    switch (option) {
-	case TLS_ERROR:
-		if (!has_error_string(sock_ctx)) {
-			response = -EINVAL;
-			break;
-		}
-
-		data = sock_ctx->err_string;
-		len = strlen(sock_ctx->err_string) + 1;
-		break;
-
-	case TLS_REMOTE_HOSTNAME:
-		if ((response = check_socket_state(sock_ctx,
-				2, SOCKET_NEW, SOCKET_CONNECTED)) != 0)
-			break;
-
-		if (strlen(sock_ctx->rem_hostname) > 0) {
-			data = sock_ctx->rem_hostname;
-			len = strlen(sock_ctx->rem_hostname) + 1;
-		}
-		break;
-
-	case TLS_HOSTNAME:
-		if ((response = check_socket_state(sock_ctx,
-				1, SOCKET_ACCEPTED)) != 0)
-			break;
-
-		response = get_hostname(sock_ctx, &data, &len);
-		break;
-
-	case TLS_PEER_IDENTITY:
-		if ((response = check_socket_state(sock_ctx, 2,
-				SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
-			break;
-
-		response = get_peer_identity(sock_ctx, &data, &len);
-		if (response == 0)
-			need_free = 1;
-		break;
-
-	case TLS_PEER_CERTIFICATE_CHAIN:
-		if ((response = check_socket_state(sock_ctx, 1, SOCKET_CONNECTED)) != 0)
-			break;
-		response = get_peer_certificate(sock_ctx, &data, &len);
-		if (response == 0)
-			need_free = 1;
-		break;
-
-	case TLS_TRUSTED_CIPHERS:
-		response = get_enabled_ciphers(sock_ctx, &data, &len);
-		if (response == 0)
-			need_free = 1;
-		break;
-
-    case TLS_CHOSEN_CIPHER:
-        if ((response = check_socket_state(sock_ctx, 2,
-                    SOCKET_CONNECTED, SOCKET_ACCEPTED)) != 0)
-            break;
-
-        data = get_chosen_cipher(sock_ctx, &len);
-        break;
-
-/*
-    case TLS_CONTEXT:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0);
-        else
-            response = get_tls_context(sock_ctx, &data, &len);
-
-        if (response == 0)
-            need_free = 1;
-        break;
-
-    case TLS_CONTEXT_FREE:
-*/
-
-	case TLS_TRUSTED_PEER_CERTIFICATES:
-	case TLS_PRIVATE_KEY:
-	case TLS_DISABLE_CIPHER:
-	case TLS_ENABLE_CIPHER:
-	case TLS_REQUEST_PEER_AUTH:
-		response = -ENOPROTOOPT; /* all set only */
-		break;
-
-	case TLS_ID:
-		/* This case is handled directly by the kernel.
-		 * If we want to change that, uncomment the lines below */
-		/* data = &id;
-		len = sizeof(id);
-		break; */
-	default:
-		log_printf(LOG_ERROR,
-				"Default case for getsockopt hit: should never happen\n");
-		response = -EBADF;
-		break;
-	}
-
+    
+    response = do_getsockopt_action(sock_ctx, option, &data, &len);
 	if (response != 0) {
 		netlink_notify_kernel(daemon, id, response);
 		return;
 	}
 
-	netlink_send_and_notify_kernel(daemon, id, data, len);
-	if (need_free == 1)
-		free((void*) data);
-
+    netlink_send_and_notify_kernel(daemon, id, data, len);
+    free(data);
+	
 	return;
 }
 
@@ -896,13 +721,6 @@ void bind_cb(daemon_ctx* daemon, unsigned long id,
 	if (bind(sock_ctx->sockfd, ext_addr, ext_addrlen) != 0) {
 		response = -errno;
 		set_err_string(sock_ctx, "Bind error: SSA daemon socket failed to bind");
-		goto err;
-	}
-
-    if (evutil_make_listen_socket_reuseable(sock_ctx->sockfd) != 0) {
-        log_printf(LOG_ERROR, "Failed to make socket nonblocking (errno %i): %s",
-                    EVUTIL_SOCKET_ERROR(), strerror(EVUTIL_SOCKET_ERROR()));
-		response = -ECANCELED;
 		goto err;
 	}
 
@@ -986,8 +804,9 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
 	sock_ctx->int_addrlen = int_addrlen;
 	sock_ctx->rem_addr = *rem_addr;
 	sock_ctx->rem_addrlen = rem_addrlen;
+    sock_ctx->local_port = get_port(int_addr);
 
-    response = prepare_SSL_connection(sock_ctx, TRUE);
+    response = prepare_SSL_client(sock_ctx);
     if (response != 0)
         goto err;
 
@@ -1001,8 +820,6 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
         response = -ECANCELED;
 		goto err;
 	}
-
-    sock_ctx->local_port = get_port(int_addr);
 
     ret = hashmap_add(daemon->sock_map_port, sock_ctx->local_port, sock_ctx);
     if (ret != 0) {
@@ -1128,7 +945,7 @@ void associate_cb(daemon_ctx* daemon, unsigned long id,
 		goto err;
 
 	sock_ctx->id = id;
-	sock_ctx->state = SOCKET_ACCEPTED;
+	sock_ctx->state = SOCKET_CONNECTED;
 
 	int ret = hashmap_add(daemon->sock_map, id, (void*)sock_ctx);
     if (ret != 0)
@@ -1153,6 +970,7 @@ err:
  * @param id The id of the socket to be closed.
  */
 void close_cb(daemon_ctx* daemon, unsigned long id) {
+
 	socket_ctx* sock_ctx;
 
 	sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);
@@ -1164,7 +982,6 @@ void close_cb(daemon_ctx* daemon, unsigned long id) {
 	switch (sock_ctx->state) {
 	case SOCKET_FINISHING_CONN:
 	case SOCKET_CONNECTED:
-	case SOCKET_ACCEPTED:
 		socket_shutdown(sock_ctx);
 		break;
 	default:
