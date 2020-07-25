@@ -12,14 +12,11 @@ extern "C" {
 #include <unistd.h>
 #include "../in_tls.h"
 
+#include "helper_functions.h"
+
+#define HOSTNAME "ebay.com"
+#define PORT "443"
 }
-
-extern "C" {
-
-    #define HOSTNAME "nathanielbennett.com"
-    #define PORT "443"
-}
-
 
 
 class SocketAPITests : public testing::Test {
@@ -27,34 +24,16 @@ public:
     struct sockaddr* address;
     socklen_t addrlen;
 
-    virtual void SetUp() {
-        struct addrinfo hints = {0};
-
-        result = NULL;
-
-        hints.ai_socktype = SOCK_STREAM;
-        hints.ai_family = AF_INET;
-
-        getaddrinfo(HOSTNAME, PORT, &hints, &result);
-
-        if (result == NULL) {
-            printf("Couldn't resolve DNS.\n");
+    SocketAPITests() {
+        int ret = resolve_dns(HOSTNAME, PORT, &address, &addrlen);
+        if (ret != 0)
             exit(1);
-        }
-
-        address = result->ai_addr;
-        addrlen = result->ai_addrlen;
     }
 
-    virtual void TearDown() {
-        freeaddrinfo(result);
+    ~SocketAPITests() {
+        free(address);
+        address = NULL;
     }
-
-
-private:
-    struct addrinfo* result;
-
-
 };
 
 
