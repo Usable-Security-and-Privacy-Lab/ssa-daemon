@@ -188,7 +188,7 @@ struct global_config_st {
     char* private_keys[MAX_CERTS]; /** list of files/folders of keys to use */
     int key_cnt;                   /** Size of \p private_keys list */
 
-    int revocation_checks; /** bitmap of various revocation methods/settings */
+    unsigned int revocation_checks; /** bitset of revocation settings */
     int session_resumption; /** 1 if sockets will reuse sessions, 0 if not */
 };
 

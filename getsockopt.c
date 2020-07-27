@@ -12,8 +12,6 @@
 #include "sessions.h"
 
 
-
-/* setsockopt */
 int get_peer_certificate(socket_ctx* sock_ctx, char** data, unsigned int* len);
 int get_peer_identity(socket_ctx* sock_ctx, char** data, unsigned int* len);
 int get_hostname(socket_ctx* sock_ctx, char** data, unsigned int* len);
@@ -23,6 +21,13 @@ int get_session_reuse(socket_ctx* sock_ctx, int** data, unsigned int* len);
 int get_tls_compression(socket_ctx* sock_ctx, int** data, unsigned int* len);
 int get_tls_context(socket_ctx* sock_ctx, 
             unsigned long** data, unsigned int* len);
+
+/* revocation settings/methods */
+int get_revocation_checks(socket_ctx* sock_ctx, int** data, unsigned int* len);
+int get_stapled_checks(socket_ctx* sock_ctx, int** data, unsigned int* len);
+int get_ocsp_checks(socket_ctx* sock_ctx, int** data, unsigned int* len);
+int get_crl_checks(socket_ctx* sock_ctx, int** data, unsigned int* len);
+int get_cached_checks(socket_ctx* sock_ctx, int** data, unsigned int* len);
 
 
 /**
@@ -85,6 +90,25 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
     case TLS_COMPRESSION:
         response = get_tls_compression(sock_ctx, (int**) data, len);
         break;
+
+    case TLS_REVOCATION_CHECKS:
+        response = get_revocation_checks(sock_ctx, (int**) data, len);
+        break;
+
+    case TLS_OCSP_STAPLED_CHECKS:
+        response = get_stapled_checks(sock_ctx, (int**) data, len);
+        break;
+
+    case TLS_OCSP_CHECKS:
+        response = get_ocsp_checks(sock_ctx, (int**) data, len);
+        break;
+
+    case TLS_CRL_CHECKS:
+        response = get_crl_checks(sock_ctx, (int**) data, len);
+        break;
+
+    case TLS_CACHE_REVOCATION:
+        response = get_cached_checks(sock_ctx, (int**) data, len);
 
     case TLS_CONTEXT:
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
@@ -389,4 +413,78 @@ int get_session_reuse(socket_ctx* sock_ctx, int** data, unsigned int* len) {
     *len = sizeof(int);
 
     return 0;   
+}
+
+
+int get_revocation_checks(socket_ctx* sock_ctx, int** data, unsigned int* len) {
+
+    int* checks_enabled = malloc(sizeof(int));
+    if (checks_enabled == NULL)
+        return -ECANCELED;
+
+    *checks_enabled = has_revocation_checks(sock_ctx->rev_ctx.checks) ? 1 : 0;
+
+    *data = checks_enabled;
+    *len = sizeof(int);
+
+    return 0;
+}
+
+
+int get_stapled_checks(socket_ctx* sock_ctx, int** data, unsigned int* len) {
+
+    int* checks_enabled = malloc(sizeof(int));
+    if (checks_enabled == NULL)
+        return -ECANCELED;
+
+    *checks_enabled = has_stapled_checks(sock_ctx->rev_ctx.checks) ? 1 : 0;
+
+    *data = checks_enabled;
+    *len = sizeof(int);
+
+    return 0;
+}
+
+int get_ocsp_checks(socket_ctx* sock_ctx, int** data, unsigned int* len) {
+
+    int* checks_enabled = malloc(sizeof(int));
+    if (checks_enabled == NULL)
+        return -ECANCELED;
+
+    *checks_enabled = has_ocsp_checks(sock_ctx->rev_ctx.checks) ? 1 : 0;
+
+    *data = checks_enabled;
+    *len = sizeof(int);
+
+    return 0;
+}
+
+
+int get_crl_checks(socket_ctx* sock_ctx, int** data, unsigned int* len) {
+
+    int* checks_enabled = malloc(sizeof(int));
+    if (checks_enabled == NULL)
+        return -ECANCELED;
+
+    *checks_enabled = has_crl_checks(sock_ctx->rev_ctx.checks) ? 1 : 0;
+
+    *data = checks_enabled;
+    *len = sizeof(int);
+
+    return 0;
+}
+
+
+int get_cached_checks(socket_ctx* sock_ctx, int** data, unsigned int* len) {
+
+    int* checks_enabled = malloc(sizeof(int));
+    if (checks_enabled == NULL)
+        return -ECANCELED;
+
+    *checks_enabled = has_cached_checks(sock_ctx->rev_ctx.checks) ? 1 : 0;
+
+    *data = checks_enabled;
+    *len = sizeof(int);
+
+    return 0;
 }
