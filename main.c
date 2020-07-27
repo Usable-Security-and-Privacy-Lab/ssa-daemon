@@ -47,10 +47,9 @@ int main(int argc, char* argv[]) {
     int ret;
 
     ret = parse_input(argc, argv, &level, &config_path);
-    if (ret != 0) {
-        printf("flags/input not recognized\n");
+    if (ret != 0)
         exit(EXIT_FAILURE);
-    }
+    
 
     if (log_init(NULL, level)) {
         fprintf(stderr, "Failed to initialize log\n");
@@ -87,6 +86,11 @@ int parse_input(int argc, char* argv[], enum log_level *level, char** path) {
             } else if (argv[1][1] == 'd') {
                 *level = LOG_DEBUG;
             } else {
+                printf("unrecognized flag \'%s\'\n", argv[1]);
+                return -1;
+            }
+
+            if (argv[1][2] != '\0') {
                 printf("unrecognized flag \'%s\'\n", argv[1]);
                 return -1;
             }
