@@ -57,10 +57,8 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    struct timeval start, stop;
-    double secs = 0;
-
-    gettimeofday(&start, NULL);
+    struct timeval start, stop;  
+    double total_secs = 0;
 
     for (int i = 0; i < num_iterations; i++) {
 
@@ -77,13 +75,18 @@ int main(int argc, char** argv) {
             exit(1);
         }
 
+        gettimeofday(&start, NULL);
+
         ret = connect(fd, addr, addrlen);
         if (ret != 0) {
             perror("connect()");
             exit(1);
         }
         
-        /*
+        gettimeofday(&stop, NULL);
+        total_secs += (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec);
+        
+        /*       
         const char* request = "GET / HTTP/1.1\r\n\r\n";
         ret = send(fd, request, strlen(request)+1, 0);
         if (ret != strlen(request)+1) {
@@ -97,16 +100,14 @@ int main(int argc, char** argv) {
             printf("recv didn't receive byte.\n");
             exit(1);
         }
-        */
+            */
 
         close(fd);
 
         printf("Connection %i complete\n", i+1);
     }
 
-    gettimeofday(&stop, NULL);
-    secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec);
-    printf("time taken %f\n",secs); 
+    printf("time taken %f\n", total_secs); 
 
     close(context_fd);
 
