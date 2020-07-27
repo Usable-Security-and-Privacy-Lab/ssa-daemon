@@ -142,13 +142,11 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
             ? &sock_ctx->secure : &sock_ctx->plain;
 
 
-    if (events & BEV_EVENT_ERROR)
-        handle_event_error(sock_ctx, ssl_err, startpoint, endpoint);
-    
     if (events & BEV_EVENT_EOF)
         handle_event_eof(sock_ctx, startpoint, endpoint);
-    
-    if (events & BEV_EVENT_CONNECTED)
+    else if (events & BEV_EVENT_ERROR)
+        handle_event_error(sock_ctx, ssl_err, startpoint, endpoint);
+    else if (events & BEV_EVENT_CONNECTED)
         handle_client_event_connected(sock_ctx, daemon, id, startpoint);
 
 
@@ -204,13 +202,11 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
     channel* endpoint = (is_secure_channel) ? &sock_ctx->plain : &sock_ctx->secure;
     channel* startpoint = (is_secure_channel) ? &sock_ctx->secure : &sock_ctx->plain;
 
-    if (events & BEV_EVENT_ERROR)
-        handle_event_error(sock_ctx, bev_error, startpoint, endpoint);
-
     if (events & BEV_EVENT_EOF)
         handle_event_eof(sock_ctx, startpoint, endpoint);
-
-    if (events & BEV_EVENT_CONNECTED)
+    else if (events & BEV_EVENT_ERROR)
+        handle_event_error(sock_ctx, bev_error, startpoint, endpoint);
+    else if (events & BEV_EVENT_CONNECTED)
         handle_server_event_connected(sock_ctx, startpoint);
     
 
@@ -338,9 +334,6 @@ err:
 void handle_event_error(socket_ctx* sock_ctx, 
             unsigned long error, channel* startpoint, channel* endpoint) {
 
-    LOG_W("Error on %s endpoint\n", startpoint->bev == sock_ctx->secure.bev
-                ? "Encrypted" : "Plaintext");
-
     if (errno == ECONNRESET || errno == EPIPE)
         LOG_I("Connection closed by local user\n");
     else if (errno != 0)
@@ -378,8 +371,11 @@ void handle_event_eof(socket_ctx* sock_ctx,
                 ? "encrypted":"plaintext");
 
     /* only clean shutdowns should get SSL_shutdown() */
-    if (!(SSL_get_shutdown(sock_ctx->ssl) & SSL_RECEIVED_SHUTDOWN))
+    if (startpoint->bev == sock_ctx->secure.bev
+                && !(SSL_get_shutdown(sock_ctx->ssl) & SSL_RECEIVED_SHUTDOWN)) {
+        LOG_W("TLS shutdown wasn't clean\n");
         sock_ctx->state = SOCKET_DISCONNECTED; /* TODO: not technically yet... */
+    }
 
     // BUG: when the remote server closes first, this prematurely terminates connections
     // try msn.com and see
