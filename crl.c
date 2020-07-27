@@ -13,7 +13,7 @@
  */
 char** retrieve_crl_urls(X509* cert, int* num_urls) {
 
-	return NULL; //TODO: stub
+    return NULL; //TODO: stub
 }
 
 
@@ -29,15 +29,15 @@ char** retrieve_crl_urls(X509* cert, int* num_urls) {
  */
 int launch_crl_checks(socket_ctx* sock_ctx, char** urls, int num_urls) {
 
-	for (int i = 0; i < num_urls; i++) {
-		//char* url = crl_urls[i];
+    for (int i = 0; i < num_urls; i++) {
+        //char* url = crl_urls[i];
 
-		//set up bufferevent here (with timeout),
-		//pass in callbacks (with revocation_ctx* as the (void*) arg)
-		//start the bufferevent's connection
-	}
+        //set up bufferevent here (with timeout),
+        //pass in callbacks (with revocation_ctx* as the (void*) arg)
+        //start the bufferevent's connection
+    }
 
-	return 0; // TODO: stub
+    return 0; // TODO: stub
 }
 
 
@@ -54,5 +54,5 @@ int launch_crl_checks(socket_ctx* sock_ctx, char** urls, int num_urls) {
  */
 int do_crl_response_checks(X509_CRL* response, SSL* ssl) {
 
-	return -1; //TODO: stub
+    return -1; //TODO: stub
 }

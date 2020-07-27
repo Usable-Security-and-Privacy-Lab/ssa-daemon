@@ -46,40 +46,40 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
     int response = 0;
     
     switch (option) {
-	case TLS_ERROR:
-		if (!has_error_string(sock_ctx)) {
-			response = -EINVAL;
-			break;
-		}
+    case TLS_ERROR:
+        if (!has_error_string(sock_ctx)) {
+            response = -EINVAL;
+            break;
+        }
 
         *len = strlen(sock_ctx->err_string) + 1;
-		*data = strdup(sock_ctx->err_string);
+        *data = strdup(sock_ctx->err_string);
         if (*data == NULL)
             response = -ECANCELED;
-		break;
+        break;
 
-	case TLS_HOSTNAME:
-		if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-			break;
-		response = get_hostname(sock_ctx, (char**) data, len);
-		break;
+    case TLS_HOSTNAME:
+        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+            break;
+        response = get_hostname(sock_ctx, (char**) data, len);
+        break;
 
-	case TLS_PEER_IDENTITY:
-		if ((response = check_socket_state(sock_ctx, 1, SOCKET_CONNECTED)) != 0)
-			break;
+    case TLS_PEER_IDENTITY:
+        if ((response = check_socket_state(sock_ctx, 1, SOCKET_CONNECTED)) != 0)
+            break;
 
-		response = get_peer_identity(sock_ctx, (char**) data, len);
-		break;
+        response = get_peer_identity(sock_ctx, (char**) data, len);
+        break;
 
-	case TLS_PEER_CERTIFICATE_CHAIN:
-		if ((response = check_socket_state(sock_ctx, 1, SOCKET_CONNECTED)) != 0)
-			break;
-		response = get_peer_certificate(sock_ctx, (char**) data, len);
-		break;
+    case TLS_PEER_CERTIFICATE_CHAIN:
+        if ((response = check_socket_state(sock_ctx, 1, SOCKET_CONNECTED)) != 0)
+            break;
+        response = get_peer_certificate(sock_ctx, (char**) data, len);
+        break;
 
-	case TLS_TRUSTED_CIPHERS:
-		response = get_enabled_ciphers(sock_ctx, (char**) data, len);
-		break;
+    case TLS_TRUSTED_CIPHERS:
+        response = get_enabled_ciphers(sock_ctx, (char**) data, len);
+        break;
 
     case TLS_CHOSEN_CIPHER:
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_CONNECTED)) != 0)
@@ -126,25 +126,25 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
         response = get_session_reuse(sock_ctx, (int**) data, len);
         break;
 
-	case TLS_TRUSTED_PEER_CERTIFICATES:
-	case TLS_PRIVATE_KEY:
-	case TLS_DISABLE_CIPHER:
-	case TLS_REQUEST_PEER_AUTH:
-		response = -ENOPROTOOPT; /* all set only */
-		break;
+    case TLS_TRUSTED_PEER_CERTIFICATES:
+    case TLS_PRIVATE_KEY:
+    case TLS_DISABLE_CIPHER:
+    case TLS_REQUEST_PEER_AUTH:
+        response = -ENOPROTOOPT; /* all set only */
+        break;
 
-	case TLS_ID:
-		/* This case is handled directly by the kernel.
-		 * If we want to change that, uncomment the lines below */
-		/* data = &id;
-		len = sizeof(id);
-		break; */
-	default:
-		log_printf(LOG_ERROR,
-				"Default case for getsockopt hit: should never happen\n");
-		response = -EBADF;
-		break;
-	}
+    case TLS_ID:
+        /* This case is handled directly by the kernel.
+         * If we want to change that, uncomment the lines below */
+        /* data = &id;
+        len = sizeof(id);
+        break; */
+    default:
+        log_printf(LOG_ERROR,
+                "Default case for getsockopt hit: should never happen\n");
+        response = -EBADF;
+        break;
+    }
 
     return response;
 }
@@ -161,49 +161,49 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
  */
 int get_peer_certificate(socket_ctx* sock_ctx, 
             char** data, unsigned int* len) {
-	X509* cert = NULL;
-	BIO* bio = NULL;
-	char* bio_data = NULL;
-	char* pem_data = NULL;
-	unsigned int cert_len;
-	int ret;
+    X509* cert = NULL;
+    BIO* bio = NULL;
+    char* bio_data = NULL;
+    char* pem_data = NULL;
+    unsigned int cert_len;
+    int ret;
 
-	cert = SSL_get_peer_certificate(sock_ctx->ssl);
-	if (cert == NULL) {
-		set_err_string(sock_ctx, "TLS error: peer certificate not found");
-		ret = -ENOTCONN;
-		goto end;
-	}
+    cert = SSL_get_peer_certificate(sock_ctx->ssl);
+    if (cert == NULL) {
+        set_err_string(sock_ctx, "TLS error: peer certificate not found");
+        ret = -ENOTCONN;
+        goto end;
+    }
 
-	bio = BIO_new(BIO_s_mem());
-	if (bio == NULL) {
-		ret = determine_and_set_error(sock_ctx);
-		goto end;
-	}
+    bio = BIO_new(BIO_s_mem());
+    if (bio == NULL) {
+        ret = determine_and_set_error(sock_ctx);
+        goto end;
+    }
 
-	if (PEM_write_bio_X509(bio, cert) == 0) {
-		ret = determine_and_set_error(sock_ctx);
-		goto end;
-	}
+    if (PEM_write_bio_X509(bio, cert) == 0) {
+        ret = determine_and_set_error(sock_ctx);
+        goto end;
+    }
 
-	cert_len = BIO_get_mem_data(bio, &bio_data);
-	pem_data = malloc(cert_len + 1); /* +1 for null terminator */
-	if (pem_data == NULL) {
-		ret = -errno;
-		set_err_string(sock_ctx, "Daemon error: failed to allocate buffers");
-		goto end;
-	}
+    cert_len = BIO_get_mem_data(bio, &bio_data);
+    pem_data = malloc(cert_len + 1); /* +1 for null terminator */
+    if (pem_data == NULL) {
+        ret = -errno;
+        set_err_string(sock_ctx, "Daemon error: failed to allocate buffers");
+        goto end;
+    }
 
-	memcpy(pem_data, bio_data, cert_len);
-	pem_data[cert_len] = '\0';
+    memcpy(pem_data, bio_data, cert_len);
+    pem_data[cert_len] = '\0';
 
-	ret = 0;
-	*data = pem_data;
-	*len = cert_len + 1;
+    ret = 0;
+    *data = pem_data;
+    *len = cert_len + 1;
 end:
-	X509_free(cert);
-	BIO_free(bio);
-	return ret;
+    X509_free(cert);
+    BIO_free(bio);
+    return ret;
 }
 
 /**
@@ -218,32 +218,32 @@ end:
  */
 int get_peer_identity(socket_ctx* sock_ctx, 
             char** identity, unsigned int* len) {
-	
-	X509_NAME* subject_name;
-	X509* cert;
+    
+    X509_NAME* subject_name;
+    X509* cert;
 
-	cert = SSL_get_peer_certificate(sock_ctx->ssl);
-	if (cert == NULL) {
-		set_err_string(sock_ctx, "TLS error: couldn't get peer certificate - %s",
-				ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
-		return -ENOTCONN;
-	}
+    cert = SSL_get_peer_certificate(sock_ctx->ssl);
+    if (cert == NULL) {
+        set_err_string(sock_ctx, "TLS error: couldn't get peer certificate - %s",
+                ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
+        return -ENOTCONN;
+    }
 
-	subject_name = X509_get_subject_name(cert);
-	if (subject_name == NULL) {
-		set_err_string(sock_ctx, "TLS error: peer's certificate has no identity");
-		return -EINVAL;
-	}
+    subject_name = X509_get_subject_name(cert);
+    if (subject_name == NULL) {
+        set_err_string(sock_ctx, "TLS error: peer's certificate has no identity");
+        return -EINVAL;
+    }
 
-	*identity = X509_NAME_oneline(subject_name, NULL, 0);
-	if (*identity == NULL) {
-		X509_free(cert);
-		return determine_and_set_error(sock_ctx);
-	}
-	*len = strlen(*identity) + 1; /* '\0' character */
+    *identity = X509_NAME_oneline(subject_name, NULL, 0);
+    if (*identity == NULL) {
+        X509_free(cert);
+        return determine_and_set_error(sock_ctx);
+    }
+    *len = strlen(*identity) + 1; /* '\0' character */
 
-	X509_free(cert);
-	return 0;
+    X509_free(cert);
+    return 0;
 }
 
 
@@ -260,17 +260,17 @@ int get_peer_identity(socket_ctx* sock_ctx,
  */
 int get_hostname(socket_ctx* sock_ctx, char** data, unsigned int* len) {
 
-	const char* hostname;
+    const char* hostname;
 
-	hostname = SSL_get_servername(sock_ctx->ssl, TLSEXT_NAMETYPE_host_name);
-	if (hostname == NULL) {
-		set_err_string(sock_ctx, "TLS error: couldn't get the server hostname - %s",
-				ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
-		return -EINVAL;
-	}
+    hostname = SSL_get_servername(sock_ctx->ssl, TLSEXT_NAMETYPE_host_name);
+    if (hostname == NULL) {
+        set_err_string(sock_ctx, "TLS error: couldn't get the server hostname - %s",
+                ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
+        return -EINVAL;
+    }
 
-	*len = strlen(hostname)+1;
-	*data = strdup(hostname);
+    *len = strlen(hostname)+1;
+    *data = strdup(hostname);
     if (*data == NULL)
         return -ECANCELED;
 

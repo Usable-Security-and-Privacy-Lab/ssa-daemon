@@ -144,7 +144,7 @@ int check_ocsp_response(unsigned char* resp_bytes,
  * revocation status.
  */
 int verify_ocsp_basicresp(OCSP_BASICRESP* resp, 
-		OCSP_CERTID* id, STACK_OF(X509)* certs, X509_STORE* store);
+        OCSP_CERTID* id, STACK_OF(X509)* certs, X509_STORE* store);
 
 
 
@@ -167,6 +167,6 @@ char* get_ocsp_id_string(OCSP_CERTID* certid);
  * cached entry already exists.
  */
 int add_to_ocsp_cache(OCSP_CERTID* id, 
-		OCSP_BASICRESP* response, daemon_ctx* daemon);
+        OCSP_BASICRESP* response, daemon_ctx* daemon);
 
 #endif

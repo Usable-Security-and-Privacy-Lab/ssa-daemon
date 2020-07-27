@@ -28,9 +28,9 @@
 #define SSA_HASHMAP_STR_H
 
 typedef struct hsmap {
-	struct hsnode** buckets;
-	int num_buckets;
-	int item_count;
+    struct hsnode** buckets;
+    int num_buckets;
+    int item_count;
 } hsmap_t;
 
 

@@ -60,7 +60,7 @@ Default =
   # PEM certificate file containing all trusted root
   # certificates to be used in the SSA
   # Fadora default
-	TrustStoreLocation: "/etc/pki/tls/certs/ca-bundle.crt"
+    TrustStoreLocation: "/etc/pki/tls/certs/ca-bundle.crt"
   # Ubuntu default
   # TrustStoreLocation: "/etc/ssl/certs/ca-certificates.crt"
 

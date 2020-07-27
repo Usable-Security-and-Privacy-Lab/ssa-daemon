@@ -64,65 +64,65 @@ Below is code for an example client that can make HTTPS connections to any HTTPS
 void print_identity(int fd);
 
 int main(int argc, char* argv[]) {
-	int sock_fd;
-	int ret;
-	char http_request[MAX_REQUEST_SIZE];
-	char http_response[MAX_RESPONSE_SIZE];
-	struct addrinfo hints;
-	struct addrinfo* addr_ptr;
-	struct addrinfo* addr_list;
+    int sock_fd;
+    int ret;
+    char http_request[MAX_REQUEST_SIZE];
+    char http_response[MAX_RESPONSE_SIZE];
+    struct addrinfo hints;
+    struct addrinfo* addr_ptr;
+    struct addrinfo* addr_list;
 
-	if (argc < 2) {
-		printf("USAGE: %s <host name>\n", argv[0]);
-		return 0;
-	}
+    if (argc < 2) {
+        printf("USAGE: %s <host name>\n", argv[0]);
+        return 0;
+    }
 
     char* host = argv[1];
     char* port = "443"; //default to 443 for HTTPS connections
 
     //set up the connection
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_family = AF_INET;
-	ret = getaddrinfo(host, port, &hints, &addr_list);
-	if (ret != 0) {
-		fprintf(stderr, "Failed in getaddrinfo: %s\n", gai_strerror(ret));
-		exit(EXIT_FAILURE);
-	}
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_family = AF_INET;
+    ret = getaddrinfo(host, port, &hints, &addr_list);
+    if (ret != 0) {
+        fprintf(stderr, "Failed in getaddrinfo: %s\n", gai_strerror(ret));
+        exit(EXIT_FAILURE);
+    }
 
     //connect to the port
-	for (addr_ptr = addr_list; addr_ptr != NULL; addr_ptr = addr_ptr->ai_next) {
-		sock_fd = socket(addr_ptr->ai_family, addr_ptr->ai_socktype, IPPROTO_TLS);
-		if (sock_fd == -1) {
-			perror("socket");
-			continue;
-		}
+    for (addr_ptr = addr_list; addr_ptr != NULL; addr_ptr = addr_ptr->ai_next) {
+        sock_fd = socket(addr_ptr->ai_family, addr_ptr->ai_socktype, IPPROTO_TLS);
+        if (sock_fd == -1) {
+            perror("socket");
+            continue;
+        }
 
         //set the correct hostname for correct handshake
         if (setsockopt(sock_fd, IPPROTO_TLS, TLS_REMOTE_HOSTNAME, host, strlen(host)+1) == -1) {
-			perror("setsockopt: TLS_REMOTE_HOSTNAME");
-			close(sock_fd);
-			continue;
-		}
+            perror("setsockopt: TLS_REMOTE_HOSTNAME");
+            close(sock_fd);
+            continue;
+        }
 
         //connect to the socket
-		if (connect(sock_fd, addr_ptr->ai_addr, addr_ptr->ai_addrlen) == -1) {
-			perror("connect");
-			close(sock_fd);
-			continue;
-		}
-		break;
-	}
+        if (connect(sock_fd, addr_ptr->ai_addr, addr_ptr->ai_addrlen) == -1) {
+            perror("connect");
+            close(sock_fd);
+            continue;
+        }
+        break;
+    }
 
-	freeaddrinfo(addr_list);
-	if (addr_ptr == NULL) {
-		fprintf(stderr, "failed to find a suitable address for connection\n");
-		exit(EXIT_FAILURE);
-	}
+    freeaddrinfo(addr_list);
+    if (addr_ptr == NULL) {
+        fprintf(stderr, "failed to find a suitable address for connection\n");
+        exit(EXIT_FAILURE);
+    }
 
     //put the HTTP request into the buf
-	sprintf(http_request,"GET / HTTP/1.1\r\nhost: %s\r\n\r\n", argv[1]);
-	memset(http_response, 0, 2048);
+    sprintf(http_request,"GET / HTTP/1.1\r\nhost: %s\r\n\r\n", argv[1]);
+    memset(http_response, 0, 2048);
     
     //send encrypted request
     int request_size = strlen(http_request);
@@ -134,10 +134,10 @@ int main(int argc, char* argv[]) {
 
     // receive decrypted response
     // in general, more robust reading will be required
-	recv(sock_fd, http_response, MAX_RESPONSE_SIZE, 0);
-	printf("Received:\n%s\n", http_response);
-	close(sock_fd);
-	return 0;
+    recv(sock_fd, http_response, MAX_RESPONSE_SIZE, 0);
+    printf("Received:\n%s\n", http_response);
+    close(sock_fd);
+    return 0;
 }
 ``` 
 ##### Running Example Code
@@ -173,11 +173,11 @@ The following code creates a simple echo server using IPPROTO_TLS
 #include <netdb.h>
 #include "../../in_tls.h"
 
-#define CERT_FILE_A	"keys/certificate_a.pem"
-#define KEY_FILE_A	"keys/key_a.pem"
-#define CERT_FILE_B	"keys/certificate_b.pem"
-#define KEY_FILE_B	"keys/key_b.pem"
-#define BUFFER_SIZE	2048
+#define CERT_FILE_A    "keys/certificate_a.pem"
+#define KEY_FILE_A    "keys/key_a.pem"
+#define CERT_FILE_B    "keys/certificate_b.pem"
+#define KEY_FILE_B    "keys/key_b.pem"
+#define BUFFER_SIZE    2048
 
 void handle_req(char* req, char* resp);
 
@@ -189,55 +189,55 @@ int main(int argc, char* argv[]) {
     }
     int port = atoi(argv[1]);
 
-	char servername[255];
-	int servername_len = sizeof(servername);
-	char request[BUFFER_SIZE];
-	char response[BUFFER_SIZE];
-	memset(request, 0, BUFFER_SIZE);
+    char servername[255];
+    int servername_len = sizeof(servername);
+    char request[BUFFER_SIZE];
+    char response[BUFFER_SIZE];
+    memset(request, 0, BUFFER_SIZE);
 
-	struct sockaddr_in addr;
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = inet_addr("0.0.0.0");
-	addr.sin_port = htons(port);
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = inet_addr("0.0.0.0");
+    addr.sin_port = htons(port);
 
-	int fd = socket(PF_INET, SOCK_STREAM, IPPROTO_TLS);
-	bind(fd, (struct sockaddr*)&addr, sizeof(addr));
-	if (setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, CERT_FILE_A, sizeof(CERT_FILE_A)) == -1) {
-		perror("cert a");
-	}
-	if (setsockopt(fd, IPPROTO_TLS, TLS_PRIVATE_KEY, KEY_FILE_A, sizeof(KEY_FILE_A)) == -1) {
-		perror("key a");
-	}
-	if (setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, CERT_FILE_B, sizeof(CERT_FILE_B)) == -1) {
-		perror("cert b");
-	}
-	if (setsockopt(fd, IPPROTO_TLS, TLS_PRIVATE_KEY, KEY_FILE_B, sizeof(KEY_FILE_B)) == -1) {
-		perror("key b");
-	}
-	listen(fd, SOMAXCONN);
+    int fd = socket(PF_INET, SOCK_STREAM, IPPROTO_TLS);
+    bind(fd, (struct sockaddr*)&addr, sizeof(addr));
+    if (setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, CERT_FILE_A, sizeof(CERT_FILE_A)) == -1) {
+        perror("cert a");
+    }
+    if (setsockopt(fd, IPPROTO_TLS, TLS_PRIVATE_KEY, KEY_FILE_A, sizeof(KEY_FILE_A)) == -1) {
+        perror("key a");
+    }
+    if (setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, CERT_FILE_B, sizeof(CERT_FILE_B)) == -1) {
+        perror("cert b");
+    }
+    if (setsockopt(fd, IPPROTO_TLS, TLS_PRIVATE_KEY, KEY_FILE_B, sizeof(KEY_FILE_B)) == -1) {
+        perror("key b");
+    }
+    listen(fd, SOMAXCONN);
 
-	while (1) {	
-		struct sockaddr_storage addr;
-		socklen_t addr_len = sizeof(addr);
-		int c_fd = accept(fd, (struct sockaddr*)&addr, &addr_len);
-		if (getsockopt(c_fd, IPPROTO_TLS, TLS_HOSTNAME, servername, &servername_len) == -1) {
-			perror("getsockopt: TLS_HOSTNAME");
-			exit(EXIT_FAILURE);
-		}
-		printf("Client requested host %d %s\n", servername_len,  servername);
-		recv(c_fd, request, BUFFER_SIZE, 0);
-		handle_req(request, response);
-		send(c_fd, response, BUFFER_SIZE, 0);
-		close(c_fd);
-	}
-	return 0;
+    while (1) {    
+        struct sockaddr_storage addr;
+        socklen_t addr_len = sizeof(addr);
+        int c_fd = accept(fd, (struct sockaddr*)&addr, &addr_len);
+        if (getsockopt(c_fd, IPPROTO_TLS, TLS_HOSTNAME, servername, &servername_len) == -1) {
+            perror("getsockopt: TLS_HOSTNAME");
+            exit(EXIT_FAILURE);
+        }
+        printf("Client requested host %d %s\n", servername_len,  servername);
+        recv(c_fd, request, BUFFER_SIZE, 0);
+        handle_req(request, response);
+        send(c_fd, response, BUFFER_SIZE, 0);
+        close(c_fd);
+    }
+    return 0;
 }
 
 void handle_req(char* req, char* resp) {
-	memcpy(resp, req, BUFFER_SIZE);
+    memcpy(resp, req, BUFFER_SIZE);
     printf("Echo client data: %s\n", req);
     sprintf(resp, "%s", req);
-	return;
+    return;
 }
 ```
 
@@ -269,65 +269,65 @@ This client is nearly identical to the https client above. The only difference i
 void print_identity(int fd);
 
 int main(int argc, char* argv[]) {
-	int sock_fd;
-	int ret;
-	char http_request[MAX_REQUEST_SIZE];
-	char http_response[MAX_RESPONSE_SIZE];
-	struct addrinfo hints;
-	struct addrinfo* addr_ptr;
-	struct addrinfo* addr_list;
+    int sock_fd;
+    int ret;
+    char http_request[MAX_REQUEST_SIZE];
+    char http_response[MAX_RESPONSE_SIZE];
+    struct addrinfo hints;
+    struct addrinfo* addr_ptr;
+    struct addrinfo* addr_list;
 
-	if (argc < 3) {
-		printf("USAGE: %s <host name> <port>\n", argv[0]);
-		return 0;
-	}
+    if (argc < 3) {
+        printf("USAGE: %s <host name> <port>\n", argv[0]);
+        return 0;
+    }
 
     char* host = argv[1];
     char* port = argv[2]; 
 
     //set up the connection
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_family = AF_INET;
-	ret = getaddrinfo(host, port, &hints, &addr_list);
-	if (ret != 0) {
-		fprintf(stderr, "Failed in getaddrinfo: %s\n", gai_strerror(ret));
-		exit(EXIT_FAILURE);
-	}
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_family = AF_INET;
+    ret = getaddrinfo(host, port, &hints, &addr_list);
+    if (ret != 0) {
+        fprintf(stderr, "Failed in getaddrinfo: %s\n", gai_strerror(ret));
+        exit(EXIT_FAILURE);
+    }
 
     //connect to the port
-	for (addr_ptr = addr_list; addr_ptr != NULL; addr_ptr = addr_ptr->ai_next) {
-		sock_fd = socket(addr_ptr->ai_family, addr_ptr->ai_socktype, IPPROTO_TLS);
-		if (sock_fd == -1) {
-			perror("socket");
-			continue;
-		}
+    for (addr_ptr = addr_list; addr_ptr != NULL; addr_ptr = addr_ptr->ai_next) {
+        sock_fd = socket(addr_ptr->ai_family, addr_ptr->ai_socktype, IPPROTO_TLS);
+        if (sock_fd == -1) {
+            perror("socket");
+            continue;
+        }
 
         //set the correct hostname for correct handshake
         if (setsockopt(sock_fd, IPPROTO_TLS, TLS_REMOTE_HOSTNAME, host, strlen(host)+1) == -1) {
-			perror("setsockopt: TLS_REMOTE_HOSTNAME");
-			close(sock_fd);
-			continue;
-		}
+            perror("setsockopt: TLS_REMOTE_HOSTNAME");
+            close(sock_fd);
+            continue;
+        }
 
         //connect to the socket
-		if (connect(sock_fd, addr_ptr->ai_addr, addr_ptr->ai_addrlen) == -1) {
-			perror("connect");
-			close(sock_fd);
-			continue;
-		}
-		break;
-	}
+        if (connect(sock_fd, addr_ptr->ai_addr, addr_ptr->ai_addrlen) == -1) {
+            perror("connect");
+            close(sock_fd);
+            continue;
+        }
+        break;
+    }
 
-	freeaddrinfo(addr_list);
-	if (addr_ptr == NULL) {
-		fprintf(stderr, "failed to find a suitable address for connection\n");
-		exit(EXIT_FAILURE);
-	}
+    freeaddrinfo(addr_list);
+    if (addr_ptr == NULL) {
+        fprintf(stderr, "failed to find a suitable address for connection\n");
+        exit(EXIT_FAILURE);
+    }
 
     //put the HTTP request into the buf
-	sprintf(http_request,"GET / HTTP/1.1\r\nhost: %s\r\n\r\n", argv[1]);
-	memset(http_response, 0, 2048);
+    sprintf(http_request,"GET / HTTP/1.1\r\nhost: %s\r\n\r\n", argv[1]);
+    memset(http_response, 0, 2048);
     
     //send encrypted request
     int request_size = strlen(http_request);
@@ -339,10 +339,10 @@ int main(int argc, char* argv[]) {
 
     // receive decrypted response
     // in general, more robust reading will be required
-	recv(sock_fd, http_response, MAX_RESPONSE_SIZE, 0);
-	printf("Received:\n%s\n", http_response);
-	close(sock_fd);
-	return 0;
+    recv(sock_fd, http_response, MAX_RESPONSE_SIZE, 0);
+    printf("Received:\n%s\n", http_response);
+    close(sock_fd);
+    return 0;
 }
 ```
 ##### Running the Client

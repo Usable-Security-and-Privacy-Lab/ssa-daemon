@@ -2,9 +2,9 @@
 #define SSA_HASHQUEUE_STR_H
 
 typedef struct hqueue {
-	struct hqnode** buckets;
-	int num_buckets;
-	int item_count;
+    struct hqnode** buckets;
+    int num_buckets;
+    int item_count;
 } hqueue_t;
 
 

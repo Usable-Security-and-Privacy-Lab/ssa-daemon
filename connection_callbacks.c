@@ -14,10 +14,10 @@
 
 
 void handle_client_event_connected(socket_ctx* sock_ctx, 
-		daemon_ctx* daemon,	unsigned long id, channel* startpoint);
+        daemon_ctx* daemon,    unsigned long id, channel* startpoint);
 void handle_server_event_connected(socket_ctx* sock_ctx, channel* startpoint);
 void handle_event_error(socket_ctx* sock_ctx, 
-		unsigned long error, channel* startpoint, channel* endpoint);
+        unsigned long error, channel* startpoint, channel* endpoint);
 void handle_event_eof(socket_ctx* sock_ctx, channel* startpoint, channel* endpoint);
 void handle_event_timeout(socket_ctx* sock_ctx);
 
@@ -52,19 +52,19 @@ void handle_event_timeout(socket_ctx* sock_ctx);
  */
 void common_bev_write_cb(struct bufferevent *bev, void *arg) {
 
-	socket_ctx* sock_ctx = (socket_ctx*) arg;
-	channel* endpoint = (bev == sock_ctx->secure.bev) ? &sock_ctx->plain : &sock_ctx->secure;
-	
+    socket_ctx* sock_ctx = (socket_ctx*) arg;
+    channel* endpoint = (bev == sock_ctx->secure.bev) ? &sock_ctx->plain : &sock_ctx->secure;
+    
     /*
-	log_printf(LOG_DEBUG, "write event on bev %p (%s)\n", bev, 
-			(bev == sock_ctx->secure.bev) ? "secure" : "plain");
+    log_printf(LOG_DEBUG, "write event on bev %p (%s)\n", bev, 
+            (bev == sock_ctx->secure.bev) ? "secure" : "plain");
      */
 
-	if (endpoint->bev && !(bufferevent_get_enabled(endpoint->bev) & EV_READ)) {
-		bufferevent_setwatermark(bev, EV_WRITE, 0, 0);
-		bufferevent_enable(endpoint->bev, EV_READ);
-	}
-	return;
+    if (endpoint->bev && !(bufferevent_get_enabled(endpoint->bev) & EV_READ)) {
+        bufferevent_setwatermark(bev, EV_WRITE, 0, 0);
+        bufferevent_enable(endpoint->bev, EV_READ);
+    }
+    return;
 }
 
 /**
@@ -77,44 +77,44 @@ void common_bev_write_cb(struct bufferevent *bev, void *arg) {
  * @param arg the context of the socket using the given bufferevent.
  */
 void common_bev_read_cb(struct bufferevent* bev, void* arg) {
-	/* TODO: set read high-water mark?? */
-	
-	socket_ctx* sock_ctx = (socket_ctx*) arg;
-	channel* endpoint = (bev == sock_ctx->secure.bev) 
-			? &sock_ctx->plain : &sock_ctx->secure;
-	struct evbuffer* in_buf;
-	struct evbuffer* out_buf;
-	size_t in_len;
+    /* TODO: set read high-water mark?? */
+    
+    socket_ctx* sock_ctx = (socket_ctx*) arg;
+    channel* endpoint = (bev == sock_ctx->secure.bev) 
+            ? &sock_ctx->plain : &sock_ctx->secure;
+    struct evbuffer* in_buf;
+    struct evbuffer* out_buf;
+    size_t in_len;
 
     /*
-	log_printf(LOG_DEBUG, "read event on bev %p (%s)\n", bev, 
-			(bev == sock_ctx->secure.bev) ? "secure" : "plain");
+    log_printf(LOG_DEBUG, "read event on bev %p (%s)\n", bev, 
+            (bev == sock_ctx->secure.bev) ? "secure" : "plain");
     */
 
-	in_buf = bufferevent_get_input(bev);
-	in_len = evbuffer_get_length(in_buf);
-	if (in_len == 0)
-		return;
+    in_buf = bufferevent_get_input(bev);
+    in_len = evbuffer_get_length(in_buf);
+    if (in_len == 0)
+        return;
 
-	/* clear read buffer if already closed */
-	if (endpoint->closed == 1) {
-		LOG_D("drained buffer.\n");
-		evbuffer_drain(in_buf, in_len);
-		return;
-	}
+    /* clear read buffer if already closed */
+    if (endpoint->closed == 1) {
+        LOG_D("drained buffer.\n");
+        evbuffer_drain(in_buf, in_len);
+        return;
+    }
 
-	/* copy content to the output buffer of the other bufferevent */
-	out_buf = bufferevent_get_output(endpoint->bev);
-	evbuffer_add_buffer(out_buf, in_buf);
+    /* copy content to the output buffer of the other bufferevent */
+    out_buf = bufferevent_get_output(endpoint->bev);
+    evbuffer_add_buffer(out_buf, in_buf);
 
-	if (evbuffer_get_length(out_buf) >= MAX_BUFFER) {
-		LOG_D("Overflowing buffer, slowing down\n");
+    if (evbuffer_get_length(out_buf) >= MAX_BUFFER) {
+        LOG_D("Overflowing buffer, slowing down\n");
 
-		bufferevent_setwatermark(endpoint->bev, 
-				EV_WRITE, MAX_BUFFER / 2, MAX_BUFFER);
-		bufferevent_disable(bev, EV_READ);
-	}
-	return;
+        bufferevent_setwatermark(endpoint->bev, 
+                EV_WRITE, MAX_BUFFER / 2, MAX_BUFFER);
+        bufferevent_disable(bev, EV_READ);
+    }
+    return;
 }
 
 
@@ -136,51 +136,51 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
     unsigned long id = sock_ctx->id;
     unsigned long ssl_err = bufferevent_get_openssl_error(bev);
 
-	channel* endpoint = (bev == sock_ctx->secure.bev)
-			? &sock_ctx->plain : &sock_ctx->secure;
-	channel* startpoint = (bev == sock_ctx->secure.bev)
-			? &sock_ctx->secure : &sock_ctx->plain;
+    channel* endpoint = (bev == sock_ctx->secure.bev)
+            ? &sock_ctx->plain : &sock_ctx->secure;
+    channel* startpoint = (bev == sock_ctx->secure.bev)
+            ? &sock_ctx->secure : &sock_ctx->plain;
 
 
-	if (events & BEV_EVENT_ERROR)
-		handle_event_error(sock_ctx, ssl_err, startpoint, endpoint);
-	
-	if (events & BEV_EVENT_EOF)
-		handle_event_eof(sock_ctx, startpoint, endpoint);
-	
-	if (events & BEV_EVENT_CONNECTED)
-		handle_client_event_connected(sock_ctx, daemon, id, startpoint);
+    if (events & BEV_EVENT_ERROR)
+        handle_event_error(sock_ctx, ssl_err, startpoint, endpoint);
+    
+    if (events & BEV_EVENT_EOF)
+        handle_event_eof(sock_ctx, startpoint, endpoint);
+    
+    if (events & BEV_EVENT_CONNECTED)
+        handle_client_event_connected(sock_ctx, daemon, id, startpoint);
 
 
-	/* Connection closed--usually due to error, EOF or timeout */
-	if (endpoint->closed == 1 && startpoint->closed == 1) {
+    /* Connection closed--usually due to error, EOF or timeout */
+    if (endpoint->closed == 1 && startpoint->closed == 1) {
         if (ssl_err != 0)
             set_socket_error(sock_ctx, ssl_err);
         socket_shutdown(sock_ctx);
 
-		switch (sock_ctx->state) {
-		case SOCKET_CONNECTING:
-			sock_ctx->state = SOCKET_ERROR;
-			netlink_handshake_notify_kernel(daemon, id, -EPROTO);
-			return;
+        switch (sock_ctx->state) {
+        case SOCKET_CONNECTING:
+            sock_ctx->state = SOCKET_ERROR;
+            netlink_handshake_notify_kernel(daemon, id, -EPROTO);
+            return;
 
         case SOCKET_FINISHING_CONN:
-		case SOCKET_CONNECTED:
-			if (events & BEV_EVENT_ERROR)
-				sock_ctx->state = SOCKET_ERROR;
-			else
-				sock_ctx->state = SOCKET_DISCONNECTED;
-			return;
+        case SOCKET_CONNECTED:
+            if (events & BEV_EVENT_ERROR)
+                sock_ctx->state = SOCKET_ERROR;
+            else
+                sock_ctx->state = SOCKET_DISCONNECTED;
+            return;
 
         /* TODO: remove? */
         case SOCKET_DISCONNECTED:
             return;
 
-		default:
-			sock_ctx->state = SOCKET_ERROR;
-			return;
-		}
-	}
+        default:
+            sock_ctx->state = SOCKET_ERROR;
+            return;
+        }
+    }
 }
 
 
@@ -197,12 +197,12 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
  */
 void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 
-	socket_ctx* sock_ctx = (socket_ctx*) arg;
+    socket_ctx* sock_ctx = (socket_ctx*) arg;
     int is_secure_channel = (bev == sock_ctx->secure.bev) ? 1 : 0;
-	int bev_error = ERR_get_error();
-	
-	channel* endpoint = (is_secure_channel) ? &sock_ctx->plain : &sock_ctx->secure;
-	channel* startpoint = (is_secure_channel) ? &sock_ctx->secure : &sock_ctx->plain;
+    int bev_error = ERR_get_error();
+    
+    channel* endpoint = (is_secure_channel) ? &sock_ctx->plain : &sock_ctx->secure;
+    channel* startpoint = (is_secure_channel) ? &sock_ctx->secure : &sock_ctx->plain;
 
     if (events & BEV_EVENT_ERROR)
         handle_event_error(sock_ctx, bev_error, startpoint, endpoint);
@@ -263,14 +263,14 @@ void handle_client_event_connected(socket_ctx* sock_ctx,
     LOG_D("%s endpoint connected\n", startpoint->bev == sock_ctx->secure.bev 
                 ? "Encrypted client" : "Plaintext client");
 
-	if (startpoint->bev != sock_ctx->secure.bev) {
-		log_printf(LOG_WARNING, "Unexpected connect event happened.\n");
-		return;
-	}
+    if (startpoint->bev != sock_ctx->secure.bev) {
+        log_printf(LOG_WARNING, "Unexpected connect event happened.\n");
+        return;
+    }
 
     /*
-	log_printf(LOG_INFO, "Encrypted endpoint connection negotiated with %s\n", 
-			SSL_get_version(sock_ctx->ssl));
+    log_printf(LOG_INFO, "Encrypted endpoint connection negotiated with %s\n", 
+            SSL_get_version(sock_ctx->ssl));
      */
 
     sock_ctx->state = SOCKET_FINISHING_CONN;
@@ -299,29 +299,29 @@ void handle_client_event_connected(socket_ctx* sock_ctx,
  */
 void handle_server_event_connected(socket_ctx* sock_ctx, channel* startpoint) {
 
-	LOG_D("%s endpoint connected\n", startpoint->bev == sock_ctx->secure.bev 
+    LOG_D("%s endpoint connected\n", startpoint->bev == sock_ctx->secure.bev 
                 ? "Encrypted server" : "Plaintext server");
 
-	if (startpoint->bev == sock_ctx->secure.bev) {
+    if (startpoint->bev == sock_ctx->secure.bev) {
         sock_ctx->state = SOCKET_FINISHING_CONN;
 
-		int ret = bufferevent_enable(sock_ctx->plain.bev, EV_READ | EV_WRITE);
-		if (ret != 0)
-			goto err;
+        int ret = bufferevent_enable(sock_ctx->plain.bev, EV_READ | EV_WRITE);
+        if (ret != 0)
+            goto err;
 
-		ret = bufferevent_socket_connect(sock_ctx->plain.bev, 
-				&sock_ctx->int_addr, sock_ctx->int_addrlen);
-		if (ret != 0)
-			goto err;
-	}
+        ret = bufferevent_socket_connect(sock_ctx->plain.bev, 
+                &sock_ctx->int_addr, sock_ctx->int_addrlen);
+        if (ret != 0)
+            goto err;
+    }
 
-	return;
+    return;
 err:
     log_printf(LOG_DEBUG, "Erasing connection completely\n");
-	
+    
     hashmap_del(sock_ctx->daemon->sock_map_port, sock_ctx->local_port);
-	socket_shutdown(sock_ctx);
-	socket_context_free(sock_ctx);
+    socket_shutdown(sock_ctx);
+    socket_context_free(sock_ctx);
 }
 
 /**
@@ -336,13 +336,13 @@ err:
  * @param endpoint The other channel of the socket.
  */
 void handle_event_error(socket_ctx* sock_ctx, 
-		    unsigned long error, channel* startpoint, channel* endpoint) {
+            unsigned long error, channel* startpoint, channel* endpoint) {
 
-	LOG_W("Error on %s endpoint\n", startpoint->bev == sock_ctx->secure.bev
+    LOG_W("Error on %s endpoint\n", startpoint->bev == sock_ctx->secure.bev
                 ? "Encrypted" : "Plaintext");
 
-	if (errno == ECONNRESET || errno == EPIPE)
-		LOG_I("Connection closed by local user\n");
+    if (errno == ECONNRESET || errno == EPIPE)
+        LOG_I("Connection closed by local user\n");
     else if (errno != 0)
         LOG_W("Unhandled error %i has occurred: %s\n", errno, strerror(errno));
     else
@@ -350,16 +350,16 @@ void handle_event_error(socket_ctx* sock_ctx,
                     ERR_reason_error_string(error));
 
 
-	startpoint->closed = 1;
+    startpoint->closed = 1;
 
-	if (endpoint->closed == 0) {
-		struct evbuffer* out_buf;
-		out_buf = bufferevent_get_output(endpoint->bev);
+    if (endpoint->closed == 0) {
+        struct evbuffer* out_buf;
+        out_buf = bufferevent_get_output(endpoint->bev);
 
-		/* close other buffer if we're closing and it has no data left */
-		if (evbuffer_get_length(out_buf) == 0)
-			endpoint->closed = 1;
-	}
+        /* close other buffer if we're closing and it has no data left */
+        if (evbuffer_get_length(out_buf) == 0)
+            endpoint->closed = 1;
+    }
     return;
 }
 
@@ -372,9 +372,9 @@ void handle_event_error(socket_ctx* sock_ctx,
  * @param endpoint The other channel of the socket. 
  */
 void handle_event_eof(socket_ctx* sock_ctx, 
-		    channel* startpoint, channel* endpoint) {
+            channel* startpoint, channel* endpoint) {
 
-	LOG_D("%s channel got EOF\n", startpoint->bev == sock_ctx->secure.bev 
+    LOG_D("%s channel got EOF\n", startpoint->bev == sock_ctx->secure.bev 
                 ? "encrypted":"plaintext");
 
     /* only clean shutdowns should get SSL_shutdown() */

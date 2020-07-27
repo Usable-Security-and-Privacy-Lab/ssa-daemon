@@ -80,7 +80,7 @@ int resolve_dns(const char* host, const char* port,
 
 int run_http_client(const char *host, const char *port, char **out, int *out_len) {
 
-	struct addrinfo* addr_list = NULL;
+    struct addrinfo* addr_list = NULL;
     struct addrinfo hints = {0};
     char err_str[ERR_STRING_MAX_LEN];
     socklen_t err_len = ERR_STRING_MAX_LEN;
@@ -123,7 +123,7 @@ int run_http_client(const char *host, const char *port, char **out, int *out_len
     }
 
     fprintf(stderr, "Done.\n");
-	fprintf(stderr, "Connecting to endpoint...\n");
+    fprintf(stderr, "Connecting to endpoint...\n");
 
     ret = connect(clientfd, addr_list->ai_addr, addr_list->ai_addrlen);
     if (ret != 0) {
@@ -134,7 +134,7 @@ int run_http_client(const char *host, const char *port, char **out, int *out_len
 
     fprintf(stderr, "Done.\n");
 
-	freeaddrinfo(addr_list);
+    freeaddrinfo(addr_list);
     close(clientfd);
     return 0;
 err:

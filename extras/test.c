@@ -14,43 +14,43 @@ int SSA_send_fd(int fd, unsigned long id, int is_accepting);
 ssize_t send_fd_to(int fd, void* iobuf, size_t nbytes, int sendfd, struct sockaddr_un* addr, int addr_len);
 
 int main() {
-	int fd = socket(PF_INET, SOCK_STREAM, 0);
-	struct sockaddr_in addr = {
-		.sin_family = AF_INET,
-		.sin_port = htons(8080),
-		.sin_addr.s_addr = htonl(INADDR_LOOPBACK)
-	};
-	connect(fd, (struct sockaddr*)&addr, sizeof(addr));
+    int fd = socket(PF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in addr = {
+        .sin_family = AF_INET,
+        .sin_port = htons(8080),
+        .sin_addr.s_addr = htonl(INADDR_LOOPBACK)
+    };
+    connect(fd, (struct sockaddr*)&addr, sizeof(addr));
 
-	/* Some chochface calls SSL_set_fd(ssl, fd) or something */
+    /* Some chochface calls SSL_set_fd(ssl, fd) or something */
 
-	/* Oh noes! Upgrade to use TLS via SSA! */
-	upgrade_sock(fd);
-	send(fd, "It worked!\n", sizeof("It worked!\n"), 0);
-	return 0;
+    /* Oh noes! Upgrade to use TLS via SSA! */
+    upgrade_sock(fd);
+    send(fd, "It worked!\n", sizeof("It worked!\n"), 0);
+    return 0;
 }
 
 
 int upgrade_sock(int fd) {
-	unsigned long id;
-	int id_len = sizeof(id);
+    unsigned long id;
+    int id_len = sizeof(id);
 
-	/* This is the address of the SSA daemon */
-	struct sockaddr_in addr = {
-		.sin_family = AF_INET,
-		.sin_port = htons(8443),
-		.sin_addr.s_addr = htonl(INADDR_LOOPBACK)
-	};
-	int new_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
-	if (getsockopt(new_fd, IPPROTO_TLS, TLS_ID, &id, &id_len) == -1) {
-		perror("getsockopt: TLS_ID");
-		exit(EXIT_FAILURE);
-	}
-	printf("socket ID is %lu\n", id);
-	SSA_send_fd(fd, id, 0);
-	connect(new_fd, (struct sockaddr*)&addr, sizeof(addr));
-	dup2(new_fd, fd);
-	return 0;
+    /* This is the address of the SSA daemon */
+    struct sockaddr_in addr = {
+        .sin_family = AF_INET,
+        .sin_port = htons(8443),
+        .sin_addr.s_addr = htonl(INADDR_LOOPBACK)
+    };
+    int new_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (getsockopt(new_fd, IPPROTO_TLS, TLS_ID, &id, &id_len) == -1) {
+        perror("getsockopt: TLS_ID");
+        exit(EXIT_FAILURE);
+    }
+    printf("socket ID is %lu\n", id);
+    SSA_send_fd(fd, id, 0);
+    connect(new_fd, (struct sockaddr*)&addr, sizeof(addr));
+    dup2(new_fd, fd);
+    return 0;
 }
 
 int SSA_send_fd(int fd, unsigned long id, int is_accepting)
@@ -80,7 +80,7 @@ int SSA_send_fd(int fd, unsigned long id, int is_accepting)
 
     bytes_to_send = sprintf(buffer, "%d:%lu", is_accepting, id);
     if (bind(con, (struct sockaddr*)&self, sizeof(sa_family_t)) == -1) {
-	    perror("bind");
+        perror("bind");
     }
     ret = send_fd_to(con, buffer, bytes_to_send + 1, fd, &addr, addrlen);
     /* Wait for a confirmation to prevent race condition */
@@ -91,7 +91,7 @@ int SSA_send_fd(int fd, unsigned long id, int is_accepting)
 }
 
 ssize_t send_fd_to(int fd, void* iobuf, size_t nbytes, int sendfd,
-	       	struct sockaddr_un* addr, int addr_len) {
+               struct sockaddr_un* addr, int addr_len) {
     struct msghdr msg = {0};
     struct iovec iov[1];
 

@@ -119,7 +119,7 @@ int begin_revocation_checks(revocation_ctx *rev_ctx, SSL* ssl, int cert_index) {
     if (has_crl_checks(rev_ctx->checks))
         crl_urls = retrieve_crl_urls(subject, &crl_url_cnt);
 
-	if (crl_url_cnt > 0) {
+    if (crl_url_cnt > 0) {
         ret = launch_crl_checks(rev_ctx, crl_urls, crl_url_cnt);
         rev_ctx->crl_responders_at[cert_index] = ret;
         if (ret > 0)
@@ -199,7 +199,7 @@ void fail_revocation_checks(revocation_ctx* rev_ctx) {
     sock_ctx->state = SOCKET_ERROR;
 
     netlink_handshake_notify_kernel(daemon, id, -EPROTO);
-	revocation_context_cleanup(rev_ctx);
+    revocation_context_cleanup(rev_ctx);
 
 }
 
@@ -223,16 +223,16 @@ void fail_revocation_checks(revocation_ctx* rev_ctx) {
  */
 int check_stapled_response(revocation_ctx* rev_ctx, SSL* ssl, OCSP_CERTID* id) {
 
-	unsigned char* stapled_resp;
-	int resp_len, ret;
+    unsigned char* stapled_resp;
+    int resp_len, ret;
 
-	resp_len = SSL_get_tlsext_status_ocsp_resp(ssl, &stapled_resp);
-	if (resp_len < 0)
-		return V_OCSP_CERTSTATUS_UNKNOWN;
+    resp_len = SSL_get_tlsext_status_ocsp_resp(ssl, &stapled_resp);
+    if (resp_len < 0)
+        return V_OCSP_CERTSTATUS_UNKNOWN;
 
     ret = check_ocsp_response(stapled_resp, resp_len, rev_ctx, id);
 
-	return ret;
+    return ret;
 }
 
 
@@ -253,28 +253,28 @@ int check_stapled_response(revocation_ctx* rev_ctx, SSL* ssl, OCSP_CERTID* id) {
 int check_ocsp_response(unsigned char* resp_bytes, 
             int resp_len, revocation_ctx* rev_ctx, OCSP_CERTID* id) {
 
-	OCSP_BASICRESP* basicresp = NULL;
-	int status, ret;
+    OCSP_BASICRESP* basicresp = NULL;
+    int status, ret;
 
-	ret = get_ocsp_basicresp(resp_bytes, resp_len, &basicresp);
-	if (ret != 0)
-		goto err;
+    ret = get_ocsp_basicresp(resp_bytes, resp_len, &basicresp);
+    if (ret != 0)
+        goto err;
 
-	status = verify_ocsp_basicresp(basicresp, 
+    status = verify_ocsp_basicresp(basicresp, 
                 id, rev_ctx->certs, rev_ctx->store);
-	if (status == V_OCSP_CERTSTATUS_UNKNOWN)
-		goto err;
+    if (status == V_OCSP_CERTSTATUS_UNKNOWN)
+        goto err;
 
     /* even if a user doesn't check cached responses, we should add them */
-	add_to_ocsp_cache(id, basicresp, rev_ctx->daemon);
+    add_to_ocsp_cache(id, basicresp, rev_ctx->daemon);
 
-	return status;
+    return status;
 err:
-	// Something went wrong with parsing/verification
-	if (basicresp != NULL)
-		OCSP_BASICRESP_free(basicresp);
-	
-	return V_OCSP_CERTSTATUS_UNKNOWN;
+    // Something went wrong with parsing/verification
+    if (basicresp != NULL)
+        OCSP_BASICRESP_free(basicresp);
+    
+    return V_OCSP_CERTSTATUS_UNKNOWN;
 }
 
 
@@ -295,22 +295,22 @@ err:
  * revocation status.
  */
 int verify_ocsp_basicresp(OCSP_BASICRESP* resp, 
-		OCSP_CERTID* id, STACK_OF(X509)* certs, X509_STORE* store) {
-	
-	ASN1_GENERALIZEDTIME* revtime = NULL;
-	ASN1_GENERALIZEDTIME* thisupd = NULL;
-	ASN1_GENERALIZEDTIME* nextupd = NULL;
-	int ret, status, reason;
+        OCSP_CERTID* id, STACK_OF(X509)* certs, X509_STORE* store) {
+    
+    ASN1_GENERALIZEDTIME* revtime = NULL;
+    ASN1_GENERALIZEDTIME* thisupd = NULL;
+    ASN1_GENERALIZEDTIME* nextupd = NULL;
+    int ret, status, reason;
 
     ret = OCSP_basic_verify(resp, certs, store, 0);
     if (ret != 1)
-		return V_OCSP_CERTSTATUS_UNKNOWN;
+        return V_OCSP_CERTSTATUS_UNKNOWN;
 
 
     ret = OCSP_resp_find_status(resp, id, 
-			&status, &reason, &revtime, &thisupd, &nextupd);
+            &status, &reason, &revtime, &thisupd, &nextupd);
     if (ret != 1)
-		return V_OCSP_CERTSTATUS_UNKNOWN;
+        return V_OCSP_CERTSTATUS_UNKNOWN;
 
 
     ret = OCSP_check_validity(thisupd, nextupd, LEEWAY_90_SECS, MAX_OCSP_AGE);
@@ -320,7 +320,7 @@ int verify_ocsp_basicresp(OCSP_BASICRESP* resp,
         status = V_OCSP_CERTSTATUS_UNKNOWN;
     }
 
-	return status;
+    return status;
 }
 
 /*******************************************************************************
@@ -344,33 +344,33 @@ int verify_ocsp_basicresp(OCSP_BASICRESP* resp,
  */
 int check_cached_response(revocation_ctx* rev_ctx, OCSP_CERTID* id) {
 
-	hsmap_t* rev_cache = rev_ctx->daemon->revocation_cache;
-	OCSP_BASICRESP* response = NULL;
-	char* id_string = NULL;
-	int status;
+    hsmap_t* rev_cache = rev_ctx->daemon->revocation_cache;
+    OCSP_BASICRESP* response = NULL;
+    char* id_string = NULL;
+    int status;
 
-	id_string = get_ocsp_id_string(id);
-	if (id_string == NULL)
-		goto err;
+    id_string = get_ocsp_id_string(id);
+    if (id_string == NULL)
+        goto err;
 
-	response = (OCSP_BASICRESP*) str_hashmap_get(rev_cache, id_string);
-	if (response == NULL)
-		goto err;
+    response = (OCSP_BASICRESP*) str_hashmap_get(rev_cache, id_string);
+    if (response == NULL)
+        goto err;
 
-	status = verify_ocsp_basicresp(response, id, rev_ctx->certs, rev_ctx->store);
-	if (status == V_OCSP_CERTSTATUS_UNKNOWN) {
-		str_hashmap_del(rev_cache, id_string);
-		goto err;
-	}
+    status = verify_ocsp_basicresp(response, id, rev_ctx->certs, rev_ctx->store);
+    if (status == V_OCSP_CERTSTATUS_UNKNOWN) {
+        str_hashmap_del(rev_cache, id_string);
+        goto err;
+    }
 
-	free(id_string);
+    free(id_string);
 
-	return status;
+    return status;
 err:
-	if (id_string != NULL)
-		free(id_string);
+    if (id_string != NULL)
+        free(id_string);
 
-	return V_OCSP_CERTSTATUS_UNKNOWN;
+    return V_OCSP_CERTSTATUS_UNKNOWN;
 }
 
 
@@ -381,34 +381,34 @@ err:
  */
 char* get_ocsp_id_string(OCSP_CERTID* certid) {
 
-	ASN1_INTEGER* id_int = NULL;
-	BIGNUM* id_bignum = NULL;
-	char* id_string = NULL;
-	char* tmp = NULL;
+    ASN1_INTEGER* id_int = NULL;
+    BIGNUM* id_bignum = NULL;
+    char* id_string = NULL;
+    char* tmp = NULL;
 
-	OCSP_id_get0_info(NULL, NULL, NULL, &id_int, certid);
-	if (id_int == NULL)
-		goto err;
+    OCSP_id_get0_info(NULL, NULL, NULL, &id_int, certid);
+    if (id_int == NULL)
+        goto err;
 
-	id_bignum = ASN1_INTEGER_to_BN(id_int, NULL);
-	if (id_bignum == NULL)
-		goto err;
+    id_bignum = ASN1_INTEGER_to_BN(id_int, NULL);
+    if (id_bignum == NULL)
+        goto err;
 
-	tmp = BN_bn2hex(id_bignum);
-	if (tmp == NULL)
-		goto err;
+    tmp = BN_bn2hex(id_bignum);
+    if (tmp == NULL)
+        goto err;
 
-	id_string = strdup(tmp);
+    id_string = strdup(tmp);
 
-	OPENSSL_free(tmp); //so that we don't have to free this way later
-	BN_free(id_bignum);
+    OPENSSL_free(tmp); //so that we don't have to free this way later
+    BN_free(id_bignum);
 
-	return id_string;
+    return id_string;
 err:
-	if (id_bignum != NULL)
-		BN_free(id_bignum);
+    if (id_bignum != NULL)
+        BN_free(id_bignum);
 
-	return NULL;
+    return NULL;
 }
 
 
@@ -421,24 +421,24 @@ err:
  * cached entry already exists.
  */
 int add_to_ocsp_cache(OCSP_CERTID* id, 
-		OCSP_BASICRESP* response, daemon_ctx* daemon) {
+        OCSP_BASICRESP* response, daemon_ctx* daemon) {
 
-	hsmap_t* rev_cache = daemon->revocation_cache;
-	char* id_string = NULL;
-	int ret;
+    hsmap_t* rev_cache = daemon->revocation_cache;
+    char* id_string = NULL;
+    int ret;
 
-	id_string = get_ocsp_id_string(id);
-	if (id_string == NULL)
-		return -1;
-	
-	ret = str_hashmap_add(rev_cache, id_string, (void*)response);
-	if (ret != 0) {
+    id_string = get_ocsp_id_string(id);
+    if (id_string == NULL)
+        return -1;
+    
+    ret = str_hashmap_add(rev_cache, id_string, (void*)response);
+    if (ret != 0) {
         OCSP_BASICRESP_free(response);
-		free(id_string);
-		return -1;
-	}
+        free(id_string);
+        return -1;
+    }
 
-	return 0;
+    return 0;
 }
 
 
@@ -460,15 +460,15 @@ int add_to_ocsp_cache(OCSP_CERTID* id,
  */
 int parse_url(char* url, char** host_out, int* port_out, char** path_out) {
 
-	char* host;
-	char* port_ptr;
-	char* path;
-	int ret, use_ssl;
+    char* host;
+    char* port_ptr;
+    char* path;
+    int ret, use_ssl;
     long port;
 
-	ret = OCSP_parse_url(url, &host, &port_ptr, &path, &use_ssl);
-	if (ret != 1)
-		return -1;
+    ret = OCSP_parse_url(url, &host, &port_ptr, &path, &use_ssl);
+    if (ret != 1)
+        return -1;
 
     port = strtol(port_ptr, NULL, 10);
     if (port == INT_MAX || port < 0) {
@@ -480,21 +480,21 @@ int parse_url(char* url, char** host_out, int* port_out, char** path_out) {
 
     free(port_ptr);
 
-	if (host_out != NULL)
-		*host_out = host;
-	else
-		free(host);
-	
-	if (port_out != NULL)
-		*port_out = (int) port;
+    if (host_out != NULL)
+        *host_out = host;
+    else
+        free(host);
+    
+    if (port_out != NULL)
+        *port_out = (int) port;
 
 
-	if (path_out != NULL)
-		*path_out = path;
-	else
-		free(path);
+    if (path_out != NULL)
+        *path_out = path;
+    else
+        free(path);
 
-	return 0;
+    return 0;
 }
 
 
@@ -505,17 +505,17 @@ int parse_url(char* url, char** host_out, int* port_out, char** path_out) {
  */
 int is_bad_http_response(char* response) {
 
-	char* firstline_end = strstr(response, "\r\n");
-	char* response_code_ptr = strchr(response, ' ') + 1;
-	
-	if (response_code_ptr >= firstline_end) 
-		return 1;
+    char* firstline_end = strstr(response, "\r\n");
+    char* response_code_ptr = strchr(response, ' ') + 1;
+    
+    if (response_code_ptr >= firstline_end) 
+        return 1;
 
-	long response_code = strtol(response_code_ptr, NULL, 10);
-	if (response_code != 200)
-		return 1;
+    long response_code = strtol(response_code_ptr, NULL, 10);
+    if (response_code != 200)
+        return 1;
 
-	return 0;
+    return 0;
 }
 
 
@@ -527,25 +527,25 @@ int is_bad_http_response(char* response) {
  */
 int get_http_body_len(char* response) {
 
-	long body_length;
+    long body_length;
 
-	char* length_ptr = strstr(response, "Content-Length");
-	if (length_ptr == NULL)
-		return -1;
+    char* length_ptr = strstr(response, "Content-Length");
+    if (length_ptr == NULL)
+        return -1;
 
-	if (length_ptr > strstr(response, "\r\n\r\n"))
-		return -1;
+    if (length_ptr > strstr(response, "\r\n\r\n"))
+        return -1;
 
-	length_ptr += strlen("Content-Length");
-	
-	while(*length_ptr == ' ' || *length_ptr == ':')
-		++length_ptr;
+    length_ptr += strlen("Content-Length");
+    
+    while(*length_ptr == ' ' || *length_ptr == ':')
+        ++length_ptr;
 
-	body_length = strtol(length_ptr, NULL, 10);
-	if (body_length >= INT_MAX || body_length < 0)
-		return -1;
+    body_length = strtol(length_ptr, NULL, 10);
+    if (body_length >= INT_MAX || body_length < 0)
+        return -1;
 
-	return (int) body_length;
+    return (int) body_length;
 }
 
 
@@ -560,35 +560,35 @@ int get_http_body_len(char* response) {
  */
 int start_reading_body(ocsp_responder* ocsp_resp) {
 
-	unsigned char* body_start;
-	int header_len;
-	int body_len;
+    unsigned char* body_start;
+    int header_len;
+    int body_len;
 
-	if (is_bad_http_response((char*) ocsp_resp->buffer))
-		return -1;
+    if (is_bad_http_response((char*) ocsp_resp->buffer))
+        return -1;
 
-	body_start = (unsigned char*) strstr((char*) ocsp_resp->buffer, "\r\n\r\n") 
-			+ strlen("\r\n\r\n");
-	header_len = body_start - ocsp_resp->buffer;
+    body_start = (unsigned char*) strstr((char*) ocsp_resp->buffer, "\r\n\r\n") 
+            + strlen("\r\n\r\n");
+    header_len = body_start - ocsp_resp->buffer;
 
-	body_len = get_http_body_len((char*) ocsp_resp->buffer);
-	if (body_len < 0)
-		return -1;
+    body_len = get_http_body_len((char*) ocsp_resp->buffer);
+    if (body_len < 0)
+        return -1;
 
-	unsigned char* tmp_buffer = (unsigned char*) malloc(body_len);
-	if (tmp_buffer == NULL)
-		return -1;
+    unsigned char* tmp_buffer = (unsigned char*) malloc(body_len);
+    if (tmp_buffer == NULL)
+        return -1;
 
-	ocsp_resp->tot_read -= header_len;
-	ocsp_resp->buf_size = body_len;
+    ocsp_resp->tot_read -= header_len;
+    ocsp_resp->buf_size = body_len;
 
-	memcpy(tmp_buffer, body_start, ocsp_resp->tot_read);
-	free(ocsp_resp->buffer);
-	ocsp_resp->buffer = tmp_buffer;
+    memcpy(tmp_buffer, body_start, ocsp_resp->tot_read);
+    free(ocsp_resp->buffer);
+    ocsp_resp->buffer = tmp_buffer;
 
-	ocsp_resp->is_reading_body = 1;
+    ocsp_resp->is_reading_body = 1;
 
-	return 0;
+    return 0;
 }
 
 
@@ -599,6 +599,6 @@ int start_reading_body(ocsp_responder* ocsp_resp) {
  * @returns 1 if done, 0 if not done.
  */
 int done_reading_body(ocsp_responder* resp_ctx) {
-	return resp_ctx->is_reading_body 
+    return resp_ctx->is_reading_body 
                 && (resp_ctx->tot_read == resp_ctx->buf_size);
 }

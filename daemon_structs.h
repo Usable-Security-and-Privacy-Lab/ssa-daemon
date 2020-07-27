@@ -195,8 +195,8 @@ struct global_config_st {
 
 
 typedef struct channel_st {
-	struct bufferevent* bev; /** The bufferevent of a given endpoint */
-	int closed;              /** 1 if the endpoint is done communicating */
+    struct bufferevent* bev; /** The bufferevent of a given endpoint */
+    int closed;              /** 1 if the endpoint is done communicating */
 } channel;
 
 
@@ -210,7 +210,7 @@ struct revocation_ctx_st {
     socket_ctx* sock_ctx; /** The parent socket_ctx of the rev context */
     unsigned long id;     /** The ID of the parent socket_ctx */
 
-	unsigned int checks; /** bitmap of rev checks; options #define'd above */
+    unsigned int checks; /** bitmap of rev checks; options #define'd above */
 
     /** The number of active, authoritative responders performing revocation
      * checks for the certificate at the corresponding index in the cert chain.
@@ -273,36 +273,36 @@ struct crl_responder_st {
 
 struct socket_ctx_st {
 
-	daemon_ctx* daemon;     /** The daemon's context */
-	unsigned long id;       /** The unique id associated with the socket */
-	evutil_socket_t sockfd; /** The file descriptor of the socket */
+    daemon_ctx* daemon;     /** The daemon's context */
+    unsigned long id;       /** The unique id associated with the socket */
+    evutil_socket_t sockfd; /** The file descriptor of the socket */
 
     enum socket_state state; /** The socket's current state @see socket_state */
 
   SSL_CTX* ssl_ctx;   /** The context of the SSL object (useful for server) */
-	SSL* ssl;           /** The SSL instance associated with \p sockfd */
+    SSL* ssl;           /** The SSL instance associated with \p sockfd */
 
 
-	channel plain;      /** The non-encrypted channel to the calling program */
-	channel secure;     /** The encrypted channel to the external peer */
+    channel plain;      /** The non-encrypted channel to the calling program */
+    channel secure;     /** The encrypted channel to the external peer */
 
-	struct evconnlistener* listener; /** Libevent struct for listening socket */
+    struct evconnlistener* listener; /** Libevent struct for listening socket */
 
-	revocation_ctx rev_ctx; /** Settings/data structs to do with revocation */
+    revocation_ctx rev_ctx; /** Settings/data structs to do with revocation */
 
-	struct sockaddr int_addr; /** Internal address--the program using SSA */
-	int int_addrlen;          /** The size of \p int_addr */
-	union {
-		struct sockaddr ext_addr; /** External address--the remote peer */
-		struct sockaddr rem_addr; /** Remote address--the remote host */
-	};
-	union {
-		int ext_addrlen; /** The size of \p ext_addr */
-		int rem_addrlen; /** The size of \p rem_addr */
-	};
+    struct sockaddr int_addr; /** Internal address--the program using SSA */
+    int int_addrlen;          /** The size of \p int_addr */
+    union {
+        struct sockaddr ext_addr; /** External address--the remote peer */
+        struct sockaddr rem_addr; /** Remote address--the remote host */
+    };
+    union {
+        int ext_addrlen; /** The size of \p ext_addr */
+        int rem_addrlen; /** The size of \p rem_addr */
+    };
     int local_port; /** Used for temporarily storing connections in daemon */
 
-	char rem_hostname[MAX_HOSTNAME+1]; /** The hostname being connected to */
+    char rem_hostname[MAX_HOSTNAME+1]; /** The hostname being connected to */
 
     char err_string[MAX_ERR_STRING+1]; /** String describing TLS/daemon error */
     unsigned int handshake_err_code;   /** TLS error code for verify failure */

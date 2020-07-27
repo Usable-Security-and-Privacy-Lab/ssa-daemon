@@ -16,7 +16,7 @@
 #include "sessions.h"
 #include "socket_setup.h"
 
-#define HASHMAP_NUM_BUCKETS	100
+#define HASHMAP_NUM_BUCKETS    100
 #define CACHE_NUM_BUCKETS 20
 
 
@@ -37,65 +37,65 @@
  */
 daemon_ctx* daemon_context_new(char* config_path, int port) {
 
-	daemon_ctx* daemon = NULL;
-	
-	daemon = calloc(1, sizeof(daemon_ctx));
-	if (daemon == NULL)
-		goto err;
+    daemon_ctx* daemon = NULL;
+    
+    daemon = calloc(1, sizeof(daemon_ctx));
+    if (daemon == NULL)
+        goto err;
 
-	daemon->port = port;
-	
-	daemon->ev_base = event_base_new();
-	if (daemon->ev_base == NULL)
-		goto err;
-	if (event_base_priority_init(daemon->ev_base, 3) != 0)
-		goto err;
+    daemon->port = port;
+    
+    daemon->ev_base = event_base_new();
+    if (daemon->ev_base == NULL)
+        goto err;
+    if (event_base_priority_init(daemon->ev_base, 3) != 0)
+        goto err;
 
-	daemon->dns_base = evdns_base_new(daemon->ev_base, 1);
-	if (daemon->dns_base == NULL)
-		goto err;
+    daemon->dns_base = evdns_base_new(daemon->ev_base, 1);
+    if (daemon->dns_base == NULL)
+        goto err;
 
-	daemon->sock_map = hashmap_create(HASHMAP_NUM_BUCKETS);
-	if (daemon->sock_map == NULL)
-		goto err;
+    daemon->sock_map = hashmap_create(HASHMAP_NUM_BUCKETS);
+    if (daemon->sock_map == NULL)
+        goto err;
 
-	daemon->sock_map_port = hashmap_create(HASHMAP_NUM_BUCKETS);
-	if (daemon->sock_map_port == NULL)
-		goto err;
+    daemon->sock_map_port = hashmap_create(HASHMAP_NUM_BUCKETS);
+    if (daemon->sock_map_port == NULL)
+        goto err;
 
-	daemon->revocation_cache = str_hashmap_create(HASHMAP_NUM_BUCKETS);
-	if (daemon->revocation_cache == NULL)
-		goto err;
+    daemon->revocation_cache = str_hashmap_create(HASHMAP_NUM_BUCKETS);
+    if (daemon->revocation_cache == NULL)
+        goto err;
 
     /*
-	daemon->ssl_ctx_cache = str_hashmap_create(HASHMAP_NUM_BUCKETS);
-	if (daemon->revocation_cache == NULL)
-		goto err;
+    daemon->ssl_ctx_cache = str_hashmap_create(HASHMAP_NUM_BUCKETS);
+    if (daemon->revocation_cache == NULL)
+        goto err;
      */
 
-	daemon->settings = parse_config(config_path);
-	if (daemon->settings == NULL)
-		goto err;
+    daemon->settings = parse_config(config_path);
+    if (daemon->settings == NULL)
+        goto err;
 
-	/* Setup netlink socket */
-	/* Set up non-blocking netlink socket with event base */
-	daemon->netlink_sock = netlink_connect(daemon);
-	if (daemon->netlink_sock == NULL)
-		goto err;
-	
-	
-	int nl_fd = nl_socket_get_fd(daemon->netlink_sock);
-	if (evutil_make_socket_nonblocking(nl_fd) != 0)
-		goto err;
+    /* Setup netlink socket */
+    /* Set up non-blocking netlink socket with event base */
+    daemon->netlink_sock = netlink_connect(daemon);
+    if (daemon->netlink_sock == NULL)
+        goto err;
+    
+    
+    int nl_fd = nl_socket_get_fd(daemon->netlink_sock);
+    if (evutil_make_socket_nonblocking(nl_fd) != 0)
+        goto err;
 
-	return daemon;
+    return daemon;
 err:
-	if (daemon != NULL)
-		daemon_context_free(daemon);
+    if (daemon != NULL)
+        daemon_context_free(daemon);
 
-	if (errno)
-		log_printf(LOG_ERROR, "Error creating daemon: %s\n", strerror(errno));
-	return NULL;
+    if (errno)
+        log_printf(LOG_ERROR, "Error creating daemon: %s\n", strerror(errno));
+    return NULL;
 }
 
 
@@ -152,7 +152,7 @@ void daemon_context_free(daemon_ctx* daemon) {
  * @returns 0 on success, or -ECANCELED if an error occurred.
  */
 int socket_context_new(socket_ctx** new_sock_ctx, int fd,
-		daemon_ctx* daemon, unsigned long id) {
+        daemon_ctx* daemon, unsigned long id) {
 
     socket_ctx* sock_ctx = (socket_ctx*)calloc(1, sizeof(socket_ctx));
     if (sock_ctx == NULL)
@@ -204,7 +204,7 @@ socket_ctx* accepting_socket_ctx_new(socket_ctx* listener_ctx, int fd) {
     int ret;
 
     sock_ctx = (socket_ctx*)calloc(1, sizeof(socket_ctx));
-	if (sock_ctx == NULL)
+    if (sock_ctx == NULL)
         return NULL;
 
     sock_ctx->daemon = daemon;
@@ -271,19 +271,19 @@ void socket_shutdown(socket_ctx* sock_ctx) {
         sock_ctx->sockfd = NO_FD;
 
     }
-	
-	if (sock_ctx->plain.bev != NULL) {
-		bufferevent_free(sock_ctx->plain.bev);
+    
+    if (sock_ctx->plain.bev != NULL) {
+        bufferevent_free(sock_ctx->plain.bev);
         sock_ctx->plain.bev = NULL;
         sock_ctx->plain.closed = 1;
     }
 
-	if (sock_ctx->sockfd != NO_FD) {
+    if (sock_ctx->sockfd != NO_FD) {
         int ret = shutdown(sock_ctx->sockfd, SHUT_WR);
         if (ret < 0)
             LOG_W("shutdown() failed");
 
-		ret = close(sock_ctx->sockfd);
+        ret = close(sock_ctx->sockfd);
         if (ret < 0)
             LOG_W("close() returned %i:%s (likely double-closing fd)\n", 
                         errno, strerror(errno));
@@ -291,7 +291,7 @@ void socket_shutdown(socket_ctx* sock_ctx) {
         sock_ctx->sockfd = NO_FD;
     }
 
-	return;
+    return;
 }
 
 /**
@@ -343,7 +343,7 @@ void socket_context_free(socket_ctx* sock_ctx) {
     }
 
     if (sock_ctx->sockfd != NO_FD) {
-		int ret = close(sock_ctx->sockfd);
+        int ret = close(sock_ctx->sockfd);
         if (ret < 0)
             LOG_W("close() returned %i:%s (likely double-closing fd)\n", 
                         errno, strerror(errno));
@@ -369,11 +369,11 @@ void socket_context_erase(socket_ctx* sock_ctx, int port) {
     daemon_ctx* daemon = sock_ctx->daemon;
 
     log_printf(LOG_DEBUG, "Erasing connection completely\n");
-	
+    
     hashmap_del(daemon->sock_map_port, port);
 
-	socket_shutdown(sock_ctx);
-	socket_context_free(sock_ctx);
+    socket_shutdown(sock_ctx);
+    socket_context_free(sock_ctx);
 }
 
 
@@ -505,25 +505,25 @@ void ocsp_responder_free(ocsp_responder* resp) {
  */
 int check_socket_state(socket_ctx* sock_ctx, int num, ...) {
 
-	va_list args;
+    va_list args;
 
-	va_start(args, num);
+    va_start(args, num);
 
-	for (int i = 0; i < num; i++) {
-		enum socket_state state = va_arg(args, enum socket_state);
-		if (sock_ctx->state == state)
-			return 0;
-	}
-	va_end(args);
+    for (int i = 0; i < num; i++) {
+        enum socket_state state = va_arg(args, enum socket_state);
+        if (sock_ctx->state == state)
+            return 0;
+    }
+    va_end(args);
 
-	switch(sock_ctx->state) {
-	case SOCKET_ERROR:
-		set_badfd_err_string(sock_ctx);
-		return -EBADFD;
-	default:
-		set_wrong_state_err_string(sock_ctx);
-		return -EOPNOTSUPP;
-	}
+    switch(sock_ctx->state) {
+    case SOCKET_ERROR:
+        set_badfd_err_string(sock_ctx);
+        return -EBADFD;
+    default:
+        set_wrong_state_err_string(sock_ctx);
+        return -EOPNOTSUPP;
+    }
 }
 
 
@@ -559,13 +559,13 @@ char* get_hostname_port_str(socket_ctx* sock_ctx) {
  * @returns The port number.
  */
 int get_port(struct sockaddr* addr) {
-	int port = 0;
-	if (addr->sa_family == AF_UNIX) {
-		port = strtol(((struct sockaddr_un*)addr)->sun_path+1, NULL, 16);
-		log_printf(LOG_INFO, "unix port is %05x", port);
-	}
-	else {
-		port = (int)ntohs(((struct sockaddr_in*)addr)->sin_port);
-	}
-	return port;
+    int port = 0;
+    if (addr->sa_family == AF_UNIX) {
+        port = strtol(((struct sockaddr_un*)addr)->sun_path+1, NULL, 16);
+        log_printf(LOG_INFO, "unix port is %05x", port);
+    }
+    else {
+        port = (int)ntohs(((struct sockaddr_in*)addr)->sin_port);
+    }
+    return port;
 }

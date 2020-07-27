@@ -40,20 +40,20 @@
  * debugging tools. */
 int main(int argc, char* argv[]) {
 
-	char* config_path = NULL;
+    char* config_path = NULL;
 
-	if (argc > 1)
-		config_path = argv[1];
+    if (argc > 1)
+        config_path = argv[1];
 
     if (log_init(NULL, LOG_DEBUG)) {
-		fprintf(stderr, "Failed to initialize log\n");
-		exit(EXIT_FAILURE);
-	}
+        fprintf(stderr, "Failed to initialize log\n");
+        exit(EXIT_FAILURE);
+    }
 
-	if (geteuid() != 0) {
-		log_printf(LOG_ERROR, "Please run as root\n");
-		exit(EXIT_FAILURE);
-	}
+    if (geteuid() != 0) {
+        log_printf(LOG_ERROR, "Please run as root\n");
+        exit(EXIT_FAILURE);
+    }
 
     /* TODO: fork/execve here to make it a true daemon... */
     int ret = run_daemon(PORT, config_path);

@@ -28,9 +28,9 @@
 #define SSA_HASHMAP_H
 
 typedef struct hmap {
-	struct hnode** buckets; /** Array of linked list nodes to store entries */
-	int num_buckets;        /** The array size of \p buckets */
-	int item_count;         /** The number of elements currently in the map */
+    struct hnode** buckets; /** Array of linked list nodes to store entries */
+    int num_buckets;        /** The array size of \p buckets */
+    int item_count;         /** The number of elements currently in the map */
 } hmap_t;
 
 

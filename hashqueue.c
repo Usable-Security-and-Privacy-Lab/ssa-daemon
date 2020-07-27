@@ -5,9 +5,9 @@
 #define STR_MATCH(s, n) (strcmp(s, n) == 0)
 
 typedef struct hqnode {
-	struct hqnode* next;
-	char* key;
-	void* value;
+    struct hqnode* next;
+    char* key;
+    void* value;
 } hqnode_t;
 
 
@@ -18,13 +18,13 @@ typedef struct hqnode {
  * @param key A unique null-terminated string to be used as the identifier.
  */
 static int hash(hqueue_t* queue, char* key) {
-	int i;
-	int hash_val = 0;
-	
-	for (i = 0; i < strlen(key); ++i)
-		hash_val += key[i];
+    int i;
+    int hash_val = 0;
+    
+    for (i = 0; i < strlen(key); ++i)
+        hash_val += key[i];
 
-	return hash_val % queue->num_buckets;
+    return hash_val % queue->num_buckets;
 }
 
 /**
@@ -35,17 +35,17 @@ static int hash(hqueue_t* queue, char* key) {
  * @returns A new string hashqueue pointer, or NULL on failure.
  */
 hqueue_t* hashqueue_create(int num_buckets) {
-	hqueue_t* queue = (hqueue_t*)malloc(sizeof(hqueue_t));
-	if (queue == NULL) {
-		return NULL;
-	}
-	queue->buckets = (hqnode_t**)calloc(num_buckets, sizeof(hqnode_t*));
-	if (queue->buckets == NULL) {
-		free(queue);
-		return NULL;
-	}
-	queue->num_buckets = num_buckets;
-	return queue;
+    hqueue_t* queue = (hqueue_t*)malloc(sizeof(hqueue_t));
+    if (queue == NULL) {
+        return NULL;
+    }
+    queue->buckets = (hqnode_t**)calloc(num_buckets, sizeof(hqnode_t*));
+    if (queue->buckets == NULL) {
+        free(queue);
+        return NULL;
+    }
+    queue->num_buckets = num_buckets;
+    return queue;
 }
 
 
@@ -56,27 +56,27 @@ hqueue_t* hashqueue_create(int num_buckets) {
  * @param free_func The function used to free each value from the hashqueue.
  */
 void hashqueue_deep_free(hqueue_t* queue, void (*free_func)(void*)) {
-	hqnode_t* cur = NULL;
-	hqnode_t* tmp = NULL;
-	int i;
-	if (queue == NULL) {
-		return;
-	}
-	for (i = 0; i < queue->num_buckets; i++) {
-		cur = queue->buckets[i];
-		while (cur != NULL) {
-			tmp = cur->next;
-			if (free_func != NULL)
-				free_func(cur->value);
-			
+    hqnode_t* cur = NULL;
+    hqnode_t* tmp = NULL;
+    int i;
+    if (queue == NULL) {
+        return;
+    }
+    for (i = 0; i < queue->num_buckets; i++) {
+        cur = queue->buckets[i];
+        while (cur != NULL) {
+            tmp = cur->next;
+            if (free_func != NULL)
+                free_func(cur->value);
+            
             free(cur->key);
-			free(cur);
-			cur = tmp;
-		}
-	}
-	free(queue->buckets);
-	free(queue);
-	return;
+            free(cur);
+            cur = tmp;
+        }
+    }
+    free(queue->buckets);
+    free(queue);
+    return;
 }
 
 /**
@@ -85,8 +85,8 @@ void hashqueue_deep_free(hqueue_t* queue, void (*free_func)(void*)) {
  * @param queue The queue to be freed.
  */
 void hashqueue_free(hqueue_t* queue) {
-	hashqueue_deep_free(queue, NULL);
-	return;
+    hashqueue_deep_free(queue, NULL);
+    return;
 }
 
 
@@ -101,8 +101,8 @@ void hashqueue_free(hqueue_t* queue) {
 int hashqueue_push(hqueue_t* queue, char* key, void* value) {
 
     int index;
-	hqnode_t* cur;
-	hqnode_t* new_node;
+    hqnode_t* cur;
+    hqnode_t* new_node;
     
     if (key == NULL)
         return 1;
@@ -117,19 +117,19 @@ int hashqueue_push(hqueue_t* queue, char* key, void* value) {
 
     index = hash(queue, key);
 
-	cur = queue->buckets[index];
-	if (cur == NULL) {
-		queue->buckets[index] = new_node;
-		queue->item_count++;
-		return 0;
-	}
+    cur = queue->buckets[index];
+    if (cur == NULL) {
+        queue->buckets[index] = new_node;
+        queue->item_count++;
+        return 0;
+    }
 
     while (cur->next != NULL)
         cur = cur->next;
 
     cur->next = new_node;
-	queue->item_count++;
-	return 0;
+    queue->item_count++;
+    return 0;
 }
 
 /**
@@ -140,38 +140,38 @@ int hashqueue_push(hqueue_t* queue, char* key, void* value) {
  */
 int hashqueue_pop(hqueue_t* queue, char* key) {
 
-	int index;
-	hqnode_t* cur;
-	hqnode_t* tmp;
-	index = hash(queue, key);
+    int index;
+    hqnode_t* cur;
+    hqnode_t* tmp;
+    index = hash(queue, key);
 
-	cur = queue->buckets[index];
-	if (cur == NULL) {
-		/* Not found */
-		return 1;
-	}
+    cur = queue->buckets[index];
+    if (cur == NULL) {
+        /* Not found */
+        return 1;
+    }
 
-	if (STR_MATCH(cur->key,key)) {
-		queue->buckets[index] = cur->next;
+    if (STR_MATCH(cur->key,key)) {
+        queue->buckets[index] = cur->next;
         free(cur->key);
-		free(cur);
-		queue->item_count--;
-		return 0;
-	}
-	while (cur->next != NULL) {
+        free(cur);
+        queue->item_count--;
+        return 0;
+    }
+    while (cur->next != NULL) {
         tmp = cur->next;
 
-		if (STR_MATCH(tmp->key,key)) {
-			cur->next = tmp->next;
+        if (STR_MATCH(tmp->key,key)) {
+            cur->next = tmp->next;
             free(tmp->key);
-			free(tmp);
-			queue->item_count--;
-			return 0;
-		}
-		cur = tmp;
-	}
-	/* Not found */
-	return 1;
+            free(tmp);
+            queue->item_count--;
+            return 0;
+        }
+        cur = tmp;
+    }
+    /* Not found */
+    return 1;
 }
 
 
@@ -183,29 +183,29 @@ int hashqueue_pop(hqueue_t* queue, char* key) {
  * or NULL if no entry exists in the hashqueue for \p key.
  */
 void* hashqueue_front(hqueue_t* queue, char* key) {
-	int index;
-	hqnode_t* cur;
+    int index;
+    hqnode_t* cur;
 
-	if (key == NULL) {
-		return NULL;
-	}
+    if (key == NULL) {
+        return NULL;
+    }
 
-	index = hash(queue, key);
-	cur = queue->buckets[index];
-	if (cur == NULL) {
-		/* Not found */
-		return NULL;
-	}
-	if (STR_MATCH(cur->key,key)) {
-		return cur->value;
-	}
-	while (cur->next != NULL) {
-		if (STR_MATCH(cur->next->key, key))
-			return cur->next->value;
-		
-		cur = cur->next;
-	}
-	return NULL;
+    index = hash(queue, key);
+    cur = queue->buckets[index];
+    if (cur == NULL) {
+        /* Not found */
+        return NULL;
+    }
+    if (STR_MATCH(cur->key,key)) {
+        return cur->value;
+    }
+    while (cur->next != NULL) {
+        if (STR_MATCH(cur->next->key, key))
+            return cur->next->value;
+        
+        cur = cur->next;
+    }
+    return NULL;
 }
 
 
@@ -214,19 +214,19 @@ void* hashqueue_front(hqueue_t* queue, char* key) {
  * @param queue The queue to print.
  */
 void hashqueue_print(hqueue_t* queue) {
-	int i;
-	hqnode_t* cur;
-	printf("Hash queue contents:\n");
-	for (i = 0; i < queue->num_buckets; i++) {
-		printf("\tBucket %d:\n", i);
-		cur = queue->buckets[i];
-		while (cur) {
-			printf("\t\tNode [key = \"%s\", value=%p]\n",
-				cur->key, cur->value);
-			cur = cur->next;
-		}
-	}
-	return;
+    int i;
+    hqnode_t* cur;
+    printf("Hash queue contents:\n");
+    for (i = 0; i < queue->num_buckets; i++) {
+        printf("\tBucket %d:\n", i);
+        cur = queue->buckets[i];
+        while (cur) {
+            printf("\t\tNode [key = \"%s\", value=%p]\n",
+                cur->key, cur->value);
+            cur = cur->next;
+        }
+    }
+    return;
 }
 
 
@@ -244,35 +244,35 @@ void hashqueue_print(hqueue_t* queue) {
  */
 int hashqueue_remove(hqueue_t* queue, char* key, void* value) {
 
-	int index;
-	hqnode_t* cur;
-	hqnode_t* tmp;
-	index = hash(queue, key);
+    int index;
+    hqnode_t* cur;
+    hqnode_t* tmp;
+    index = hash(queue, key);
 
-	cur = queue->buckets[index];
-	if (cur == NULL)
-		return 1; /* Not found */
+    cur = queue->buckets[index];
+    if (cur == NULL)
+        return 1; /* Not found */
 
-	if (STR_MATCH(cur->key,key) && cur->value == value) {
-		queue->buckets[index] = cur->next;
+    if (STR_MATCH(cur->key,key) && cur->value == value) {
+        queue->buckets[index] = cur->next;
         free(cur->key);
-		free(cur);
-		queue->item_count--;
-		return 0;
-	}
-	while (cur->next != NULL) {
+        free(cur);
+        queue->item_count--;
+        return 0;
+    }
+    while (cur->next != NULL) {
         tmp = cur->next;
 
-		if (STR_MATCH(tmp->key,key) && cur->value == value) {
-			cur->next = tmp->next;
+        if (STR_MATCH(tmp->key,key) && cur->value == value) {
+            cur->next = tmp->next;
             free(tmp->key);
-			free(tmp);
-			queue->item_count--;
-			return 0;
-		}
-		cur = tmp;
-	}
+            free(tmp);
+            queue->item_count--;
+            return 0;
+        }
+        cur = tmp;
+    }
 
-	/* Not found */
-	return 1;
+    /* Not found */
+    return 1;
 }

@@ -85,7 +85,7 @@ void socket_cb(daemon_ctx* ctx, unsigned long id, char* comm);
  * @returns (via Netlink) a notification of 0 on success, or -errno on failure.
  */
 void setsockopt_cb(daemon_ctx* ctx, unsigned long id, int level, 
-		int option, void* value, socklen_t len);
+        int option, void* value, socklen_t len);
 
 
 /**
@@ -146,7 +146,7 @@ void bind_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr,
  * to be returned.
  */
 void connect_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr, 
-	int int_addrlen, struct sockaddr* rem_addr, int rem_addrlen, int blocking);
+    int int_addrlen, struct sockaddr* rem_addr, int rem_addrlen, int blocking);
 
 
 
@@ -167,7 +167,7 @@ void connect_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr,
  * @returns (via Netlink) a notification of 0 for success, or -errno for errors.
  */
 void listen_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr,
-	int int_addrlen, struct sockaddr* ext_addr, int ext_addrlen);
+    int int_addrlen, struct sockaddr* ext_addr, int ext_addrlen);
 
 
 /**
@@ -185,7 +185,7 @@ void listen_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr,
  * @param int_addrlen The size of \p int_addr.
  */
 void associate_cb(daemon_ctx* ctx, unsigned long id, struct sockaddr* int_addr,
-	       	int int_addrlen);
+               int int_addrlen);
 
 
 /**

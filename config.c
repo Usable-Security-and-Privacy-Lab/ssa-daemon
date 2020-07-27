@@ -16,8 +16,8 @@
 #define MAX_STRLIST_SIZE 100
 
 /* These are all of the possible config labels. To add, define another here
- * and add it to the if/else chain in parse_next_<client/server>_setting().
- * Note that these should be in lowercase--it's what we convert input to. */
+* and add it to the if/else chain in parse_next_<client/server>_setting().
+* Note that these should be in lowercase--it's what we convert input to. */
 #define CA_PATH         "ca-path"
 #define CIPHER_LIST     "cipher-list"
 #define CIPHERSUITES    "ciphersuites"
@@ -90,76 +90,76 @@ void log_parser_error(yaml_parser_t parser);
 /*******************************************************************************
  *              UNDERSTANDING THIS FILE (AND LIBYAML IN GENERAL)
  *******************************************************************************
- *
- * In libyaml (and YAML in general), .yml configuration files can be represented
- * by a sequence of tokens, or 'events'. This series of events always starts 
- * with a STREAM_START event and ends with a STREAM_END event, to indicate the 
- * start and end of a given file. Furthermore, a file may have one or multiple
- * 'documents' within it. The start of a document is designated by three dashes,
- * '---'; the end of a document can be designated the same way if another 
- * document is to be started immediately after it, or by three dots '...' if it
- * is the last document in the file. If only one document exists in a file, 
- * these are implied and do not need to be added (this is what we do).
- * Then, if one uses a set of one or more key:value pairs within the document,
- * these are designated by MAPPING_START and MAPPING_END tokens wrapped around
- * the set of them. If a list (designated by dashes '-') is found in the 
- * document, they are designated by a SEQUENCE_START and SEQUENCE_END event
- * at the start and end of the list. Other than that, every value scanned is
- * represented by a SCALAR event (there are more possibilities than this but 
- * this is all we'll use).
- *  
- * So, if you had the document:
- * ---
- * client: hello
- * ...
- * 
- * It would be represented by the following tokens:
- * STREAM_START
- * DOCUMENT_START
- * MAPPING_START
- * SCALAR ('client')
- * SCALAR('hello')
- * MAPPING_END
- * DOCUMENT_END
- * STREAM_END
- * 
- * Similarly, the following document:
- * client:
- *   min-tls-version: 1.2
- *   cipher-list:
- *     - cipher-1
- *     - cipher-2
- *     - cipher-3
- *   tls-compression: off
- * 
- * Would be represented by the following tokens:
- * STREAM_START
- * DOCUMENT_START
- * MAPPING_START
- * SCALAR ('client')
- * MAPPING_START
- * SCALAR ('min-tls-version')
- * SCALAR ('1.2')
- * SCALAR ('cipher-list')
- * SEQUENCE_START
- * SCALAR ('cipher-1')
- * SCALAR ('cipher-2')
- * SCALAR ('cipher-3')
- * SEQUENCE_END
- * SCALAR ('tls-compression')
- * SCALAR ('off')
- * MAPPING_END
- * MAPPING_END
- * DOCUMENT_END
- * STREAM_END
- * 
- * You'll notice that MAPPING_START/END and SEQUENCE START/END only wraps
- * around the entire set of tokens, not around each one. A corollary of this
- * is that key:value pairs are only implied, with one after the other. Lastly,
- * the key:value pair with the list has a SCALAR key, and then the entire list
- * covered by SEQUENCE_START and SEQUENCE_END is the value of that key.
- * 
- */
+*
+* In libyaml (and YAML in general), .yml configuration files can be represented
+* by a sequence of tokens, or 'events'. This series of events always starts 
+* with a STREAM_START event and ends with a STREAM_END event, to indicate the 
+* start and end of a given file. Furthermore, a file may have one or multiple
+* 'documents' within it. The start of a document is designated by three dashes,
+* '---'; the end of a document can be designated the same way if another 
+* document is to be started immediately after it, or by three dots '...' if it
+* is the last document in the file. If only one document exists in a file, 
+* these are implied and do not need to be added (this is what we do).
+* Then, if one uses a set of one or more key:value pairs within the document,
+* these are designated by MAPPING_START and MAPPING_END tokens wrapped around
+* the set of them. If a list (designated by dashes '-') is found in the 
+* document, they are designated by a SEQUENCE_START and SEQUENCE_END event
+* at the start and end of the list. Other than that, every value scanned is
+* represented by a SCALAR event (there are more possibilities than this but 
+* this is all we'll use).
+*  
+* So, if you had the document:
+* ---
+* client: hello
+* ...
+* 
+* It would be represented by the following tokens:
+* STREAM_START
+* DOCUMENT_START
+* MAPPING_START
+* SCALAR ('client')
+* SCALAR('hello')
+* MAPPING_END
+* DOCUMENT_END
+* STREAM_END
+* 
+* Similarly, the following document:
+* client:
+*   min-tls-version: 1.2
+*   cipher-list:
+*     - cipher-1
+*     - cipher-2
+*     - cipher-3
+*   tls-compression: off
+* 
+* Would be represented by the following tokens:
+* STREAM_START
+* DOCUMENT_START
+* MAPPING_START
+* SCALAR ('client')
+* MAPPING_START
+* SCALAR ('min-tls-version')
+* SCALAR ('1.2')
+* SCALAR ('cipher-list')
+* SEQUENCE_START
+* SCALAR ('cipher-1')
+* SCALAR ('cipher-2')
+* SCALAR ('cipher-3')
+* SEQUENCE_END
+* SCALAR ('tls-compression')
+* SCALAR ('off')
+* MAPPING_END
+* MAPPING_END
+* DOCUMENT_END
+* STREAM_END
+* 
+* You'll notice that MAPPING_START/END and SEQUENCE START/END only wraps
+* around the entire set of tokens, not around each one. A corollary of this
+* is that key:value pairs are only implied, with one after the other. Lastly,
+* the key:value pair with the list has a SCALAR key, and then the entire list
+* covered by SEQUENCE_START and SEQUENCE_END is the value of that key.
+* 
+*/
 
 /*******************************************************************************
  *    THE IMPORTANT STUFF (WHERE TO ADD ADDITIONAL CONFIG SETTINGS EASILY)
@@ -207,7 +207,7 @@ int parse_next_setting(yaml_parser_t* parser, global_config* config) {
     str_tolower(label);
 
     /* This is the list of all possible client setting labels;
-     * ADD ADDITIONAL SETTINGS AS NEEDS BE HERE (as well as to the struct) */
+    * ADD ADDITIONAL SETTINGS AS NEEDS BE HERE (as well as to the struct) */
     if (strcmp(label, CA_PATH) == 0) {
         ret = parse_string(parser, &config->ca_path);
 
@@ -304,10 +304,10 @@ int parse_next_setting(yaml_parser_t* parser, global_config* config) {
 
 
 /*
- *******************************************************************************
- *      USE THESE FUNCTIONS TO PARSE INFO INTO THE GLOBAL_CONFIG STRUCT
- *******************************************************************************
- */ 
+*******************************************************************************
+*      USE THESE FUNCTIONS TO PARSE INFO INTO THE GLOBAL_CONFIG STRUCT
+*******************************************************************************
+*/ 
 
 /* Helpful parsing functions */
 
@@ -519,9 +519,9 @@ int parse_tls_version(yaml_parser_t* parser, enum tls_version* version) {
 
 /**
  *******************************************************************************
- *       FUNCTIONS TO PARSE THE CONFIG FILE AND ENSURE CORRECT FORMAT
- *******************************************************************************
- */
+*       FUNCTIONS TO PARSE THE CONFIG FILE AND ENSURE CORRECT FORMAT
+*******************************************************************************
+*/
 
 
 /**
@@ -679,9 +679,9 @@ int parse_settings(yaml_parser_t* parser, global_config* settings) {
 
 /**
  *******************************************************************************
- *                HELPER FUNCTIONS FOR PARSING/STRING CHECKING
- *******************************************************************************
- */
+*                HELPER FUNCTIONS FOR PARSING/STRING CHECKING
+*******************************************************************************
+*/
 
 
 /**
