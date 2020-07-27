@@ -932,7 +932,7 @@ void associate_cb(daemon_ctx* daemon, unsigned long id,
 
     sock_ctx = hashmap_get(daemon->sock_map_port, port);
     if (sock_ctx == NULL) {
-        log_printf(LOG_ERROR, "Port provided in associate_cb not found\n");
+        LOG_I("Port provided in associate_cb not found\n");
         /* socket_ctx encountered fatal error and was erased before accepted */
         netlink_notify_kernel(daemon, id, -ECONNABORTED);
         return;
@@ -941,7 +941,7 @@ void associate_cb(daemon_ctx* daemon, unsigned long id,
     hashmap_del(daemon->sock_map_port, port);
     sock_ctx->local_port = 0;
 
-    if (sock_ctx->state != SOCKET_CONNECTING)
+    if (sock_ctx->state != SOCKET_FINISHING_CONN)
         goto err;
 
     sock_ctx->id = id;
@@ -975,7 +975,7 @@ void close_cb(daemon_ctx* daemon, unsigned long id) {
 
     sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);
     if (sock_ctx == NULL) {
-        log_printf(LOG_ERROR, "Close called on non-existent socket\n");
+        LOG_I("Close called on non-existent socket\n");
         return;
     }
 
