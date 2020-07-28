@@ -95,8 +95,8 @@ key-path: test_files/certs/server_key.pem
 cert-path: test_files/certs/testing/ecdsa
 key-path: test_files/certs/testing/ecdsa_key.pem
 
-#cert-path: test_files/certs/testing/rsa
-#key-path: test_files/certs/testing/rsa_key.pem 
+cert-path: test_files/certs/testing/rsa
+key-path: test_files/certs/testing/rsa_key.pem 
 
 #cert-path: test_files/certs/testing/dsa
 #key-path: test_files/certs/testing/dsa_key.pem 

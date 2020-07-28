@@ -3,13 +3,11 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <dirent.h>
 
 #include <event2/bufferevent.h>
 #include <event2/bufferevent_ssl.h>
 #include <event2/event.h>
 #include <openssl/err.h>
-#include <openssl/x509v3.h>
 
 #include "config.h"
 #include "connection_callbacks.h"
@@ -131,9 +129,16 @@ SSL_CTX* SSL_CTX_create(global_config* settings) {
 			goto err;
 	}
 
-	ret = load_certificates(ctx, settings); 
-	if (ret != 1) 
-		goto err;
+	for(int i = 0; i < settings->cert_cnt; ++i) {
+		ret = load_certificates(ctx, settings->certificates[i]); 
+		if (ret != 1) 
+			goto err;
+
+		ret = load_private_key(ctx, settings->private_keys[i]); 
+		if(ret != 1) 
+			goto err;
+		
+	}
 
 	return ctx;
 err:

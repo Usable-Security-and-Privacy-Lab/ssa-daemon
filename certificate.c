@@ -1,10 +1,8 @@
 #include <string.h>
-#include <dirent.h>
-
-#include <openssl/x509v3.h>
 
 #include "error.h"
 #include "log.h"
+#include "certificate.h"
 
 /**
  * Check if null terminated string ends with ".pem".
@@ -177,84 +175,83 @@ int add_directory_certs(SSL_CTX* ctx, X509** cert_list, int num_certs) {
 }
 
 /**
- * Each certificate file or directory in the config file are built and loaded  
- * into ctx with their associated private key. Private keys are checked to
- * ensure they match the end entity.
- * @param ctx The context that certificates will be loaded into.
- * @param settings The settings struct from the config file. Used to get 
- * the certificates and keys that will be loaded. 
- * @returns 1 on success, 0 on error.
+ * Loads a private key into SSL_CTX, verifies the key matches the last certificate 
+ * chain loaded in ctx, and builds the certificate chain. This function should be 
+ * called after a certificate is loaded into the CTX. 
+ * @param ctx The context the private key will be loaded into.
+ * @param key_path Path to private key file. This file should be PEM or DER (ASN1).
+ * @return 1 on success, 0 on error.
  */
-int load_certificates(SSL_CTX* ctx, global_config* settings) {
-	char** cert_chain = settings->certificates;
-	int cert_cnt = settings->cert_cnt;
+int load_private_key(SSL_CTX* ctx, char* key_path) {
+	int file_type;
+	if(is_pem_file(key_path)) 
+		file_type = SSL_FILETYPE_PEM;
+	else 
+		file_type = SSL_FILETYPE_ASN1;
 
-	if(settings->key_cnt != cert_cnt) {
-		log_printf(LOG_ERROR, "Number of keys and certificate chains differ.\n");
+	int ret = SSL_CTX_use_PrivateKey_file(ctx, key_path, file_type);
+	if (ret != 1) { 
+		log_printf(LOG_ERROR, "Couldn't use private key file\n");
 		return 0;
 	}
 
-	for(int i = 0; i < cert_cnt; ++i) {
-		char* path = cert_chain[i];
-		DIR* directory = opendir(path);
+	ret = SSL_CTX_check_private_key(ctx);
+	if (ret != 1) {
+		log_printf(LOG_ERROR, "Loaded Private Key didn't match cert chain\n");
+		return 0;
+	}
+	
+	ret = SSL_CTX_build_cert_chain(ctx, 0); 
+	if (ret != 1) {
+		log_printf(LOG_ERROR, "Incomplete server certificate chain\n");
+		return 0;
+	}
 
-		if(is_pem_file(path)) {
-			if(SSL_CTX_use_certificate_chain_file(ctx, path) != 1) {
-				log_printf(LOG_ERROR, "Failed to load certificate chain file.\n");
-				return 0;
-			}
-		}
-		else if(directory != NULL) {
-			int num_certs = get_directory_size(directory);
-			closedir(directory);
-			X509* cert_list[num_certs];
-			directory = opendir(path);
 
-			int ret = get_directory_certs(cert_list, directory, path);
-			if(ret < 0) {
-				log_printf(LOG_ERROR, "Failed to get certificates from directory.\n");
-				return 0;
-			}
-			
-			ret = add_directory_certs(ctx, cert_list, num_certs);
-			if(ret < 1) {
-				free_certificates(cert_list, num_certs, directory);
-				log_printf(LOG_ERROR, "Failed to add certificates from directory.\n");
-				return 0;
-			}
+	return 1;
+}
 
-			free_certificates(cert_list, num_certs, directory);
-		}
-		else {
-			log_printf(LOG_ERROR, "[cert-path] must be a pem file or directory.\n");
+/**
+ * A certificate file or directory is loaded into ctx. The private key should
+ * be loaded into ctx after this function is called. 
+ * @param ctx The context that certificates will be loaded into.
+ * @param path The path to a PEM file or directory containing all certificates
+ * in the chain to be loaded into ctx.
+ * @returns 1 on success, 0 on error.
+ */
+int load_certificates(SSL_CTX* ctx, char* path) {
+	DIR* directory = opendir(path);
+
+	if(is_pem_file(path)) {
+		if(SSL_CTX_use_certificate_chain_file(ctx, path) != 1) {
+			log_printf(LOG_ERROR, "Failed to load certificate chain file.\n");
 			return 0;
 		}
+	}
+	else if(directory != NULL) {
+		int num_certs = get_directory_size(directory);
+		closedir(directory);
+		X509* cert_list[num_certs];
+		directory = opendir(path);
 
-		int file_type;
-		char* key_path = settings->private_keys[i];
-		if(is_pem_file(key_path)) 
-			file_type = SSL_FILETYPE_PEM;
-		else 
-			file_type = SSL_FILETYPE_ASN1;
-
-		int ret = SSL_CTX_use_PrivateKey_file(ctx, key_path, file_type);
-		if (ret != 1) { 
-			log_printf(LOG_ERROR, "Couldn't use private key file\n");
-			return 0;
-		}
-
-		ret = SSL_CTX_check_private_key(ctx);
-		if (ret != 1) {
-			log_printf(LOG_ERROR, "Loaded Private Key didn't match cert chain\n");
+		int ret = get_directory_certs(cert_list, directory, path);
+		if(ret < 0) {
+			log_printf(LOG_ERROR, "Failed to get certificates from directory.\n");
 			return 0;
 		}
 		
-		ret = SSL_CTX_build_cert_chain(ctx, 0); 
-		if (ret != 1) {
-			log_printf(LOG_ERROR, "Incomplete server certificate chain\n");
+		ret = add_directory_certs(ctx, cert_list, num_certs);
+		if(ret < 1) {
+			free_certificates(cert_list, num_certs, directory);
+			log_printf(LOG_ERROR, "Failed to add certificates from directory.\n");
 			return 0;
 		}
 
+		free_certificates(cert_list, num_certs, directory);
+	}
+	else {
+		log_printf(LOG_ERROR, "[cert-path] must be a pem file or directory.\n");
+		return 0;
 	}
 
 	return 1;
