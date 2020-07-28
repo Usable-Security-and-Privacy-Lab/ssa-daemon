@@ -107,7 +107,7 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
         response = get_crl_checks(sock_ctx, (int**) data, len);
         break;
 
-    case TLS_CACHE_REVOCATION:
+    case TLS_CACHED_REV_CHECKS:
         response = get_cached_checks(sock_ctx, (int**) data, len);
 
     case TLS_CONTEXT:

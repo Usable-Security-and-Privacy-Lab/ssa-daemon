@@ -86,7 +86,7 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
     case TLS_COMPRESSION:
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
             break;
-        set_tls_compression(sock_ctx, (int*) value, len);
+        response = set_tls_compression(sock_ctx, (int*) value, len);
         break;
 
     case TLS_REVOCATION_CHECKS:
@@ -113,7 +113,7 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
         response = set_crl_checks(sock_ctx, (int*) value, len);
         break;
 
-    case TLS_CACHE_REVOCATION:
+    case TLS_CACHED_REV_CHECKS:
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
             break;
         response = set_rev_cache_checks(sock_ctx, (int*) value, len);
@@ -342,7 +342,7 @@ int set_tls_compression(socket_ctx* sock_ctx, int* value, socklen_t len) {
         return -EINVAL;
 
     if (compression_enabled == 1 && settings->tls_compression == 0)
-        return -EINVAL;
+        return -EPROTO;
 
     if (compression_enabled == 1)
         opts &= ~SSL_OP_NO_COMPRESSION;
@@ -457,8 +457,8 @@ int set_ocsp_stapled_checks(socket_ctx* sock_ctx, int* enabled, socklen_t len) {
     if (len != sizeof(int))
         return -EINVAL;
 
-    if (*enabled == 0 && has_stapled_checks(settings->revocation_checks))
-        return -EPROTO; /* fail if disabling when config has checks enforced */
+    if (*enabled == 1 && !has_stapled_checks(settings->revocation_checks))
+        return -EPROTO; /* fail if enabling when config disables it */
     
     if (*enabled == 1)
         turn_on_stapled_checks(sock_ctx->rev_ctx.checks);
@@ -477,8 +477,8 @@ int set_ocsp_checks(socket_ctx* sock_ctx, int* enabled, socklen_t len) {
     if (len != sizeof(int))
         return -EINVAL;
 
-    if (*enabled == 0 && has_ocsp_checks(settings->revocation_checks))
-        return -EPROTO; /* fail if disabling when config has checks enforced */
+    if (*enabled == 1 && !has_ocsp_checks(settings->revocation_checks))
+        return -EPROTO; /* fail if enabling when config disables it */
     
     if (*enabled == 1)
         turn_on_ocsp_checks(sock_ctx->rev_ctx.checks);
@@ -497,8 +497,8 @@ int set_crl_checks(socket_ctx* sock_ctx, int* enabled, socklen_t len) {
     if (len != sizeof(int))
         return -EINVAL;
 
-    if (*enabled == 0 && has_crl_checks(settings->revocation_checks))
-        return -EPROTO; /* fail if disabling when config has checks enforced */
+    if (*enabled == 1 && !has_crl_checks(settings->revocation_checks))
+        return -EPROTO; /* fail if enabling when config disables it */
     
     if (*enabled == 1)
         turn_on_crl_checks(sock_ctx->rev_ctx.checks);
@@ -517,8 +517,8 @@ int set_rev_cache_checks(socket_ctx* sock_ctx, int* enabled, socklen_t len) {
     if (len != sizeof(int))
         return -EINVAL;
     
-    if (*enabled == 0 && has_cached_checks(settings->revocation_checks))
-        return -EPROTO; /* fail if disabling when config has checks enforced */
+    if (*enabled == 1 && !has_cached_checks(settings->revocation_checks))
+        return -EPROTO; /* fail if enabling when config disables it */
     
     if (*enabled == 1)
         turn_on_cached_checks(sock_ctx->rev_ctx.checks);

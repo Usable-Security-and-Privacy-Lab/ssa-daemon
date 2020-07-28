@@ -62,7 +62,7 @@
 #define TLS_CRL_CHECKS                   105
 
 /** Whether or not cached revocation responses are used as part of checks */
-#define TLS_CACHE_REVOCATION             106
+#define TLS_CACHED_REV_CHECKS            106
 
 /** The settings and sessions associated with a given file descriptor */
 #define TLS_CONTEXT                      107
