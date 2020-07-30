@@ -279,11 +279,7 @@ void socket_shutdown(socket_ctx* sock_ctx) {
     }
 
     if (sock_ctx->sockfd != NO_FD) {
-        int ret = shutdown(sock_ctx->sockfd, SHUT_WR);
-        if (ret < 0)
-            LOG_W("shutdown() failed");
-
-        ret = close(sock_ctx->sockfd);
+        int ret = close(sock_ctx->sockfd);
         if (ret < 0)
             LOG_W("close() returned %i:%s (likely double-closing fd)\n", 
                         errno, strerror(errno));
