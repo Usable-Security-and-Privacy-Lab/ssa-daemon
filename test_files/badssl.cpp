@@ -1,124 +1,43 @@
 #include <gtest/gtest.h>
-#include <string>
-
-#include <future>
-#include <stdlib.h>
-
-#include "timeouts.h"
-
-extern "C" {
-#include <netdb.h>
 
 #include "helper_functions.h"
+#include "timeouts.h"
 
-const char* ERR_SOURCE_CONNECT = "connect()";
-const char* ERR_SOURCE_HOSTNAME = "TLS_HOSTNAME getsockopt()";
 
+void do_connection_test(std::string hostname, 
+        std::string port, bool should_connect) {
+
+    TEST_TIMEOUT_BEGIN
+
+    int fd = create_socket(BLOCKING_SOCKET);
+    if (fd < 0)
+        FAIL();
+
+    set_hostname(fd, hostname);
+
+    if (should_connect)
+        connect_to_host(fd, hostname, port);
+    else
+        connect_to_host_fail(fd, hostname, port, EPROTO);
+
+    close(fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_LONG)
 }
 
-
-
-#define TEST_CONNECT_FAIL(testname, hostname_str, port_str)         \
+#define TEST_CONNECT_FAIL(testname, hostname, port)                 \
     TEST(BadSSLTests, testname) {                                   \
-                                                                    \
-        TEST_TIMEOUT_BEGIN                                          \
-                                                                    \
-        const int EPROTO_ERRNO = EPROTO;                            \
-        struct sockaddr* addr;                                      \
-        socklen_t addrlen;                                          \
-        std::string hostname = hostname_str;                        \
-        std::string port = port_str;                                \
-        int dns_failed;                                             \
-        int fd;                                                     \
-                                                                    \
-                                                                    \
-        dns_failed = resolve_dns(hostname.c_str(),                  \
-                    port.c_str(), &addr, &addrlen);                 \
-        ASSERT_EQ(dns_failed, 0);                                   \
-                                                                    \
-        fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);             \
-        int socket_errno = errno;                                   \
-        if (fd == -1)                                               \
-            perror("socket creation failed");                       \
-                                                                    \
-        EXPECT_EQ(socket_errno, 0);                                 \
-        ASSERT_GE(fd, 0);                                           \
-                                                                    \
-        int hostname_ret = setsockopt(fd, IPPROTO_TLS,              \
-                TLS_HOSTNAME, hostname.c_str(), hostname.size()+1); \
-        int hostname_errno = errno;                                 \
-        if (hostname_ret != 0)                                      \
-            print_socket_error(fd, ERR_SOURCE_HOSTNAME);            \
-                                                                    \
-        EXPECT_EQ(hostname_errno, 0);                               \
-        ASSERT_EQ(hostname_ret, 0);                                 \
-                                                                    \
-        int connect_ret = connect(fd, addr, addrlen);               \
-        int connect_errno = errno;                                  \
-                                                                    \
-        EXPECT_EQ(connect_errno, EPROTO_ERRNO);                     \
-        ASSERT_LT(connect_ret, 0);                                  \
-                                                                    \
-        print_socket_error(fd, ERR_SOURCE_CONNECT);                 \
-                                                                    \
-        free(addr);                                                 \
-        close(fd);                                                  \
-                                                                    \
-        TEST_TIMEOUT_FAIL_END(TIMEOUT_LONG)                         \
-                                                                    \
+        do_connection_test(hostname, port, SHOULD_FAIL);            \
     }
 
 
-#define TEST_CONNECT_PASS(testname, hostname_str, port_str)         \
+#define TEST_CONNECT_PASS(testname, hostname, port)                 \
     TEST(BadSSLTests, testname) {                                   \
-                                                                    \
-        TEST_TIMEOUT_BEGIN                                          \
-                                                                    \
-        const int NO_ERRNO = 0;                                     \
-        struct sockaddr* addr;                                      \
-        socklen_t addrlen;                                          \
-        std::string hostname = hostname_str;                        \
-        std::string port = port_str;                                \
-        int dns_failed;                                             \
-        int fd;                                                     \
-                                                                    \
-                                                                    \
-        dns_failed = resolve_dns(hostname.c_str(),                  \
-                    port.c_str(), &addr, &addrlen);                 \
-        ASSERT_EQ(dns_failed, 0);                                   \
-                                                                    \
-        fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);             \
-        int socket_errno = errno;                                   \
-        if (fd == -1)                                               \
-            perror("socket creation failed");                       \
-                                                                    \
-        EXPECT_EQ(socket_errno, 0);                                 \
-        ASSERT_GE(fd, 0);                                           \
-                                                                    \
-        int hostname_ret = setsockopt(fd, IPPROTO_TLS,              \
-                TLS_HOSTNAME, hostname.c_str(), hostname.size()+1); \
-        int hostname_errno = errno;                                 \
-        if (hostname_ret != 0)                                      \
-            print_socket_error(fd, ERR_SOURCE_HOSTNAME);            \
-                                                                    \
-        EXPECT_EQ(hostname_errno, 0);                               \
-        ASSERT_EQ(hostname_ret, 0);                                 \
-                                                                    \
-        int connect_ret = connect(fd, addr, addrlen);               \
-        int connect_errno = errno;                                  \
-                                                                    \
-        if (connect_ret != 0)                                       \
-            print_socket_error(fd, ERR_SOURCE_CONNECT);             \
-                                                                    \
-        EXPECT_EQ(connect_errno, NO_ERRNO);                         \
-        ASSERT_EQ(connect_ret, 0);                                  \
-                                                                    \
-        free(addr);                                                 \
-        close(fd);                                                  \
-                                                                    \
-        TEST_TIMEOUT_FAIL_END(TIMEOUT_LONG)                         \
-                                                                    \
+        do_connection_test(hostname, port, SHOULD_SUCCEED);         \
     }
+
+
+
 
 
 /*******************************************************************************
@@ -177,5 +96,4 @@ TEST_CONNECT_PASS(RSA8192, "rsa8192.badssl.com", "443")
 TEST_CONNECT_PASS(ExtendedValidation, "extended-validation.badssl.com", "443")
 TEST_CONNECT_PASS(LongSubdomainWithDashes, "long-extended-subdomain-name-containing-many-letters-and-dashes.badssl.com", "443")
 TEST_CONNECT_PASS(LongSubdomainWithoutDashes, "longextendedsubdomainnamewithoutdashesinordertotestwordwrapping.badssl.com", "443")
-
 

@@ -3,7 +3,7 @@ CXXFLAGS=-Wall -Wno-deprecated-declarations
 GTESTFLAGS=-lgtest_main -lgtest -pthread
 SSLFLAGS=-lssl -lcrypto
 
-all: helper_functions.o badssl top_500 setsockopt_tests socket_api_tests sessions_client
+all: helper_functions.o badssl top_500 socket_api_tests client_sessions
 
 badssl: badssl.cpp timeouts.h helper_functions.h helper_functions.o
 	g++ $(CXXFLAGS) -o badssl badssl.cpp timeouts.h helper_functions.h helper_functions.o $(GTESTFLAGS)
@@ -11,17 +11,14 @@ badssl: badssl.cpp timeouts.h helper_functions.h helper_functions.o
 top_500: top_500.cpp timeouts.h helper_functions.h helper_functions.o
 	g++ $(CXXFLAGS) -o top_500 top_500.cpp timeouts.h helper_functions.h helper_functions.o $(GTESTFLAGS)
 
-setsockopt_tests: setsockopt_tests.cpp timeouts.h 
-	g++ $(CXXFLAGS) -o setsockopt_tests setsockopt_tests.cpp timeouts.h helper_functions.h helper_functions.o $(GTESTFLAGS)
-
 socket_api_tests: socket_api_tests.cpp timeouts.h helper_functions.h helper_functions.o
 	g++ $(CXXFLAGS) -o socket_api_tests socket_api_tests.cpp timeouts.h helper_functions.h helper_functions.o $(GTESTFLAGS)
 
-sessions_client: sessions_client.cpp timeouts.h helper_functions.h helper_functions.o
-	g++ $(CXXFLAGS) -o sessions_client sessions_client.cpp timeouts.h helper_functions.h helper_functions.o $(GTESTFLAGS)
+client_sessions: client_sessions.cpp timeouts.h helper_functions.h helper_functions.o
+	g++ $(CXXFLAGS) -o client_sessions client_sessions.cpp timeouts.h helper_functions.h helper_functions.o $(GTESTFLAGS)
 
-helper_functions.o: helper_functions.c helper_functions.h
-	gcc -c $(CXXFLAGS) helper_functions.c
+helper_functions.o: helper_functions.cpp helper_functions.h
+	g++ -c $(CXXFLAGS) helper_functions.cpp helper_functions.h $(GTESTFLAGS)
 
 clean:
 	rm -f helper_functions.o
