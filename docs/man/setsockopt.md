@@ -145,7 +145,12 @@ listed below:
 > #### TLS_COMPRESSION
 > Sets the connection to support or disable compression of TLS records. TLS 
 > compression is entirely different from HTTP compression, and it is not 
-> commonly used as there are known vulnerabilities linked to its use. 
+> commonly used as there are known vulnerabilities linked to it. This option 
+> will only enable compression under the following conditions:
+> 1. OpenSSL must be built without the macro `OPENSSL_NO_COMP`
+> 2. The `ZLIB_SHARED` macro must be enabled (i.e. the zlib library must be 
+> compiled in such a way that it can be shared with OpenSSL)
+>
 > `optval` should point to an integer value of either `1` or `0`, and 
 > `optlen` should be equal to `sizeof(int)`.
 > 

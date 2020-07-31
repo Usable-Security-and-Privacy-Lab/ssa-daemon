@@ -35,6 +35,20 @@ below:
 
 ### TLS getsockopt options:
 
+> #### TLS_COMPRESSION
+> Determines whether TLS compression is enabled for the given socket. If the 
+> socket is connected to a peer at the time this function is called, it will 
+> report whether the connection is actively using compression. 
+>
+> `optval` should point to an integer, and `optlen` should be equal to 
+> `sizeof(int)`. `optval` will return `1` if compression is on, and `0` if off. 
+>
+> **ERRORS**
+> - `EINVAL` - Bad input (`optlen` not the right size). 
+
+
+
+
 
 
 ## RETURN VALUE

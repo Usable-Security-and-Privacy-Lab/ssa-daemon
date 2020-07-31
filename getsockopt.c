@@ -88,9 +88,6 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
         break;
 
     case TLS_COMPRESSION:
-        if ((response = check_socket_state(sock_ctx, 
-                    2, SOCKET_NEW, SOCKET_CONNECTED)) != 0)
-            break;
         response = get_tls_compression(sock_ctx, (int**) data, len);
         break;
 
@@ -315,19 +312,14 @@ int get_chosen_cipher(socket_ctx* sock_ctx, char** data, unsigned int* len) {
  */
 int get_tls_compression(socket_ctx* sock_ctx, int** data, unsigned int* len) {
 
+    if (*len != sizeof(int))
+        return -EINVAL;
+
     int* compression_enabled = malloc(sizeof(int));
     if (compression_enabled == NULL)
         return -ECANCELED;
 
-    if (sock_ctx->state == SOCKET_NEW) {
-        int opts = SSL_CTX_get_options(sock_ctx->ssl_ctx);
-
-        if (opts & SSL_OP_NO_COMPRESSION)
-            *compression_enabled = 0;
-        else
-            *compression_enabled = 1;
-
-    } else if (sock_ctx->state == SOCKET_CONNECTED) {
+    if (sock_ctx->state == SOCKET_CONNECTED) {
         SSL_SESSION* session = SSL_get0_session(sock_ctx->ssl);
         if (session == NULL) {
             free(compression_enabled);
@@ -337,8 +329,12 @@ int get_tls_compression(socket_ctx* sock_ctx, int** data, unsigned int* len) {
         *compression_enabled = SSL_SESSION_get_compress_id(session) ? 1 : 0;
     
     } else {
-        free(compression_enabled);
-        return -ECANCELED;
+        int opts = SSL_CTX_get_options(sock_ctx->ssl_ctx);
+
+        if (opts & SSL_OP_NO_COMPRESSION)
+            *compression_enabled = 0;
+        else
+            *compression_enabled = 1;
     }
 
     *data = compression_enabled;
