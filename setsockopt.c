@@ -335,7 +335,6 @@ int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, socklen_t len) {
 int set_tls_compression(socket_ctx* sock_ctx, int* value, socklen_t len) {
 
     global_config* settings = sock_ctx->daemon->settings;
-    int opts = SSL_CTX_get_options(sock_ctx->ssl_ctx);
     int compression_enabled = *value;
 
     if (len != sizeof(int))
@@ -345,14 +344,12 @@ int set_tls_compression(socket_ctx* sock_ctx, int* value, socklen_t len) {
         return -EPROTO;
 
     if (compression_enabled == 1)
-        opts &= ~SSL_OP_NO_COMPRESSION;
+        SSL_CTX_clear_options(sock_ctx->ssl_ctx, SSL_OP_NO_COMPRESSION);
     else if (compression_enabled == 0)
-        opts |= SSL_OP_NO_COMPRESSION;
+        SSL_CTX_set_options(sock_ctx->ssl_ctx, SSL_OP_NO_COMPRESSION);
     else
         return -EINVAL;
     
-    SSL_CTX_set_options(sock_ctx->ssl_ctx, opts);
-
     return 0;
 }
 

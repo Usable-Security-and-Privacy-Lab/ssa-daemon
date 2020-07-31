@@ -79,20 +79,16 @@ SSL_CTX* SSL_CTX_create(global_config* settings) {
     else 
         SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_OFF);
 
-    if (!settings->tls_compression)
-        SSL_CTX_set_options(ctx, 
-                    SSL_CTX_get_options(ctx) | SSL_OP_NO_COMPRESSION);
-    else
-        SSL_CTX_set_options(ctx, 
-                    SSL_CTX_get_options(ctx) & ~SSL_OP_NO_COMPRESSION);
     
+    if (!settings->tls_compression)
+        SSL_CTX_set_options(ctx, SSL_OP_NO_COMPRESSION);
+    else
+        SSL_CTX_clear_options(ctx, SSL_OP_NO_COMPRESSION);
 
     if (!settings->session_tickets)
-        SSL_CTX_set_options(ctx, 
-                    SSL_CTX_get_options(ctx) | SSL_OP_NO_TICKET);
+        SSL_CTX_set_options(ctx, SSL_OP_NO_TICKET);
     else
-        SSL_CTX_set_options(ctx,
-                    SSL_CTX_get_options(ctx) & ~SSL_OP_NO_TICKET);
+        SSL_CTX_clear_options(ctx, SSL_OP_NO_TICKET);
     
 
     tls_version = get_tls_version(settings->min_tls_version);

@@ -88,6 +88,9 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
         break;
 
     case TLS_COMPRESSION:
+        if ((response = check_socket_state(sock_ctx, 
+                    2, SOCKET_NEW, SOCKET_CONNECTED)) != 0)
+            break;
         response = get_tls_compression(sock_ctx, (int**) data, len);
         break;
 
@@ -304,27 +307,43 @@ int get_chosen_cipher(socket_ctx* sock_ctx, char** data, unsigned int* len) {
 
 
 /**
- * Determines whether compression is enabled or disabled for a given socket.
- * @param sock_ctx The context of the socket to check TLS compression for.
- * @returns 0 on success, or -ECANCELED if a fatal error occurred.
+ * Determines whether compression is enabled or disabled for a given socket. 
+ * If the socket is connected to an endpoint, this function determines whether 
+ * the current connection is using TLS compression. 
+ * @param sock_ctx The context of the socket to check TLS compression for. 
+ * @returns 0 on success, or -ECANCELED if a fatal error occurred. 
  */
 int get_tls_compression(socket_ctx* sock_ctx, int** data, unsigned int* len) {
 
-    int opts = SSL_CTX_get_options(sock_ctx->ssl_ctx);
-    int* compression_enabled;
-
-    compression_enabled = malloc(sizeof(int));
+    int* compression_enabled = malloc(sizeof(int));
     if (compression_enabled == NULL)
         return -ECANCELED;
 
-    if (opts & SSL_OP_NO_COMPRESSION)
-        *compression_enabled = 0;
-    else
-        *compression_enabled = 1;
+    if (sock_ctx->state == SOCKET_NEW) {
+        int opts = SSL_CTX_get_options(sock_ctx->ssl_ctx);
+
+        if (opts & SSL_OP_NO_COMPRESSION)
+            *compression_enabled = 0;
+        else
+            *compression_enabled = 1;
+
+    } else if (sock_ctx->state == SOCKET_CONNECTED) {
+        SSL_SESSION* session = SSL_get0_session(sock_ctx->ssl);
+        if (session == NULL) {
+            free(compression_enabled);
+            return -ECANCELED;
+        }
+
+        *compression_enabled = SSL_SESSION_get_compress_id(session) ? 1 : 0;
+    
+    } else {
+        free(compression_enabled);
+        return -ECANCELED;
+    }
 
     *data = compression_enabled;
     *len = sizeof(int);
-
+    
     return 0;
 }
 
