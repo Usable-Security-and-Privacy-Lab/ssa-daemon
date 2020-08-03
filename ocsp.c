@@ -31,26 +31,26 @@ void ocsp_responder_read_cb(struct bufferevent* bev, void* arg);
  */
 char** retrieve_ocsp_urls(X509* cert, int* num_urls) {
 
-	STACK_OF(OPENSSL_STRING) *url_sk = NULL;
-	char** urls = NULL;
-	url_sk = X509_get1_ocsp(cert);
-	if (url_sk == NULL)
-		return NULL;
+    STACK_OF(OPENSSL_STRING) *url_sk = NULL;
+    char** urls = NULL;
+    url_sk = X509_get1_ocsp(cert);
+    if (url_sk == NULL)
+        return NULL;
 
-	*num_urls = sk_OPENSSL_STRING_num(url_sk);
-	if (*num_urls == 0)
-		return NULL;
+    *num_urls = sk_OPENSSL_STRING_num(url_sk);
+    if (*num_urls == 0)
+        return NULL;
 
-	urls = calloc(*num_urls, sizeof(char*));
-	if (urls == NULL)
-		return NULL;
+    urls = calloc(*num_urls, sizeof(char*));
+    if (urls == NULL)
+        return NULL;
 
-	for (int i = 0; i < *num_urls; i++) 
-		urls[i] = sk_OPENSSL_STRING_value(url_sk, i);
+    for (int i = 0; i < *num_urls; i++) 
+        urls[i] = sk_OPENSSL_STRING_value(url_sk, i);
 
-	sk_OPENSSL_STRING_free(url_sk);
+    sk_OPENSSL_STRING_free(url_sk);
 
-	return urls;
+    return urls;
 }
 
 
@@ -78,7 +78,7 @@ int launch_ocsp_checks(revocation_ctx* rev_ctx, int cert_index, OCSP_CERTID* id)
 
     last = get_last_responder(rev_ctx->ocsp_responders);
 
-	for (int i = 0; i < num_urls && i < MAX_OCSP_RESPONDERS; i++) {
+    for (int i = 0; i < num_urls && i < MAX_OCSP_RESPONDERS; i++) {
 
         new_responder = launch_ocsp_client(rev_ctx, urls[i]);
         if (new_responder == NULL)
@@ -139,11 +139,11 @@ ocsp_responder* get_last_responder(ocsp_responder* list) {
 ocsp_responder* launch_ocsp_client(revocation_ctx* rev_ctx, char* url) {
 
     struct timeval read_timeout = { .tv_sec = OCSP_READ_TIMEOUT };
-	ocsp_responder* ocsp_resp;
+    ocsp_responder* ocsp_resp;
     struct bufferevent* bev = NULL;
-	char* hostname = NULL;
-	int port;
-	int ret;
+    char* hostname = NULL;
+    int port;
+    int ret;
 
     ocsp_resp = calloc(1, sizeof(ocsp_responder));
     if (ocsp_resp == NULL) {
@@ -151,11 +151,11 @@ ocsp_responder* launch_ocsp_client(revocation_ctx* rev_ctx, char* url) {
         return NULL;
     }
 
-	ocsp_resp->url = url;
+    ocsp_resp->url = url;
 
     ret = parse_url(url, &hostname, &port, NULL);
-	if (ret != 0)
-		goto err;
+    if (ret != 0)
+        goto err;
 
     bev = bufferevent_socket_new(rev_ctx->daemon->ev_base, 
                 -1, BEV_OPT_CLOSE_ON_FREE);
@@ -177,14 +177,14 @@ ocsp_responder* launch_ocsp_client(revocation_ctx* rev_ctx, char* url) {
         goto err;
 
     ocsp_resp->buffer = (unsigned char*) calloc(1, MAX_HEADER_SIZE + 1);
-	if (ocsp_resp->buffer == NULL) 
-		goto err;
+    if (ocsp_resp->buffer == NULL) 
+        goto err;
 
-	ocsp_resp->rev_ctx = rev_ctx;
-	ocsp_resp->buf_size = MAX_HEADER_SIZE;
+    ocsp_resp->rev_ctx = rev_ctx;
+    ocsp_resp->buf_size = MAX_HEADER_SIZE;
 
-	free(hostname);
-	return ocsp_resp;
+    free(hostname);
+    return ocsp_resp;
 err:
     if (ocsp_resp != NULL)
         ocsp_responder_free(ocsp_resp);
@@ -228,20 +228,20 @@ int form_http_request(unsigned char **http_req,
             path, host, body_len);
     if (header_len < 0 || header_len >= MAX_HEADER_SIZE)
         return -1; /* snprintf failed; or too much header */
-	
+    
     
     full_request = calloc(1, header_len + body_len); /* no '\0' */
     if (full_request == NULL) {
-		free(body);
+        free(body);
         return -1; /* ENOMEM */
-	}
+    }
 
     memcpy(full_request, header, header_len);
     memcpy(&full_request[header_len], body, body_len);
 
     *http_req = full_request;
 
-	free(body);
+    free(body);
     return header_len + body_len;
 }
 
@@ -254,41 +254,41 @@ int form_http_request(unsigned char **http_req,
  */
 int send_ocsp_request(struct bufferevent* bev, char* url, OCSP_REQUEST* req) {
 
-	unsigned char* http_req = NULL;
-	char* host = NULL;
-	char* path = NULL;
-	int ret, req_len;
+    unsigned char* http_req = NULL;
+    char* host = NULL;
+    char* path = NULL;
+    int ret, req_len;
 
-	ret = parse_url(url, &host, NULL, &path);
-	if (ret != 0)
-		goto err;
-	
-	req_len = form_http_request(&http_req, req, host, path);
-	if (req_len < 0) {
-		log_printf(LOG_ERROR, "form_http_request failed\n");
-		goto err;
-	}
+    ret = parse_url(url, &host, NULL, &path);
+    if (ret != 0)
+        goto err;
+    
+    req_len = form_http_request(&http_req, req, host, path);
+    if (req_len < 0) {
+        log_printf(LOG_ERROR, "form_http_request failed\n");
+        goto err;
+    }
 
-	ret = bufferevent_write(bev, http_req, req_len);
-	if (ret != 0) {
-		log_printf(LOG_ERROR, "Bufferevent_write failed\n");
-		goto err;
-	}
+    ret = bufferevent_write(bev, http_req, req_len);
+    if (ret != 0) {
+        log_printf(LOG_ERROR, "Bufferevent_write failed\n");
+        goto err;
+    }
 
-	free(http_req);
-	free(host);
-	free(path);
-	return 0;
+    free(http_req);
+    free(host);
+    free(path);
+    return 0;
 err:
 
-	if (http_req != NULL)
-		free(http_req);
-	if (host != NULL)
-		free(host);
-	if (path != NULL)
-		free(path);
+    if (http_req != NULL)
+        free(http_req);
+    if (host != NULL)
+        free(host);
+    if (path != NULL)
+        free(path);
 
-	return -1;
+    return -1;
 }
 
 
@@ -310,44 +310,44 @@ void ocsp_responder_event_cb(struct bufferevent* bev, short events, void* arg) {
     ocsp_responder* ocsp_resp = (ocsp_responder*) arg;
     revocation_ctx* rev_ctx = ocsp_resp->rev_ctx;
     OCSP_REQUEST* request = NULL;
-	int ret;
+    int ret;
 
-	if (events & BEV_EVENT_CONNECTED) {
+    if (events & BEV_EVENT_CONNECTED) {
 
-		request = create_ocsp_request(ocsp_resp->certid);
-		if (request == NULL)
-			goto err;
+        request = create_ocsp_request(ocsp_resp->certid);
+        if (request == NULL)
+            goto err;
 
-		ret = send_ocsp_request(bev, ocsp_resp->url, request);
-		if (ret != 0)
-			goto err;
+        ret = send_ocsp_request(bev, ocsp_resp->url, request);
+        if (ret != 0)
+            goto err;
 
-		ret = bufferevent_enable(bev, EV_READ | EV_WRITE);
-		if (ret != 0)
-			goto err;
+        ret = bufferevent_enable(bev, EV_READ | EV_WRITE);
+        if (ret != 0)
+            goto err;
 
         OCSP_REQUEST_free(request);
         request = NULL;
-	}
+    }
 
-	if (events & BEV_EVENT_TIMEOUT || events & BEV_EVENT_ERROR) {
-		log_printf(LOG_ERROR, "Bufferevent timed out/encountered error\n");
-		goto err;
-	}
+    if (events & BEV_EVENT_TIMEOUT || events & BEV_EVENT_ERROR) {
+        log_printf(LOG_ERROR, "Bufferevent timed out/encountered error\n");
+        goto err;
+    }
 
-	return;
+    return;
 err:
     if (request != NULL)
         OCSP_REQUEST_free(request);
 
     ocsp_responder_shutdown(ocsp_resp);
 
-	if (rev_ctx->responders_at[ocsp_resp->cert_position]-- == 0) {
-		set_err_string(rev_ctx->sock_ctx, "TLS handshake failure: "
-				"the certificate's revocation status could not be determined");
+    if (rev_ctx->responders_at[ocsp_resp->cert_position]-- == 0) {
+        set_err_string(rev_ctx->sock_ctx, "TLS handshake failure: "
+                "the certificate's revocation status could not be determined");
         
-		fail_revocation_checks(rev_ctx);
-	}
+        fail_revocation_checks(rev_ctx);
+    }
 }
 
 
@@ -359,61 +359,64 @@ err:
  * bufferevent.
  */
 void ocsp_responder_read_cb(struct bufferevent* bev, void* arg) {
-	
+    
     ocsp_responder* ocsp_resp = (ocsp_responder*) arg;
-	revocation_ctx* rev_ctx = ocsp_resp->rev_ctx;
+    revocation_ctx* rev_ctx = ocsp_resp->rev_ctx;
 
-	int ret, status;
-	int num_read;
+    int ret, status;
+    int num_read;
 
-	num_read = bufferevent_read(bev, &ocsp_resp->buffer[ocsp_resp->tot_read],
-			ocsp_resp->buf_size - ocsp_resp->tot_read);
+    num_read = bufferevent_read(bev, &ocsp_resp->buffer[ocsp_resp->tot_read],
+            ocsp_resp->buf_size - ocsp_resp->tot_read);
 
-	ocsp_resp->tot_read += num_read;
+    ocsp_resp->tot_read += num_read;
 
-	if (!ocsp_resp->is_reading_body) {
+    if (!ocsp_resp->is_reading_body) {
 
-		if (strstr((char*)ocsp_resp->buffer, "\r\n\r\n") != NULL) {
-			ret = start_reading_body(ocsp_resp);
-			if (ret != 0)
-				goto err;
+        if (strstr((char*)ocsp_resp->buffer, "\r\n\r\n") != NULL) {
+            ret = start_reading_body(ocsp_resp);
+            if (ret != 0)
+                goto err;
 
-		} else if (ocsp_resp->tot_read == ocsp_resp->buf_size) {
-			goto err;
-		}
-	}
+        } else if (ocsp_resp->tot_read == ocsp_resp->buf_size) {
+            goto err;
+        }
+    }
 
-	/* A connection could be all done reading both header and body in one go */
-	if (done_reading_body(ocsp_resp)) {
+    /* A connection could be all done reading both header and body in one go */
+    if (done_reading_body(ocsp_resp)) {
 
-		status = check_ocsp_response(ocsp_resp->buffer, 
-				ocsp_resp->tot_read, rev_ctx, ocsp_resp->certid);
+        status = check_ocsp_response(ocsp_resp->buffer, 
+                ocsp_resp->tot_read, rev_ctx, ocsp_resp->certid);
 
-		switch (status) {
-		case V_OCSP_CERTSTATUS_UNKNOWN:
-			goto err;
+        switch (status) {
+        case V_OCSP_CERTSTATUS_UNKNOWN:
+            goto err;
 
-		case V_OCSP_CERTSTATUS_GOOD:
+        case V_OCSP_CERTSTATUS_GOOD:
             pass_individual_rev_check(ocsp_resp);
-			break;
+            break;
 
-		case V_OCSP_CERTSTATUS_REVOKED:
-			set_err_string(rev_ctx->sock_ctx, "TLS handshake error: "
-					"certificate revoked (OCSP remote response)");
-			fail_revocation_checks(rev_ctx);
-			break;
-		}
-	}
-	return;
+        case V_OCSP_CERTSTATUS_REVOKED:
+            set_err_string(rev_ctx->sock_ctx, "TLS handshake error: "
+                    "certificate revoked (OCSP remote response)");
+
+            fail_revocation_checks(rev_ctx);
+            break;
+        }
+    }
+
+    return;
+
 err:
-	ocsp_responder_shutdown(ocsp_resp);
+    ocsp_responder_shutdown(ocsp_resp);
 
-	if (rev_ctx->responders_at[ocsp_resp->cert_position]-- == 0) {
-		set_err_string(rev_ctx->sock_ctx, "TLS handshake failure: "
-				"the certficate's revocation status could not be determined");
+    if (rev_ctx->responders_at[ocsp_resp->cert_position]-- == 0) {
+        set_err_string(rev_ctx->sock_ctx, "TLS handshake failure: "
+                "the certficate's revocation status could not be determined");
 
-		fail_revocation_checks(rev_ctx);
-	}
+        fail_revocation_checks(rev_ctx);
+    }
 }
 
 /*******************************************************************************
@@ -461,12 +464,12 @@ OCSP_REQUEST* create_ocsp_request(OCSP_CERTID* id) {
         goto err;
 
     if (OCSP_request_add0_id(request, id) == NULL)
-		goto err;
+        goto err;
 
     return request;
 err:
     if (request != NULL)
-	    OCSP_REQUEST_free(request);
+        OCSP_REQUEST_free(request);
     else
         OCSP_CERTID_free(id);
 
@@ -484,27 +487,28 @@ err:
  */
 int get_ocsp_basicresp(unsigned char* bytes, int len, OCSP_BASICRESP** resp) {
 
-	OCSP_RESPONSE* full_response = NULL;
-	const unsigned char* const_bytes = bytes;
-	int ret;
+    OCSP_RESPONSE* full_response = NULL;
+    const unsigned char* const_bytes = bytes;
+    int ret;
 
-	full_response = d2i_OCSP_RESPONSE(NULL, &const_bytes, (long)len);
-	if (full_response == NULL)
-		goto err;
+    full_response = d2i_OCSP_RESPONSE(NULL, &const_bytes, (long)len);
+    if (full_response == NULL)
+        goto err;
 
-	ret = OCSP_response_status(full_response);
-	if (ret != OCSP_RESPONSE_STATUS_SUCCESSFUL)
-		goto err;
+    ret = OCSP_response_status(full_response);
+    if (ret != OCSP_RESPONSE_STATUS_SUCCESSFUL)
+        goto err;
 
-	*resp = OCSP_response_get1_basic(full_response);
-	if (*resp == NULL)
-		goto err;
+    *resp = OCSP_response_get1_basic(full_response);
+    if (*resp == NULL)
+        goto err;
 
-	OCSP_RESPONSE_free(full_response);
-	return 0;
+    OCSP_RESPONSE_free(full_response);
+    return 0;
 err:
-	if (full_response != NULL)
-		OCSP_RESPONSE_free(full_response);
+    if (full_response != NULL)
+        OCSP_RESPONSE_free(full_response);
 
-	return -1;
+    return -1;
 }
+

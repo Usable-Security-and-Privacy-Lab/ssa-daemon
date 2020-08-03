@@ -13,11 +13,13 @@
 #include "error.h"
 #include "log.h"
 #include "netlink.h"
+#include "sessions.h"
 #include "socket_setup.h"
 #include "crl.h"
 
-#define HASHMAP_NUM_BUCKETS	100
+#define HASHMAP_NUM_BUCKETS    100
 #define CACHE_NUM_BUCKETS 20
+
 
 /**
  * Creates a new daemon_ctx to be used throughout the life cycle
@@ -36,35 +38,35 @@
  */
 daemon_ctx* daemon_context_new(char* config_path, int port) {
 
-	daemon_ctx* daemon = NULL;
-	
-	daemon = calloc(1, sizeof(daemon_ctx));
-	if (daemon == NULL)
-		goto err;
+    daemon_ctx* daemon = NULL;
+    
+    daemon = calloc(1, sizeof(daemon_ctx));
+    if (daemon == NULL)
+        goto err;
 
-	daemon->port = port;
-	
-	daemon->ev_base = event_base_new();
-	if (daemon->ev_base == NULL)
-		goto err;
-	if (event_base_priority_init(daemon->ev_base, 3) != 0)
-		goto err;
+    daemon->port = port;
+    
+    daemon->ev_base = event_base_new();
+    if (daemon->ev_base == NULL)
+        goto err;
+    if (event_base_priority_init(daemon->ev_base, 3) != 0)
+        goto err;
 
-	daemon->dns_base = evdns_base_new(daemon->ev_base, 1);
-	if (daemon->dns_base == NULL)
-		goto err;
+    daemon->dns_base = evdns_base_new(daemon->ev_base, 1);
+    if (daemon->dns_base == NULL)
+        goto err;
 
-	daemon->sock_map = hashmap_create(HASHMAP_NUM_BUCKETS);
-	if (daemon->sock_map == NULL)
-		goto err;
+    daemon->sock_map = hashmap_create(HASHMAP_NUM_BUCKETS);
+    if (daemon->sock_map == NULL)
+        goto err;
 
-	daemon->sock_map_port = hashmap_create(HASHMAP_NUM_BUCKETS);
-	if (daemon->sock_map_port == NULL)
-		goto err;
+    daemon->sock_map_port = hashmap_create(HASHMAP_NUM_BUCKETS);
+    if (daemon->sock_map_port == NULL)
+        goto err;
 
-	daemon->revocation_cache = str_hashmap_create(HASHMAP_NUM_BUCKETS);
-	if (daemon->revocation_cache == NULL)
-		goto err;
+    daemon->revocation_cache = str_hashmap_create(HASHMAP_NUM_BUCKETS);
+    if (daemon->revocation_cache == NULL)
+        goto err;
 
 	//set_inotify(daemon);
 
@@ -78,41 +80,42 @@ daemon_ctx* daemon_context_new(char* config_path, int port) {
 		read_crl_cache(daemon->crl_cache, crl_cache);
 
 
-log_printf(LOG_DEBUG, "about to init sem\n");
+//log_printf(LOG_DEBUG, "about to init sem\n");
 	daemon->cache_sem = calloc(1, sizeof(sem_t));
 	if (sem_init(daemon->cache_sem, 0, 1))
 		log_printf(LOG_DEBUG, "%s\n", strerror(errno));
-log_printf(LOG_DEBUG, "succeeded in initializing sem\n");
+//log_printf(LOG_DEBUG, "succeeded in initializing sem\n");
 
     /*
-	daemon->ssl_ctx_cache = str_hashmap_create(HASHMAP_NUM_BUCKETS);
-	if (daemon->revocation_cache == NULL)
-		goto err;
+    daemon->ssl_ctx_cache = str_hashmap_create(HASHMAP_NUM_BUCKETS);
+    if (daemon->revocation_cache == NULL)
+        goto err;
      */
 
-	daemon->settings = parse_config(config_path);
-	if (daemon->settings == NULL)
-		goto err;
+    daemon->settings = parse_config(config_path);
+    if (daemon->settings == NULL)
+        goto err;
 
-	/* Setup netlink socket */
-	/* Set up non-blocking netlink socket with event base */
-	daemon->netlink_sock = netlink_connect(daemon);
-	if (daemon->netlink_sock == NULL)
-		goto err;
-	
-	
-	int nl_fd = nl_socket_get_fd(daemon->netlink_sock);
-	if (evutil_make_socket_nonblocking(nl_fd) != 0)
-		goto err;
-//goto err;
-	return daemon;
+    /* Setup netlink socket */
+    /* Set up non-blocking netlink socket with event base */
+    daemon->netlink_sock = netlink_connect(daemon);
+    if (daemon->netlink_sock == NULL)
+        goto err;
+    
+    
+    int nl_fd = nl_socket_get_fd(daemon->netlink_sock);
+    if (evutil_make_socket_nonblocking(nl_fd) != 0)
+        goto err;
+
+    return daemon;
+
 err:
-	if (daemon != NULL)
-		daemon_context_free(daemon);
+    if (daemon != NULL)
+        daemon_context_free(daemon);
 
-	if (errno)
-		log_printf(LOG_ERROR, "Error creating daemon: %s\n", strerror(errno));
-	return NULL;
+    if (errno)
+        log_printf(LOG_ERROR, "Error creating daemon: %s\n", strerror(errno));
+    return NULL;
 }
 
 
@@ -177,8 +180,8 @@ void daemon_context_free(daemon_ctx* daemon) {
  * @param id The ID assigned to the given socket_ctx.
  * @returns 0 on success, or -ECANCELED if an error occurred.
  */
-int socket_context_new(socket_ctx** new_sock_ctx, int fd,  
-		daemon_ctx* daemon, unsigned long id) {
+int socket_context_new(socket_ctx** new_sock_ctx, int fd,
+        daemon_ctx* daemon, unsigned long id) {
 
     socket_ctx* sock_ctx = (socket_ctx*)calloc(1, sizeof(socket_ctx));
     if (sock_ctx == NULL)
@@ -189,12 +192,18 @@ int socket_context_new(socket_ctx** new_sock_ctx, int fd,
         goto err;
 
     sock_ctx->daemon = daemon;
+    //sock_ctx->rev_ctx.daemon = daemon;
     sock_ctx->id = id;
+    //sock_ctx->rev_ctx.id = id;
     sock_ctx->sockfd = fd;
     sock_ctx->state = SOCKET_NEW;
+
     sock_ctx->rev_ctx = revocation_context_setup(sock_ctx);
 	if (sock_ctx->rev_ctx == NULL)
 		log_printf(LOG_DEBUG, "It was null\n");
+
+    /* transfer over revocation check flags */
+    //sock_ctx->rev_ctx.checks = daemon->settings->revocation_checks;
 
     int ret = hashmap_add(daemon->sock_map, id, sock_ctx);
     if (ret != 0)
@@ -228,7 +237,7 @@ socket_ctx* accepting_socket_ctx_new(socket_ctx* listener_ctx, int fd) {
     int ret;
 
     sock_ctx = (socket_ctx*)calloc(1, sizeof(socket_ctx));
-	if (sock_ctx == NULL)
+    if (sock_ctx == NULL)
         return NULL;
 
     sock_ctx->daemon = daemon;
@@ -260,44 +269,59 @@ err:
  */
 void socket_shutdown(socket_ctx* sock_ctx) {
 
+    if (sock_ctx == NULL) {
+        LOG_F("Tried to shutdown NULL socket context reference\n");
+        return;
+    }
     if (sock_ctx->rev_ctx != NULL)
-	revocation_context_cleanup(sock_ctx->rev_ctx);
+        revocation_context_cleanup(&sock_ctx->rev_ctx);
+
 
     if (sock_ctx->ssl != NULL) {
         switch (sock_ctx->state) {
-        case SOCKET_CONNECTED:
         case SOCKET_FINISHING_CONN:
-        case SOCKET_ACCEPTED:
+        case SOCKET_CONNECTED:
             SSL_shutdown(sock_ctx->ssl);
-            break;
+
+            /* FALL THROUGH */
         default:
+            session_cleanup(sock_ctx->ssl);
             break;
         }
-
-        SSL_free(sock_ctx->ssl);
     }
 
-    sock_ctx->ssl = NULL;
-
-    if (sock_ctx->listener != NULL) 
+    if (sock_ctx->listener != NULL) {
         evconnlistener_free(sock_ctx->listener);
-    sock_ctx->listener = NULL;
+        sock_ctx->sockfd = NO_FD;
+        sock_ctx->listener = NULL;
+    }
 
-    if (sock_ctx->secure.bev != NULL)
+    if (sock_ctx->secure.bev != NULL) {
         bufferevent_free(sock_ctx->secure.bev);
-    sock_ctx->secure.bev = NULL;
-	sock_ctx->secure.closed = 1;
-	
-	if (sock_ctx->plain.bev != NULL)
-		bufferevent_free(sock_ctx->plain.bev);
-	sock_ctx->plain.bev = NULL;
-	sock_ctx->plain.closed = 1;
+        sock_ctx->secure.bev = NULL;
+        sock_ctx->secure.closed = 1; /* why do we even have this lever?? */
+        
+        sock_ctx->ssl = NULL;
+        sock_ctx->sockfd = NO_FD;
 
-	if (sock_ctx->sockfd != -1)
-		close(sock_ctx->sockfd);
-	sock_ctx->sockfd = -1;
+    }
+    
+    if (sock_ctx->plain.bev != NULL) {
+        bufferevent_free(sock_ctx->plain.bev);
+        sock_ctx->plain.bev = NULL;
+        sock_ctx->plain.closed = 1;
+    }
 
-	return;
+    if (sock_ctx->sockfd != NO_FD) {
+        int ret = close(sock_ctx->sockfd);
+        if (ret < 0)
+            LOG_W("close() returned %i:%s (likely double-closing fd)\n", 
+                        errno, strerror(errno));
+        
+        sock_ctx->sockfd = NO_FD;
+    }
+
+    return;
 }
 
 /**
@@ -308,37 +332,62 @@ void socket_shutdown(socket_ctx* sock_ctx) {
  */
 void socket_context_free(socket_ctx* sock_ctx) {
 
-	if (sock_ctx == NULL) {
-		log_printf(LOG_WARNING, "Tried to free a null sock_ctx reference\n");
-		return;
-	}
+    if (sock_ctx == NULL) {
+        LOG_F("Tried to free NULL socket context reference\n");
+        return;
+    }
 
-	if (sock_ctx->rev_ctx != NULL) {
-		revocation_context_cleanup(sock_ctx->rev_ctx);
-		sock_ctx->rev_ctx = NULL;
-	}
 
-	if (sock_ctx->listener != NULL) {
-		evconnlistener_free(sock_ctx->listener);
-	} else if (sock_ctx->sockfd != -1) { 
-		EVUTIL_CLOSESOCKET(sock_ctx->sockfd);
-	}
+    if (sock_ctx->rev_ctx != NULL) {
+	revocation_context_cleanup(sock_ctx->rev_ctx);
+	sock_ctx->rev_ctx = NULL;
+    }
 
-	if (sock_ctx->rev_ctx != NULL)
-		revocation_context_cleanup(sock_ctx->rev_ctx);
-	
-    if (sock_ctx->ssl_ctx != NULL)
-        SSL_CTX_free(sock_ctx->ssl_ctx);
-
+    
     if (sock_ctx->ssl != NULL)
-	    SSL_free(sock_ctx->ssl);
-	if (sock_ctx->secure.bev != NULL)
-		bufferevent_free(sock_ctx->secure.bev);
-	if (sock_ctx->plain.bev != NULL)
-		bufferevent_free(sock_ctx->plain.bev);
+        session_cleanup(sock_ctx->ssl);
+
+    if (sock_ctx->listener != NULL) {
+        evconnlistener_free(sock_ctx->listener);
+        sock_ctx->sockfd = NO_FD;
+        sock_ctx->listener = NULL;
+    }
+
+    if (sock_ctx->secure.bev != NULL) {
+        bufferevent_free(sock_ctx->secure.bev);
+        sock_ctx->secure.bev = NULL;
+        sock_ctx->ssl = NULL;
+        sock_ctx->sockfd = NO_FD;
+    }
+
+    if (sock_ctx->plain.bev != NULL) {
+        bufferevent_free(sock_ctx->plain.bev);
+        sock_ctx->plain.bev = NULL;
+    }
+
+    if (sock_ctx->ssl_ctx != NULL) {
+        if (has_session_cache(sock_ctx->ssl_ctx))
+            session_cache_free(sock_ctx->ssl_ctx);
+        SSL_CTX_free(sock_ctx->ssl_ctx);
+        sock_ctx->ssl_ctx = NULL;
+    }
+
+    if (sock_ctx->ssl != NULL) {
+        SSL_free(sock_ctx->ssl);
+        sock_ctx->ssl = NULL;
+    }
+
+    if (sock_ctx->sockfd != NO_FD) {
+        int ret = close(sock_ctx->sockfd);
+        if (ret < 0)
+            LOG_W("close() returned %i:%s (likely double-closing fd)\n", 
+                        errno, strerror(errno));
+        
+        sock_ctx->sockfd = NO_FD;
+    }
 
     free(sock_ctx);
-	return;
+    return;
 }
 
 
@@ -355,11 +404,11 @@ void socket_context_erase(socket_ctx* sock_ctx, int port) {
     daemon_ctx* daemon = sock_ctx->daemon;
 
     log_printf(LOG_DEBUG, "Erasing connection completely\n");
-	
+    
     hashmap_del(daemon->sock_map_port, port);
 
-	socket_shutdown(sock_ctx);
-	socket_context_free(sock_ctx);
+    socket_shutdown(sock_ctx);
+    socket_context_free(sock_ctx);
 }
 
 
@@ -564,25 +613,51 @@ void crl_responder_free(crl_responder* resp) {
  */
 int check_socket_state(socket_ctx* sock_ctx, int num, ...) {
 
-	va_list args;
+    va_list args;
 
-	va_start(args, num);
+    va_start(args, num);
 
-	for (int i = 0; i < num; i++) {
-		enum socket_state state = va_arg(args, enum socket_state);
-		if (sock_ctx->state == state)
-			return 0;
-	}
-	va_end(args);
+    for (int i = 0; i < num; i++) {
+        enum socket_state state = va_arg(args, enum socket_state);
+        if (sock_ctx->state == state)
+            return 0;
+    }
+    va_end(args);
 
-	switch(sock_ctx->state) {
-	case SOCKET_ERROR:
-		set_badfd_err_string(sock_ctx);
-		return -EBADFD;
-	default:
-		set_wrong_state_err_string(sock_ctx);
-		return -EOPNOTSUPP;
-	}
+    switch(sock_ctx->state) {
+    case SOCKET_ERROR:
+        set_badfd_err_string(sock_ctx);
+        return -EBADFD;
+    default:
+        set_wrong_state_err_string(sock_ctx);
+        return -EOPNOTSUPP;
+    }
+}
+
+
+/**
+ * Creates a string of the format "<hostname>:<port>".
+ * @param sock_ctx The socket to retrieve hostname and port information from.
+ * @returns A newly allocated null-terminated string.
+ */
+char* get_hostname_port_str(socket_ctx* sock_ctx) {
+
+    char* hostname = sock_ctx->rem_hostname;
+    int port = get_port(&sock_ctx->rem_addr);
+    int out_len = strlen(hostname) + 10; /* short max is < 10 digits */
+    int ret;
+
+    char* out = calloc(1, out_len);
+    if (out == NULL)
+        return NULL;
+
+    ret = snprintf(out, out_len, "%s:%i", hostname, port);
+    if (ret < 0) {
+        free(out);
+        return NULL;
+    }
+
+    return out;
 }
 
 
@@ -592,13 +667,15 @@ int check_socket_state(socket_ctx* sock_ctx, int num, ...) {
  * @returns The port number.
  */
 int get_port(struct sockaddr* addr) {
-	int port = 0;
-	if (addr->sa_family == AF_UNIX) {
-		port = strtol(((struct sockaddr_un*)addr)->sun_path+1, NULL, 16);
-		log_printf(LOG_INFO, "unix port is %05x", port);
-	}
-	else {
-		port = (int)ntohs(((struct sockaddr_in*)addr)->sin_port);
-	}
-	return port;
+
+    int port = 0;
+    if (addr->sa_family == AF_UNIX) {
+        port = strtol(((struct sockaddr_un*)addr)->sun_path+1, NULL, 16);
+        log_printf(LOG_INFO, "unix port is %05x", port);
+    }
+    else {
+        port = (int)ntohs(((struct sockaddr_in*)addr)->sin_port);
+    }
+    return port;
 }
+

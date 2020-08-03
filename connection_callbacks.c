@@ -14,10 +14,10 @@
 
 
 void handle_client_event_connected(socket_ctx* sock_ctx, 
-		daemon_ctx* daemon,	unsigned long id, channel* startpoint);
+        daemon_ctx* daemon,    unsigned long id, channel* startpoint);
 void handle_server_event_connected(socket_ctx* sock_ctx, channel* startpoint);
 void handle_event_error(socket_ctx* sock_ctx, 
-		unsigned long error, channel* startpoint, channel* endpoint);
+        unsigned long error, channel* startpoint, channel* endpoint);
 void handle_event_eof(socket_ctx* sock_ctx, channel* startpoint, channel* endpoint);
 void handle_event_timeout(socket_ctx* sock_ctx);
 
@@ -52,19 +52,19 @@ void handle_event_timeout(socket_ctx* sock_ctx);
  */
 void common_bev_write_cb(struct bufferevent *bev, void *arg) {
 
-	socket_ctx* sock_ctx = (socket_ctx*) arg;
-	channel* endpoint = (bev == sock_ctx->secure.bev) ? &sock_ctx->plain : &sock_ctx->secure;
-	
+    socket_ctx* sock_ctx = (socket_ctx*) arg;
+    channel* endpoint = (bev == sock_ctx->secure.bev) ? &sock_ctx->plain : &sock_ctx->secure;
+    
     /*
-	log_printf(LOG_DEBUG, "write event on bev %p (%s)\n", bev, 
-			(bev == sock_ctx->secure.bev) ? "secure" : "plain");
+    log_printf(LOG_DEBUG, "write event on bev %p (%s)\n", bev, 
+            (bev == sock_ctx->secure.bev) ? "secure" : "plain");
      */
 
-	if (endpoint->bev && !(bufferevent_get_enabled(endpoint->bev) & EV_READ)) {
-		bufferevent_setwatermark(bev, EV_WRITE, 0, 0);
-		bufferevent_enable(endpoint->bev, EV_READ);
-	}
-	return;
+    if (endpoint->bev && !(bufferevent_get_enabled(endpoint->bev) & EV_READ)) {
+        bufferevent_setwatermark(bev, EV_WRITE, 0, 0);
+        bufferevent_enable(endpoint->bev, EV_READ);
+    }
+    return;
 }
 
 /**
@@ -77,43 +77,44 @@ void common_bev_write_cb(struct bufferevent *bev, void *arg) {
  * @param arg the context of the socket using the given bufferevent.
  */
 void common_bev_read_cb(struct bufferevent* bev, void* arg) {
-	/* TODO: set read high-water mark?? */
-	
-	socket_ctx* sock_ctx = (socket_ctx*) arg;
-	channel* endpoint = (bev == sock_ctx->secure.bev) 
-			? &sock_ctx->plain : &sock_ctx->secure;
-	struct evbuffer* in_buf;
-	struct evbuffer* out_buf;
-	size_t in_len;
+    /* TODO: set read high-water mark?? */
+    
+    socket_ctx* sock_ctx = (socket_ctx*) arg;
+    channel* endpoint = (bev == sock_ctx->secure.bev) 
+            ? &sock_ctx->plain : &sock_ctx->secure;
+    struct evbuffer* in_buf;
+    struct evbuffer* out_buf;
+    size_t in_len;
 
     /*
-	log_printf(LOG_DEBUG, "read event on bev %p (%s)\n", bev, 
-			(bev == sock_ctx->secure.bev) ? "secure" : "plain");
+    log_printf(LOG_DEBUG, "read event on bev %p (%s)\n", bev, 
+            (bev == sock_ctx->secure.bev) ? "secure" : "plain");
     */
 
-	in_buf = bufferevent_get_input(bev);
-	in_len = evbuffer_get_length(in_buf);
-	if (in_len == 0)
-		return;
+    in_buf = bufferevent_get_input(bev);
+    in_len = evbuffer_get_length(in_buf);
+    if (in_len == 0)
+        return;
 
-	/* clear read buffer if already closed */
-	if (endpoint->closed == 1) {
-		log_printf(LOG_DEBUG, "drained buffer.\n");
-		evbuffer_drain(in_buf, in_len);
-		return;
-	}
+    /* clear read buffer if already closed */
+    if (endpoint->closed == 1) {
+        LOG_D("drained buffer.\n");
+        evbuffer_drain(in_buf, in_len);
+        return;
+    }
 
-	/* copy content to the output buffer of the other bufferevent */
-	out_buf = bufferevent_get_output(endpoint->bev);
-	evbuffer_add_buffer(out_buf, in_buf);
+    /* copy content to the output buffer of the other bufferevent */
+    out_buf = bufferevent_get_output(endpoint->bev);
+    evbuffer_add_buffer(out_buf, in_buf);
 
-	if (evbuffer_get_length(out_buf) >= MAX_BUFFER) {
-		log_printf(LOG_DEBUG, "Overflowing buffer, slowing down\n");
-		bufferevent_setwatermark(endpoint->bev, 
-				EV_WRITE, MAX_BUFFER / 2, MAX_BUFFER);
-		bufferevent_disable(bev, EV_READ);
-	}
-	return;
+    if (evbuffer_get_length(out_buf) >= MAX_BUFFER) {
+        LOG_D("Overflowing buffer, slowing down\n");
+
+        bufferevent_setwatermark(endpoint->bev, 
+                EV_WRITE, MAX_BUFFER / 2, MAX_BUFFER);
+        bufferevent_disable(bev, EV_READ);
+    }
+    return;
 }
 
 
@@ -135,54 +136,49 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
     unsigned long id = sock_ctx->id;
     unsigned long ssl_err = bufferevent_get_openssl_error(bev);
 
-	channel* endpoint = (bev == sock_ctx->secure.bev)
-			? &sock_ctx->plain : &sock_ctx->secure;
-	channel* startpoint = (bev == sock_ctx->secure.bev)
-			? &sock_ctx->secure : &sock_ctx->plain;
+    channel* endpoint = (bev == sock_ctx->secure.bev)
+            ? &sock_ctx->plain : &sock_ctx->secure;
+    channel* startpoint = (bev == sock_ctx->secure.bev)
+            ? &sock_ctx->secure : &sock_ctx->plain;
 
 
-	if (events & BEV_EVENT_CONNECTED)
-		handle_client_event_connected(sock_ctx, daemon, id, startpoint);
-	
-	if (events & BEV_EVENT_ERROR)
-		handle_event_error(sock_ctx, ssl_err, startpoint, endpoint);
-	
-	if (events & BEV_EVENT_EOF)
-		handle_event_eof(sock_ctx, startpoint, endpoint);
-	
-	if (events & BEV_EVENT_TIMEOUT) 
-		handle_event_timeout(sock_ctx);
+    if (events & BEV_EVENT_EOF)
+        handle_event_eof(sock_ctx, startpoint, endpoint);
+    else if (events & BEV_EVENT_ERROR)
+        handle_event_error(sock_ctx, ssl_err, startpoint, endpoint);
+    else if (events & BEV_EVENT_CONNECTED)
+        handle_client_event_connected(sock_ctx, daemon, id, startpoint);
 
 
-	/* Connection closed--usually due to error, EOF or timeout */
-	if (endpoint->closed == 1 && startpoint->closed == 1) {
-		switch (sock_ctx->state) {
-		case SOCKET_CONNECTING:
-            if (ssl_err != 0)
-			    set_socket_error(sock_ctx, ssl_err);
-			
-			socket_shutdown(sock_ctx);
-			sock_ctx->state = SOCKET_ERROR;
+    /* Connection closed--usually due to error, EOF or timeout */
+    if (endpoint->closed == 1 && startpoint->closed == 1) {
+        if (ssl_err != 0)
+            set_socket_error(sock_ctx, ssl_err);
+        socket_shutdown(sock_ctx);
 
-			netlink_handshake_notify_kernel(daemon, id, -EPROTO);
-			break;
+        switch (sock_ctx->state) {
+        case SOCKET_CONNECTING:
+            sock_ctx->state = SOCKET_ERROR;
+            netlink_handshake_notify_kernel(daemon, id, -EPROTO);
+            return;
 
-		case SOCKET_CONNECTED:
-			socket_shutdown(sock_ctx);
-			if (events & BEV_EVENT_ERROR)
-				sock_ctx->state = SOCKET_ERROR;
-			else
-				sock_ctx->state = SOCKET_DISCONNECTED;
-			break;
+        case SOCKET_FINISHING_CONN:
+        case SOCKET_CONNECTED:
+            if (events & BEV_EVENT_ERROR)
+                sock_ctx->state = SOCKET_ERROR;
+            else
+                sock_ctx->state = SOCKET_DISCONNECTED;
+            return;
 
-		default:
-			socket_shutdown(sock_ctx);
-			sock_ctx->state = SOCKET_ERROR;
-			break;
-		}
-	}
+        /* TODO: remove? */
+        case SOCKET_DISCONNECTED:
+            return;
 
-	return;
+        default:
+            sock_ctx->state = SOCKET_ERROR;
+            return;
+        }
+    }
 }
 
 
@@ -199,46 +195,44 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
  */
 void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 
-	socket_ctx* sock_ctx = (socket_ctx*) arg;
+    socket_ctx* sock_ctx = (socket_ctx*) arg;
     int is_secure_channel = (bev == sock_ctx->secure.bev) ? 1 : 0;
-	int bev_error = ERR_get_error();
-	
-	channel* endpoint = (is_secure_channel) ? &sock_ctx->plain : &sock_ctx->secure;
-	channel* startpoint = (is_secure_channel) ? &sock_ctx->secure : &sock_ctx->plain;
-
-	if (events & BEV_EVENT_CONNECTED)
-		handle_server_event_connected(sock_ctx, startpoint);
+    int bev_error = ERR_get_error();
     
-    if (events & BEV_EVENT_ERROR)
-		handle_event_error(sock_ctx, bev_error, startpoint, endpoint);
-	
-	if (events & BEV_EVENT_EOF)
-		handle_event_eof(sock_ctx, startpoint, endpoint);
+    channel* endpoint = (is_secure_channel) ? &sock_ctx->plain : &sock_ctx->secure;
+    channel* startpoint = (is_secure_channel) ? &sock_ctx->secure : &sock_ctx->plain;
 
+    if (events & BEV_EVENT_EOF)
+        handle_event_eof(sock_ctx, startpoint, endpoint);
+    else if (events & BEV_EVENT_ERROR)
+        handle_event_error(sock_ctx, bev_error, startpoint, endpoint);
+    else if (events & BEV_EVENT_CONNECTED)
+        handle_server_event_connected(sock_ctx, startpoint);
+    
 
+    if (endpoint->closed == 1 && startpoint->closed == 1) {
+        long ssl_err = SSL_get_verify_result(sock_ctx->ssl);
 
-	if (endpoint->closed == 1 && startpoint->closed == 1) {
+        socket_shutdown(sock_ctx);
 
-        if (sock_ctx->state == SOCKET_ACCEPTED) {
-
-            /* don't free connection--user has fd reference to it still. */
-            socket_shutdown(sock_ctx);
+        switch(sock_ctx->state) {
+        case SOCKET_CONNECTED:
             if (events & BEV_EVENT_ERROR)
                 sock_ctx->state = SOCKET_ERROR;
             else 
                 sock_ctx->state = SOCKET_DISCONNECTED;
-
-        } else {
-			long ssl_err = SSL_get_verify_result(sock_ctx->ssl);
-			if (ssl_err != X509_V_OK)
-				log_printf(LOG_ERROR, 
-                        "TLS handshake error %li on incoming connection: %s",
-						ssl_err, X509_verify_cert_error_string(ssl_err));
+            break;
+        
+        default:
+            if (ssl_err != X509_V_OK)
+                LOG_E("TLS handshake error %li on incoming connection: %s",
+                            ssl_err, X509_verify_cert_error_string(ssl_err));
 
             hashmap_del(sock_ctx->daemon->sock_map_port, sock_ctx->local_port);
-			socket_context_free(sock_ctx);
+            socket_context_free(sock_ctx);
+            break;
         }
-	}
+    }
     return;
 }
 
@@ -260,24 +254,32 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
  * @param startpoint The channel that triggered the bufferevent.
  */
 void handle_client_event_connected(socket_ctx* sock_ctx, 
-		    daemon_ctx* daemon,	unsigned long id, channel* startpoint) {
+            daemon_ctx* daemon, unsigned long id, channel* startpoint) {
 
-	if (startpoint->bev != sock_ctx->secure.bev) {
-		log_printf(LOG_WARNING, "Unexpected connect event happened.\n");
-		return;
-	}
+    LOG_D("%s endpoint connected\n", startpoint->bev == sock_ctx->secure.bev 
+                ? "Encrypted client" : "Plaintext client");
+
+    if (startpoint->bev != sock_ctx->secure.bev) {
+        log_printf(LOG_WARNING, "Unexpected connect event happened.\n");
+        return;
+    }
 
     /*
-	log_printf(LOG_INFO, "Encrypted endpoint connection negotiated with %s\n", 
-			SSL_get_version(sock_ctx->ssl));
+    log_printf(LOG_INFO, "Encrypted endpoint connection negotiated with %s\n", 
+            SSL_get_version(sock_ctx->ssl));
      */
-
-	/* BUG: return value of this function never checked */
-	bufferevent_set_timeouts(sock_ctx->secure.bev, NULL, NULL);
 
     sock_ctx->state = SOCKET_FINISHING_CONN;
 
-    if (has_revocation_checks(sock_ctx->rev_ctx->checks))
+    if (SSL_session_reused(sock_ctx->ssl))
+        log_printf(LOG_DEBUG, "Session reused!\n");
+    else
+        log_printf(LOG_DEBUG, "Session not reused...\n");
+
+
+    if (has_revocation_checks(sock_ctx->rev_ctx->checks) && 
+                !SSL_session_reused(sock_ctx->ssl))
+
         do_cert_chain_revocation_checks(sock_ctx);
     else
         netlink_handshake_notify_kernel(daemon, id, NOTIFY_SUCCESS);
@@ -294,27 +296,29 @@ void handle_client_event_connected(socket_ctx* sock_ctx,
  */
 void handle_server_event_connected(socket_ctx* sock_ctx, channel* startpoint) {
 
-	log_printf(LOG_DEBUG, "%s server endpoint connected\n",
-		startpoint->bev == sock_ctx->secure.bev ? "Encrypted" : "Plaintext");		
+    LOG_D("%s endpoint connected\n", startpoint->bev == sock_ctx->secure.bev 
+                ? "Encrypted server" : "Plaintext server");
 
-	if (startpoint->bev == sock_ctx->secure.bev) {
+    if (startpoint->bev == sock_ctx->secure.bev) {
+        sock_ctx->state = SOCKET_FINISHING_CONN;
 
-		int ret = bufferevent_enable(sock_ctx->plain.bev, EV_READ | EV_WRITE);
-		if (ret != 0) 
-			goto err;
+        int ret = bufferevent_enable(sock_ctx->plain.bev, EV_READ | EV_WRITE);
+        if (ret != 0)
+            goto err;
 
-		ret = bufferevent_socket_connect(sock_ctx->plain.bev, 
-				&sock_ctx->int_addr, sock_ctx->int_addrlen);
-		if (ret != 0)
-			goto err;
-	}
-	return;
+        ret = bufferevent_socket_connect(sock_ctx->plain.bev, 
+                &sock_ctx->int_addr, sock_ctx->int_addrlen);
+        if (ret != 0)
+            goto err;
+    }
+
+    return;
 err:
     log_printf(LOG_DEBUG, "Erasing connection completely\n");
-	
+    
     hashmap_del(sock_ctx->daemon->sock_map_port, sock_ctx->local_port);
-	socket_shutdown(sock_ctx);
-	socket_context_free(sock_ctx);
+    socket_shutdown(sock_ctx);
+    socket_context_free(sock_ctx);
 }
 
 /**
@@ -329,33 +333,28 @@ err:
  * @param endpoint The other channel of the socket.
  */
 void handle_event_error(socket_ctx* sock_ctx, 
-		unsigned long error, channel* startpoint, channel* endpoint) {
+            unsigned long error, channel* startpoint, channel* endpoint) {
 
-	log_printf(LOG_WARNING, "%s endpoint encountered an error\n", 
-			startpoint->bev == sock_ctx->secure.bev 
-			? "encrypted" : "plaintext");
-	
-	if (errno == ECONNRESET || errno == EPIPE) {
-		log_printf(LOG_INFO, "Connection closed by local user\n");
-
-	} else if (errno != 0) {
-		log_printf(LOG_WARNING, "Unhandled error %i has occurred: %s\n", 
-				errno, strerror(errno));
-    } else {
-        log_printf(LOG_ERROR, "SSL error occurred on endpoint: %s\n",
+    if (errno == ECONNRESET || errno == EPIPE)
+        LOG_I("Connection closed by local user\n");
+    else if (errno != 0)
+        LOG_W("Unhandled error %i has occurred: %s\n", errno, strerror(errno));
+    else
+        LOG_E("SSL error occurred on endpoint: %s\n", 
                     ERR_reason_error_string(error));
+
+
+    startpoint->closed = 1;
+
+    if (endpoint->closed == 0) {
+        struct evbuffer* out_buf;
+        out_buf = bufferevent_get_output(endpoint->bev);
+
+        /* close other buffer if we're closing and it has no data left */
+        if (evbuffer_get_length(out_buf) == 0)
+            endpoint->closed = 1;
     }
-
-	startpoint->closed = 1;
-
-	if (endpoint->closed == 0) {
-		struct evbuffer* out_buf;
-		out_buf = bufferevent_get_output(endpoint->bev);
-		/* close other buffer if we're closing and it has no data left */
-		if (evbuffer_get_length(out_buf) == 0)
-			endpoint->closed = 1;
-	}
-	return;
+    return;
 }
 
 
@@ -367,55 +366,34 @@ void handle_event_error(socket_ctx* sock_ctx,
  * @param endpoint The other channel of the socket. 
  */
 void handle_event_eof(socket_ctx* sock_ctx, 
-		channel* startpoint, channel* endpoint) {
+            channel* startpoint, channel* endpoint) {
 
-    /*
-	log_printf(LOG_DEBUG, "%s channel got EOF\n", 
-				startpoint->bev == sock_ctx->secure.bev ? "encrypted":"plaintext");
-     */
+    LOG_D("%s channel got EOF\n", startpoint->bev == sock_ctx->secure.bev 
+                ? "encrypted":"plaintext");
 
-	// BUG: when the remote server closes first, this prematurely terminates connections
-	// try msn.com and see
-	if (bufferevent_getfd(endpoint->bev) == -1)
-		endpoint->closed = 1;
-	
-	else if (endpoint->closed == 0) {
-        /*
-		log_printf(LOG_DEBUG, "Other channel not yet closed.\n");
-         */
-		if (evbuffer_get_length(bufferevent_get_input(startpoint->bev)) > 0)
-			common_bev_read_cb(endpoint->bev, sock_ctx);
-		
-		if (evbuffer_get_length(bufferevent_get_output(endpoint->bev)) == 0)
-			endpoint->closed = 1;
-	}
+    /* only clean shutdowns should get SSL_shutdown() */
+    if (startpoint->bev == sock_ctx->secure.bev
+                && !(SSL_get_shutdown(sock_ctx->ssl) & SSL_RECEIVED_SHUTDOWN)) {
+        LOG_W("TLS shutdown wasn't clean\n");
+        sock_ctx->state = SOCKET_DISCONNECTED; /* TODO: not technically yet... */
+    }
 
-	startpoint->closed = 1;
+    // BUG: when the remote server closes first, this prematurely terminates connections
+    // try msn.com and see
+    if (bufferevent_getfd(endpoint->bev) == -1)
+        endpoint->closed = 1;
 
-	return;
-}
+    else if (endpoint->closed == 0) {
+        if (evbuffer_get_length(bufferevent_get_input(startpoint->bev)) > 0) {
+            LOG_D("Channel still had data to be read from it--flushing...\n");
+            common_bev_read_cb(endpoint->bev, sock_ctx);
+        }
 
-/**
- * Called whenever a bufferevent associated with \p sock_ctx times out.
- * @param sock_ctx The context of the socket that received a timeout on one of
- * its bufferevents.
- */
-void handle_event_timeout(socket_ctx* sock_ctx) {
+        if (evbuffer_get_length(bufferevent_get_output(endpoint->bev)) == 0)
+            endpoint->closed = 1;
+    }
 
-    daemon_ctx* daemon = sock_ctx->daemon;
-    int id = sock_ctx->id;
-
-    log_printf(LOG_ERROR, "Connecting bufferevent timed out\n");
-
-    bufferevent_set_timeouts(sock_ctx->secure.bev, NULL, NULL);
-
-    sock_ctx->plain.closed = 1;
-    sock_ctx->secure.closed = 1;
-
-    set_err_string(sock_ctx, "TLS handshake error: connection timed out");
-    netlink_handshake_notify_kernel(daemon, id, -ENETUNREACH);
+    startpoint->closed = 1;
 
     return;
 }
-
-

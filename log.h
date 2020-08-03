@@ -31,10 +31,11 @@
 #include <sys/socket.h>
 
 typedef enum log_level {
-	LOG_DEBUG,
-	LOG_INFO,
-	LOG_WARNING,
-	LOG_ERROR,
+    LOG_DEBUG,
+    LOG_INFO,
+    LOG_WARNING,
+    LOG_ERROR,
+    LOG_FATAL,
 } log_level_t;
 
 #ifndef NO_LOG
@@ -71,12 +72,26 @@ void log_printf_addr(struct sockaddr *addr);
  * Closes the log file being written to.
  */
 void log_close(void);
+
+
+#define LOG_D(...) log_printf(LOG_DEBUG, __VA_ARGS__)
+#define LOG_I(...) log_printf(LOG_INFO, __VA_ARGS__)
+#define LOG_W(...) log_printf(LOG_WARNING, __VA_ARGS__)
+#define LOG_E(...) log_printf(LOG_ERROR, __VA_ARGS__)
+#define LOG_F(...) log_printf(LOG_FATAL, __VA_ARGS__)
+
 #else
 #define noop
-#define log_init(X, Y)	((int)0)
+#define log_init(X, Y)    ((int)0)
 #define log_printf(...) noop
 #define log_printf_addr(...) noop
 #define log_close() noop
+
+#define LOG_DEBUG(string) noop
+#define LOG_INFO(string) noop
+#define LOG_WARN(string) noop
+#define LOG_ERROR(string) noop
+#define LOG_FATAL(string) noop
 #endif
 
 int timeval_subtract(struct timeval* result, struct timeval* x, struct timeval* y);

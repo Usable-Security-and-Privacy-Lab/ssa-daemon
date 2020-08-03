@@ -12,10 +12,6 @@
 #include "hashmap_str.h"
 #include "hashmap_crl.h"
 
-/*
-#define SESSION_CACHE_INDEX 1
-#define SESSION_CACHE_NUM_BUCKETS 255
-*/
 
 /** The maximum length that an error string may be (not including '\0') */
 #define MAX_ERR_STRING 128
@@ -46,7 +42,7 @@
 
 
 /**
- * Disables any revocation checks from being performed, and passes all TLS 
+ * Disables any revocation checks from being performed, and passes all TLS
  * handshakes (even if a revoked certificate is in use)
  */
 #define turn_off_revocation_checks(checks) (checks |= NO_REVOCATION_CHECKS)
@@ -135,10 +131,9 @@ enum socket_state {
     SOCKET_ERROR = 0,      /** Socket unrecoverably failed operation */
     SOCKET_NEW,            /** Fresh socket ready for `connect` or `listen` */
     SOCKET_CONNECTING,     /** Performing TCP or TLS handshake */
-    SOCKET_FINISHING_CONN, /** revocation checks, connecting internally */
+    SOCKET_FINISHING_CONN, /** revocation checks/connecting internally */
     SOCKET_CONNECTED,      /** Both endpoints connected (client) */
     SOCKET_LISTENING,      /** Socket listening/accepting connections */
-    SOCKET_ACCEPTED,       /** Both endpoints connected (server) */
     SOCKET_DISCONNECTED    /** Both endpoints closed cleanly (client/server) */
 };
 
@@ -199,14 +194,15 @@ struct global_config_st {
     char* private_keys[MAX_CERTS]; /** list of files/folders of keys to use */
     int key_cnt;                   /** Size of \p private_keys list */
 
-    int revocation_checks; /** 1 if revocation checked, 0 if not */
+    unsigned int revocation_checks; /** bitset of revocation settings */
+    int session_resumption; /** 1 if sockets will reuse sessions, 0 if not */
 };
 
 
 
 typedef struct channel_st {
-	struct bufferevent* bev; /** The bufferevent of a given endpoint */
-	int closed;              /** 1 if the endpoint is done communicating */
+    struct bufferevent* bev; /** The bufferevent of a given endpoint */
+    int closed;              /** 1 if the endpoint is done communicating */
 } channel;
 
 
@@ -220,13 +216,13 @@ struct revocation_ctx_st {
     socket_ctx* sock_ctx; /** The parent socket_ctx of the rev context */
     unsigned long id;     /** The ID of the parent socket_ctx */
 
-	unsigned int checks; /** bitmap of rev checks; options #define'd above */
+    unsigned int checks; /** bitmap of rev checks; options #define'd above */
 
-    /** The number of active, authoritative responders performing revocation 
-     * checks for the certificate at the corresponding index in the cert chain. 
-     * For example, responders_at[0] would represent the number of responders 
-     * checking the leaf certificate of a chain, responders_at[1] would be the 
-     * number of responders checking the certificate that signed the leaf 
+    /** The number of active, authoritative responders performing revocation
+     * checks for the certificate at the corresponding index in the cert chain.
+     * For example, responders_at[0] would represent the number of responders
+     * checking the leaf certificate of a chain, responders_at[1] would be the
+     * number of responders checking the certificate that signed the leaf
      * certificate, and so on. An `authoritative` responder would be any one
      * OCSP responder for a certificate; CRL responders can collectively be
      * considered as one authoritative responder, but individually they are not.
@@ -235,10 +231,10 @@ struct revocation_ctx_st {
      */
     int *responders_at;
 
-    /** The number of active CRL responders peforming revocation check for the 
+    /** The number of active CRL responders peforming revocation check for the
      * certificate at the corresponding index in the cert chain.
-     * For example, crl_responders_at[0] would return the number of CRL 
-     * responders checking the leaf certificate of a chain. 
+     * For example, crl_responders_at[0] would return the number of CRL
+     * responders checking the leaf certificate of a chain.
      * @see responders_at.
      */
     int *crl_responders_at;
@@ -297,40 +293,41 @@ struct crl_responder_st {
 
 	const char* hostname;
 };
- 
+
 
 struct socket_ctx_st {
 
-	daemon_ctx* daemon;     /** The daemon's context */
-	unsigned long id;       /** The unique id associated with the socket */
-	evutil_socket_t sockfd; /** The file descriptor of the socket */
+    daemon_ctx* daemon;     /** The daemon's context */
+    unsigned long id;       /** The unique id associated with the socket */
+    evutil_socket_t sockfd; /** The file descriptor of the socket */
 
     enum socket_state state; /** The socket's current state @see socket_state */
 
-    SSL_CTX* ssl_ctx;   /** The context of the SSL object (useful for server) */
-	SSL* ssl;           /** The SSL instance associated with \p sockfd */
+  SSL_CTX* ssl_ctx;   /** The context of the SSL object (useful for server) */
+    SSL* ssl;           /** The SSL instance associated with \p sockfd */
 
 
-	channel plain;      /** The non-encrypted channel to the calling program */
-	channel secure;     /** The encrypted channel to the external peer */
+    channel plain;      /** The non-encrypted channel to the calling program */
+    channel secure;     /** The encrypted channel to the external peer */
 
-	struct evconnlistener* listener; /** Libevent struct for listening socket */
+    struct evconnlistener* listener; /** Libevent struct for listening socket */
 
-	revocation_ctx* rev_ctx; /** Settings/data structs to do with revocation */
 
-	struct sockaddr int_addr; /** Internal address--the program using SSA */
-	int int_addrlen;          /** The size of \p int_addr */
-	union {
-		struct sockaddr ext_addr; /** External address--the remote peer */
-		struct sockaddr rem_addr; /** Remote address--the remote host */
-	};
-	union {
-		int ext_addrlen; /** The size of \p ext_addr */
-		int rem_addrlen; /** The size of \p rem_addr */
-	};
+    revocation_ctx* rev_ctx; /** Settings/data structs to do with revocation */
+
+    struct sockaddr int_addr; /** Internal address--the program using SSA */
+    int int_addrlen;          /** The size of \p int_addr */
+    union {
+        struct sockaddr ext_addr; /** External address--the remote peer */
+        struct sockaddr rem_addr; /** Remote address--the remote host */
+    };
+    union {
+        int ext_addrlen; /** The size of \p ext_addr */
+        int rem_addrlen; /** The size of \p rem_addr */
+    };
     int local_port; /** Used for temporarily storing connections in daemon */
 
-	char rem_hostname[MAX_HOSTNAME+1]; /** The hostname being connected to */
+    char rem_hostname[MAX_HOSTNAME+1]; /** The hostname being connected to */
 
     char err_string[MAX_ERR_STRING+1]; /** String describing TLS/daemon error */
     unsigned int handshake_err_code;   /** TLS error code for verify failure */
@@ -341,7 +338,7 @@ struct socket_ctx_st {
 daemon_ctx *daemon_context_new(char* config_path, int port);
 void daemon_context_free(daemon_ctx* daemon);
 
-int socket_context_new(socket_ctx** sock, int fd, 
+int socket_context_new(socket_ctx** sock, int fd,
             daemon_ctx* ctx, unsigned long id);
 socket_ctx* accepting_socket_ctx_new(socket_ctx* listener_ctx, int fd);
 void socket_shutdown(socket_ctx* sock_ctx);
@@ -359,6 +356,20 @@ void crl_responder_free(crl_responder* resp);
 
 int check_socket_state(socket_ctx* sock_ctx, int num, ...);
 
+
+/**
+ * Creates a string of the format "<hostname>:<port>".
+ * @param sock_ctx The socket to retrieve hostname and port information from.
+ * @returns A newly allocated null-terminated string.
+ */
+char* get_hostname_port_str(socket_ctx* sock_ctx);
+
+
+/**
+ * Retrieves an integer port number from a given sockaddr struct.
+ * @param addr The sockaddr struct to retrieve the port number of.
+ * @returns The port number.
+ */
 int get_port(struct sockaddr* addr);
 
 

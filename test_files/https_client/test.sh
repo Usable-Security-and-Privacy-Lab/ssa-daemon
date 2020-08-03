@@ -7,18 +7,18 @@
 
 for j in {1..5}
 do
-	echo "round $j"
-	for i in {1..100}
-	do
-		echo "Iteration $i"
-		./threaded_https_client -b 1024 -c 1 -d 1000000 -f final_5_iterations.csv -h 192.168.0.100 -t $i 
-	done
+    echo "round $j"
+    for i in {1..100}
+    do
+        echo "Iteration $i"
+        ./threaded_https_client -b 1024 -c 1 -d 1000000 -f final_5_iterations.csv -h 192.168.0.100 -t $i 
+    done
 
-	for i in {1..100}
-	do
-		echo "Iteration $i"
-		./threaded_https_client -b 1024 -c 1 -d 1000000 -f final_5_iterations.csv -h 192.168.21.101 -t $i -s
-	done
+    for i in {1..100}
+    do
+        echo "Iteration $i"
+        ./threaded_https_client -b 1024 -c 1 -d 1000000 -f final_5_iterations.csv -h 192.168.21.101 -t $i -s
+    done
 done
 
 for j in {1..5}

@@ -17,10 +17,10 @@ void set_wrong_state_err_string(socket_ctx* sock_ctx);
  * @returns 1 if an error string was found, or 0 otherwise.
  */
 int has_error_string(socket_ctx* sock_ctx) {
-	if (strlen(sock_ctx->err_string) > 0)
-		return 1;
-	else
-		return 0;
+    if (strlen(sock_ctx->err_string) > 0)
+        return 1;
+    else
+        return 0;
 }
 
 
@@ -138,15 +138,15 @@ void set_err_string(socket_ctx* sock_ctx, char* string, ...) {
 
     int error = errno;
 
-	if (sock_ctx == NULL)
-		return;
+    if (sock_ctx == NULL)
+        return;
 
-	va_list args;
-	clear_socket_error(sock_ctx);
+    va_list args;
+    clear_socket_error(sock_ctx);
 
-	va_start(args, string);
-	vsnprintf(sock_ctx->err_string, MAX_ERR_STRING, string, args);
-	va_end(args);
+    va_start(args, string);
+    vsnprintf(sock_ctx->err_string, MAX_ERR_STRING, string, args);
+    va_end(args);
 
     errno = error;
 }
@@ -192,7 +192,7 @@ void clear_global_errors() {
  */
 void clear_socket_error(socket_ctx* sock_ctx) {
 
-	memset(sock_ctx->err_string, 0, MAX_ERR_STRING + 1);
+    memset(sock_ctx->err_string, 0, MAX_ERR_STRING + 1);
     sock_ctx->handshake_err_code = NO_ERROR;
 }
 
@@ -216,8 +216,8 @@ void clear_global_and_socket_errors(socket_ctx* sock_ctx) {
  * @param sock_ctx The context of the socket to set the error string for.
  */
 void set_badfd_err_string(socket_ctx* sock_ctx) {
-	if (sock_ctx == NULL)
-		return;
+    if (sock_ctx == NULL)
+        return;
 
     set_err_string(sock_ctx, "SSA daemon socket error: given socket "
                 "previously failed an operation in an unrecoverable way");
@@ -229,9 +229,9 @@ void set_badfd_err_string(socket_ctx* sock_ctx) {
  * @param sock_ctx The context of the socket to set the error string for.
  */
 void set_wrong_state_err_string(socket_ctx* sock_ctx) {
-	if (sock_ctx == NULL)
-		return;
+    if (sock_ctx == NULL)
+        return;
 
-	set_err_string(sock_ctx, "SSA daemon error: given socket is not in the "
+    set_err_string(sock_ctx, "SSA daemon error: given socket is not in the "
                 "right state to perform the requested operation");
 }

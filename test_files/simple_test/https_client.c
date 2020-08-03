@@ -73,7 +73,7 @@ int connect_to_host(char* host, char* service) {
 			perror("socket");
 			continue;
 		}
-	        if (setsockopt(sock, IPPROTO_TLS, TLS_REMOTE_HOSTNAME, host, strlen(host)+1) == -1) {
+	        if (setsockopt(sock, IPPROTO_TLS, TLS_HOSTNAME, host, strlen(host)+1) == -1) {
 			perror("setsockopt: TLS_REMOTE_HOSTNAME");
 			close(sock);
 			continue;

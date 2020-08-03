@@ -3,7 +3,7 @@
 
 #include <event2/bufferevent.h>
 
-#define MAX_BUFFER	1024*1024*10 /* 10 Megabits */
+#define MAX_BUFFER    1024*1024*10 /* 10 Megabits */
 
 
 /**

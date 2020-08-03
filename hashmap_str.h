@@ -28,9 +28,9 @@
 #define SSA_HASHMAP_STR_H
 
 typedef struct hsmap {
-	struct hsnode** buckets;
-	int num_buckets;
-	int item_count;
+    struct hsnode** buckets;
+    int num_buckets;
+    int item_count;
 } hsmap_t;
 
 
@@ -96,5 +96,6 @@ void* str_hashmap_get(hsmap_t* map, char* key);
  * @param map The map to print.
  */
 void str_hashmap_print(hsmap_t* map);
+
 
 #endif

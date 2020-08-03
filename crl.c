@@ -677,4 +677,3 @@ int set_inotify(daemon_ctx *daemon) {
 }
 */
 
-

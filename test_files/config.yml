@@ -15,13 +15,13 @@ max-tls-version: 1.3 # Default: 1.3
 # CA-path can be a file or directory of CA files. All files must be in PEM format. Use "c_rehash ."
 # in directory before use. 
 #  CA-path: /etc/ssl/certs
-#  CA-path: test_files/certs/rootCA.pem # use this for testing our server
+CA-path: test_files/certs/rootCA.pem # use this for testing our server
 
 # The CRIME attack targets TLS Compression; an attacker can gain information 
 # about authorization tokens, secret web cookies or other sensitive information 
 # passed in HTTP requests/responses since message lengths are not hidden by encryption.
 # It should be kept disabled unless other mitigations are put in place.
-tls-compression: disabled # Default: disabled
+tls-compression: enabled # Default: disabled
 
 # Session Tickets posess a vulnerability in them for TLS 1.2 and lower.
 # For more info, see here: https://blog.filippo.io/we-need-to-talk-about-session-tickets/
@@ -76,8 +76,10 @@ verify-cert-transparency: disabled
 # Default: enabled
 
 # Certificate Revocation checks are important in determining the authenticity of a webiste.
-revocation-checks: enabled
+revocation-checks: disabled
 # Default: enabled
+
+session-resumption: enabled
 
 
 # Set the path to the certificate chain to be provided to clients.
