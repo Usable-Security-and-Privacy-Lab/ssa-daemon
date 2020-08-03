@@ -40,6 +40,18 @@ void pass_individual_rev_check(ocsp_responder* ocsp_resp);
 
 
 /**
+ * Designates a given certificate being queried for by a responder as valid and 
+ * unrevoked, and cancels all other bufferevents querying responders for the 
+ * same certificate. If no more certificates are left to be checked, this 
+ * function will also pass the revocation checks and report handshake success
+ * to the kernel over netlink.
+ * @param crl_resp The crl responder that successfully verified its given
+ * certificate.
+ */
+void pass_individual_crl_check(crl_responder* crl_resp);
+
+
+/**
  * Reports handshake success to the kernel over netlink, and shuts down any 
  * bufferevents still performing revocation checks.
  * @param rev_ctx The revocation context of the socket.
@@ -99,7 +111,7 @@ int get_http_body_len(char* response);
  * @param resp_ctx The given responder to modify the buffer of.
  * @returns 0 on success, or if an error occurred.
  */
-int start_reading_body(ocsp_responder* ocsp_resp);
+int start_reading_body(void* generic_resp);
 
 /**
  * Determines whether the given ocsp responder has finished reading all of
@@ -107,7 +119,7 @@ int start_reading_body(ocsp_responder* ocsp_resp);
  * @param resp_ctx The ocsp responder to check.
  * @returns 1 if done, 0 if not done.
  */
-int done_reading_body(ocsp_responder* ocsp_resp);
+int done_reading_body(void* generic_resp);
 
 
 /**

@@ -657,31 +657,31 @@ void setsockopt_cb(daemon_ctx* daemon, unsigned long id, int level,
     case TLS_REVOCATION_CHECKS:
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
             break;
-        turn_on_revocation_checks(sock_ctx->rev_ctx.checks);
+        turn_on_revocation_checks(sock_ctx->rev_ctx->checks);
         break;
 
     case TLS_OCSP_STAPLED_CHECKS:
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
             break;
-        turn_on_stapled_checks(sock_ctx->rev_ctx.checks);
+        turn_on_stapled_checks(sock_ctx->rev_ctx->checks);
         break;
 
     case TLS_OCSP_CHECKS:
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
             break;
-        turn_on_ocsp_checks(sock_ctx->rev_ctx.checks);
+        turn_on_ocsp_checks(sock_ctx->rev_ctx->checks);
         break;
 
     case TLS_CRL_CHECKS:
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
             break;
-        turn_on_crl_checks(sock_ctx->rev_ctx.checks);
+        turn_on_crl_checks(sock_ctx->rev_ctx->checks);
         break;
 
     case TLS_CACHE_REVOCATION:
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
             break;
-        turn_on_cached_checks(sock_ctx->rev_ctx.checks);
+        turn_on_cached_checks(sock_ctx->rev_ctx->checks);
         break;
 
 /*
@@ -1146,6 +1146,7 @@ err:
  * @param id The id of the socket to be closed.
  */
 void close_cb(daemon_ctx* daemon, unsigned long id) {
+
 	socket_ctx* sock_ctx;
 
 	sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);

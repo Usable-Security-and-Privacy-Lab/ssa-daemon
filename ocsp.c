@@ -400,12 +400,10 @@ void ocsp_responder_read_cb(struct bufferevent* bev, void* arg) {
 		case V_OCSP_CERTSTATUS_REVOKED:
 			set_err_string(rev_ctx->sock_ctx, "TLS handshake error: "
 					"certificate revoked (OCSP remote response)");
-
 			fail_revocation_checks(rev_ctx);
 			break;
 		}
 	}
-
 	return;
 err:
 	ocsp_responder_shutdown(ocsp_resp);

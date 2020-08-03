@@ -516,7 +516,7 @@ int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
 
     clear_global_and_socket_errors(sock_ctx);
 
-    if (is_client && has_revocation_checks(sock_ctx->rev_ctx.checks)) {
+    if (is_client && has_revocation_checks(sock_ctx->rev_ctx->checks)) {
 
         ret = SSL_CTX_set_tlsext_status_type(sock_ctx->ssl_ctx, 
                     TLSEXT_STATUSTYPE_ocsp);

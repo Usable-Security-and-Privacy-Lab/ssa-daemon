@@ -3,6 +3,12 @@
 
 #include "daemon_structs.h"
 
+#define MAX_CRL_RESPONDERS 10
+#define OCSP_READ_TIMEOUT 8
+#define MAX_HEADER_SIZE 8192
+#define LEEWAY_90_SECS 90
+#define MAX_CRL_AGE 604800L
+
 
 
 /**
@@ -13,7 +19,7 @@
  * @param urls The URLs of OCSP responders for the clients to connect to.
  * @param num_ocsp_urls The number of URLs found in urls.
  */
-int launch_crl_checks(socket_ctx* sock_ctx, char** urls, int num_urls);
+int launch_crl_checks(revocation_ctx* rev_ctx, int cert_index);
 
 
 /**
@@ -27,7 +33,7 @@ int launch_crl_checks(socket_ctx* sock_ctx, char** urls, int num_urls);
  * 0 if no such status was found; or -1 if the response's correctness could not 
  * be verified.
  */
-int do_crl_response_checks(X509_CRL* response, SSL* ssl);
+int check_crl_response(X509_CRL* crl, X509* subject, X509* issuer, int* response);
 
 
 /**
@@ -41,6 +47,20 @@ int do_crl_response_checks(X509_CRL* response, SSL* ssl);
  */
 char** retrieve_crl_urls(X509* cert, int* num_urls);
 
+void cdp_free(char** urls, int num_urls);
+
+int check_crl_cache(hcmap_t* cache_map, X509* cert);
+
+int send_crl_request(struct bufferevent* bev, char* url, char* http_req);
+
+int crl_cache_update(hcmap_t* cache_map, X509_CRL* crl, char* url, 
+			char* hostname, sem_t* cache_sem);
+
+int read_crl_cache(hcmap_t* cache_map, FILE* cache_ptr);
+
+int crl_in_cache(hcmap_t* cache_map, char* url);
+
+char* alloc_dup(char* serial, int len);
 
 
 #endif
