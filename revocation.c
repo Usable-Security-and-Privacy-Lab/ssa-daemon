@@ -34,7 +34,7 @@ void do_cert_chain_revocation_checks(socket_ctx* sock_ctx) {
 
     for (int i = 0; i < rev_ctx->total_to_check; i++) {
         ret = begin_revocation_checks(rev_ctx, sock_ctx->ssl, i);
-
+log_printf(LOG_ERROR, "beginning checks\n");
         if (ret != 0) {
             goto err;
 	}

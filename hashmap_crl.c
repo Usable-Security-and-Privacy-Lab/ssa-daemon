@@ -43,8 +43,6 @@ int hash(hcmap_t* map, char* key, int len) {
 	unsigned int hash_val = 0;
 
 	for (i = 0; i < len; ++i) {
-		if (key[i] == 0xFF)
-			fprintf(stderr, "this is a test\n");
 		hash_val += (i * key[i]);
 	}
 
@@ -54,7 +52,7 @@ int hash(hcmap_t* map, char* key, int len) {
 
 
 hcmap_t* crl_hashmap_create(int num_buckets) {
-	fprintf(stderr, "creating hashmap\n");
+
 	hcmap_t* map = (hcmap_t*)calloc(1, sizeof(hcmap_t));
 	if (map == NULL) {
 		return NULL;

@@ -70,20 +70,20 @@ daemon_ctx* daemon_context_new(char* config_path, int port) {
 
 	//set_inotify(daemon);
 
-	daemon->crl_cache = crl_hashmap_create(HASHMAP_NUM_BUCKETS * 100);
-	if (daemon->crl_cache == NULL)
-		goto err;
+    daemon->crl_cache = crl_hashmap_create(HASHMAP_NUM_BUCKETS * 100);
+    if (daemon->crl_cache == NULL)
+	goto err;
 
 
-	FILE *crl_cache = fopen("crl_cache.txt", "r");
-	if (crl_cache != NULL)
-		read_crl_cache(daemon->crl_cache, crl_cache);
+    FILE *crl_cache = fopen("crl_cache.txt", "r");
+    if (crl_cache != NULL)
+	read_crl_cache(daemon->crl_cache, crl_cache);
 
 
 //log_printf(LOG_DEBUG, "about to init sem\n");
-	daemon->cache_sem = calloc(1, sizeof(sem_t));
-	if (sem_init(daemon->cache_sem, 0, 1))
-		log_printf(LOG_DEBUG, "%s\n", strerror(errno));
+    daemon->cache_sem = calloc(1, sizeof(sem_t));
+    if (sem_init(daemon->cache_sem, 0, 1))
+	log_printf(LOG_DEBUG, "%s\n", strerror(errno));
 //log_printf(LOG_DEBUG, "succeeded in initializing sem\n");
 
     /*
@@ -274,7 +274,7 @@ void socket_shutdown(socket_ctx* sock_ctx) {
         return;
     }
     if (sock_ctx->rev_ctx != NULL)
-        revocation_context_cleanup(&sock_ctx->rev_ctx);
+        revocation_context_cleanup(sock_ctx->rev_ctx);
 
 
     if (sock_ctx->ssl != NULL) {

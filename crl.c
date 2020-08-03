@@ -607,7 +607,7 @@ void read_cache_info(hcmap_t* cache_map) {
 		fclose(cache_metadoc);
 		free(cache_info);
 	}
-	crl_hashmap_print(cache_map);
+	//crl_hashmap_print(cache_map);
 }
 
 int crl_in_cache(hcmap_t* cache_map, char* url) {
