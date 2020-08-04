@@ -426,7 +426,7 @@ int load_certificates(SSL_CTX* ctx, global_config* settings) {
  * and the plain_fd are cleaned up on failure.
  */
 int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
-log_printf(LOG_ERROR, "preparing bufferevents\n");
+
     daemon_ctx* daemon = sock_ctx->daemon;
     enum bufferevent_ssl_state state;
     bufferevent_event_cb event_cb;
@@ -447,7 +447,7 @@ log_printf(LOG_ERROR, "preparing bufferevents\n");
                 sock_ctx->sockfd, sock_ctx->ssl, state, BEV_OPT_CLOSE_ON_FREE);
     if (sock_ctx->secure.bev == NULL)
         goto err;
-log_printf(LOG_ERROR, "449\n");
+
     bufferevent_openssl_set_allow_dirty_shutdown(sock_ctx->secure.bev, 1);
 
     ret = bufferevent_enable(sock_ctx->secure.bev, EV_READ | EV_WRITE);

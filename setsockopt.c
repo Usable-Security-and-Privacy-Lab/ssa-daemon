@@ -47,7 +47,7 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
             int option, void* value, socklen_t len) {
 
     int response = 0;
-log_printf(LOG_ERROR, "setsockopt; option: %d\n", option);
+
     switch (option) {
     case TLS_HOSTNAME:
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)

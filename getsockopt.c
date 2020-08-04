@@ -48,10 +48,7 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
             int option, void** data, unsigned int* len) {
 
     int response = 0;
-    int version;
-    int **check;
 
-log_printf(LOG_ERROR, "getsockopt, option: %d\n", option);
     switch (option) {
     case TLS_ERROR:
         if (!has_error_string(sock_ctx)) {

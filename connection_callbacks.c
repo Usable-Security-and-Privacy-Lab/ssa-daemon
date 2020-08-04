@@ -141,21 +141,14 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
     channel* startpoint = (bev == sock_ctx->secure.bev)
             ? &sock_ctx->secure : &sock_ctx->plain;
 
-log_printf(LOG_ERROR, "event cb\n");
     if (events & BEV_EVENT_EOF) {
         handle_event_eof(sock_ctx, startpoint, endpoint);
-	log_printf(LOG_ERROR, "eof\n");
     }
     else if (events & BEV_EVENT_ERROR) {
         handle_event_error(sock_ctx, ssl_err, startpoint, endpoint);
-	log_printf(LOG_ERROR, "error\n");
     }
     else if (events & BEV_EVENT_CONNECTED) {
         handle_client_event_connected(sock_ctx, daemon, id, startpoint);
-	log_printf(LOG_ERROR, "connected\n");
-    }
-    else {
-	log_printf(LOG_ERROR, "none\n");
     }
 
     /* Connection closed--usually due to error, EOF or timeout */
@@ -263,7 +256,7 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
  */
 void handle_client_event_connected(socket_ctx* sock_ctx, 
             daemon_ctx* daemon, unsigned long id, channel* startpoint) {
-log_printf(LOG_ERROR, "client event connected\n");
+
     LOG_D("%s endpoint connected\n", startpoint->bev == sock_ctx->secure.bev 
                 ? "Encrypted client" : "Plaintext client");
 
@@ -284,7 +277,6 @@ log_printf(LOG_ERROR, "client event connected\n");
     else
         log_printf(LOG_DEBUG, "Session not reused...\n");
 
-log_printf(LOG_ERROR, "client event connected\n");
     if (has_revocation_checks(sock_ctx->rev_ctx->checks) && 
                 !SSL_session_reused(sock_ctx->ssl))
 

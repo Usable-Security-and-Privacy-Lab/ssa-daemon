@@ -624,7 +624,7 @@ void setsockopt_cb(daemon_ctx* daemon, unsigned long id, int level,
     }
 
     clear_global_and_socket_errors(sock_ctx);
-log_printf(LOG_ERROR, "option: %d\n", option);
+
     if (level == IPPROTO_TLS) {
         response = do_setsockopt_action(sock_ctx, option, value, len);
     
@@ -671,8 +671,7 @@ void getsockopt_cb(daemon_ctx* daemon,
         clear_global_and_socket_errors(sock_ctx);
     
     response = do_getsockopt_action(sock_ctx, option, &data, &len);
-    if (data != NULL)
-        log_printf(LOG_ERROR, "674: %d\n", response);
+
     if (response != 0) {
         netlink_notify_kernel(daemon, id, response);
         return;
@@ -771,7 +770,6 @@ err:
 void connect_cb(daemon_ctx* daemon, unsigned long id,
         struct sockaddr* int_addr, int int_addrlen,
         struct sockaddr* rem_addr, int rem_addrlen, int blocking) {
-log_printf(LOG_ERROR, "connect cb\n");
     socket_ctx* sock_ctx;
     int response;
     int ret;

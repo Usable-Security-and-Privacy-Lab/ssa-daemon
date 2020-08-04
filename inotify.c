@@ -13,7 +13,7 @@ void inotify_cb(struct bufferevent *bev, void *arg) {
 
 //TODO: what to return??
 inotify_ctx* set_inotify(struct event_base* ev_base) {
-	log_printf(LOG_ERROR, "set_inotify\n");
+
 	int fd; //,wd;
 	char buf[BUF_LEN] __attribute__ ((aligned(8)));
 	inotify_ctx *inotify = calloc(1, sizeof(inotify_ctx));
@@ -43,7 +43,6 @@ inotify_ctx* set_inotify(struct event_base* ev_base) {
 
 void inotify_cleanup(inotify_ctx* inotify) {
 
-    log_printf(LOG_ERROR, "inotify_cleanup\n");
     bufferevent_free(inotify->bev);
     close(inotify->fd);
     free(inotify);
