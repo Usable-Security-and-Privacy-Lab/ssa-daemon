@@ -76,6 +76,22 @@
 /** A cipher marked as usable for connections */
 #define TLS_ENABLE_CIPHER                110 /* TODO: used to be 109; fix */
 
+/** TLS version control */
+#define TLS_VERSION_MIN                  111
+#define TLS_VERSION_MAX                  112
+#define TLS_VERSION_CONN                 113
+
+static const int TLS_1_2 = 0x0303;
+static const int TLS_1_3 = 0x0304;
+
+__attribute__((unused)) static char* tls_version_str(int version) {
+    if (version == TLS_1_2)
+        return "TLS 1.2";
+    if (version == TLS_1_3)
+        return "TLS 1.3";
+    return "Unknown version number";
+}
+
 
 /* Internal use only */
 #define TLS_PEER_CERTIFICATE_CHAIN        95

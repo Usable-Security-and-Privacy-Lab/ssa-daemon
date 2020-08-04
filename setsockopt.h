@@ -1,7 +1,9 @@
 #ifndef SSA_SETSOCKOPT_H
 #define SSA_SETSOCKOPT_H
 
+#include "socket_setup.h"
 #include "daemon_structs.h"
+#include "in_tls.h"
 
 
 /**
@@ -15,6 +17,5 @@
  */
 int do_setsockopt_action(socket_ctx* sock_ctx, 
             int option, void* value, socklen_t len);
-
 
 #endif

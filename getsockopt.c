@@ -4,6 +4,7 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
+#include "socket_setup.h"
 #include "cipher_selection.h"
 #include "error.h"
 #include "getsockopt.h"
@@ -16,6 +17,9 @@ int get_peer_certificate(socket_ctx* sock_ctx, char** data, unsigned int* len);
 int get_peer_identity(socket_ctx* sock_ctx, char** data, unsigned int* len);
 int get_hostname(socket_ctx* sock_ctx, char** data, unsigned int* len);
 int get_chosen_cipher(socket_ctx* sock_ctx, char** data, unsigned int* len);
+int get_version_min(socket_ctx* sock_ctx, int** data, unsigned int* len);
+int get_version_max(socket_ctx* sock_ctx, int** data, unsigned int* len);
+int get_version_conn(socket_ctx* sock_ctx, int** data, unsigned int* len);
 int get_session_resumed(socket_ctx* sock_ctx, int** data, unsigned int *len);
 int get_session_reuse(socket_ctx* sock_ctx, int** data, unsigned int* len);
 int get_tls_compression(socket_ctx* sock_ctx, int** data, unsigned int* len);
@@ -44,7 +48,10 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
             int option, void** data, unsigned int* len) {
 
     int response = 0;
-    
+    int version;
+    int **check;
+
+log_printf(LOG_ERROR, "getsockopt, option: %d\n", option);
     switch (option) {
     case TLS_ERROR:
         if (!has_error_string(sock_ctx)) {
@@ -85,6 +92,20 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_CONNECTED)) != 0)
             break;
         get_chosen_cipher(sock_ctx, (char**) data, len);
+        break;
+
+    case TLS_VERSION_MIN:
+	get_version_min(sock_ctx, (int**) data, len);
+        break;
+
+    case TLS_VERSION_MAX:
+        get_version_max(sock_ctx, (int**) data, len);
+        break;
+
+    case TLS_VERSION_CONN:
+        if ((response = check_socket_state(sock_ctx, 1, SOCKET_CONNECTED)) != 0)
+            break;
+        get_version_conn(sock_ctx, (int**) data, len);
         break;
 
     case TLS_COMPRESSION:
@@ -302,6 +323,32 @@ int get_chosen_cipher(socket_ctx* sock_ctx, char** data, unsigned int* len) {
 }
 
 
+int get_version_min(socket_ctx* sock_ctx, int** data, unsigned int* len) {
+
+    int* version = malloc(sizeof(int));
+    *version = SSL_CTX_get_min_proto_version(sock_ctx->ssl_ctx);
+    *data = version;
+    *len = sizeof(int);
+    return 0;
+}
+
+int get_version_max(socket_ctx* sock_ctx, int** data, unsigned int* len) {
+
+    int* version = malloc(sizeof(int));
+    *version = SSL_CTX_get_max_proto_version(sock_ctx->ssl_ctx);
+    *data = version;
+    *len = sizeof(int);
+    return 0;
+}
+
+int get_version_conn(socket_ctx* sock_ctx, int** data, unsigned int* len) {
+
+    int* version = malloc(sizeof(int));
+    *version = SSL_version(sock_ctx->ssl);
+    *data = version;
+    *len = sizeof(int);
+    return 0;
+}
 
 /**
  * Determines whether compression is enabled or disabled for a given socket. 
@@ -437,7 +484,7 @@ int get_revocation_checks(socket_ctx* sock_ctx, int** data, unsigned int* len) {
     if (checks_enabled == NULL)
         return -ECANCELED;
 
-    *checks_enabled = has_revocation_checks(sock_ctx->rev_ctx.checks) ? 1 : 0;
+    *checks_enabled = has_revocation_checks(sock_ctx->rev_ctx->checks) ? 1 : 0;
 
     *data = checks_enabled;
     *len = sizeof(int);
@@ -452,7 +499,7 @@ int get_stapled_checks(socket_ctx* sock_ctx, int** data, unsigned int* len) {
     if (checks_enabled == NULL)
         return -ECANCELED;
 
-    *checks_enabled = has_stapled_checks(sock_ctx->rev_ctx.checks) ? 1 : 0;
+    *checks_enabled = has_stapled_checks(sock_ctx->rev_ctx->checks) ? 1 : 0;
 
     *data = checks_enabled;
     *len = sizeof(int);
@@ -466,7 +513,7 @@ int get_ocsp_checks(socket_ctx* sock_ctx, int** data, unsigned int* len) {
     if (checks_enabled == NULL)
         return -ECANCELED;
 
-    *checks_enabled = has_ocsp_checks(sock_ctx->rev_ctx.checks) ? 1 : 0;
+    *checks_enabled = has_ocsp_checks(sock_ctx->rev_ctx->checks) ? 1 : 0;
 
     *data = checks_enabled;
     *len = sizeof(int);
@@ -481,7 +528,7 @@ int get_crl_checks(socket_ctx* sock_ctx, int** data, unsigned int* len) {
     if (checks_enabled == NULL)
         return -ECANCELED;
 
-    *checks_enabled = has_crl_checks(sock_ctx->rev_ctx.checks) ? 1 : 0;
+    *checks_enabled = has_crl_checks(sock_ctx->rev_ctx->checks) ? 1 : 0;
 
     *data = checks_enabled;
     *len = sizeof(int);
@@ -496,10 +543,11 @@ int get_cached_checks(socket_ctx* sock_ctx, int** data, unsigned int* len) {
     if (checks_enabled == NULL)
         return -ECANCELED;
 
-    *checks_enabled = has_cached_checks(sock_ctx->rev_ctx.checks) ? 1 : 0;
+    *checks_enabled = has_cached_checks(sock_ctx->rev_ctx->checks) ? 1 : 0;
 
     *data = checks_enabled;
     *len = sizeof(int);
 
     return 0;
 }
+

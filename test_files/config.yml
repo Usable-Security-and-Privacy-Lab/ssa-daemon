@@ -15,7 +15,7 @@ max-tls-version: 1.3 # Default: 1.3
 # CA-path can be a file or directory of CA files. All files must be in PEM format. Use "c_rehash ."
 # in directory before use. 
 #  CA-path: /etc/ssl/certs
-CA-path: test_files/certs/rootCA.pem # use this for testing our server
+# CA-path: test_files/certs/rootCA.pem # use this for testing our server
 
 # The CRIME attack targets TLS Compression; an attacker can gain information 
 # about authorization tokens, secret web cookies or other sensitive information 
