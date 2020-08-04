@@ -68,7 +68,7 @@ daemon_ctx* daemon_context_new(char* config_path, int port) {
     if (daemon->revocation_cache == NULL)
         goto err;
 
-	//set_inotify(daemon);
+    daemon->inotify = set_inotify(daemon->ev_base);
 
     daemon->crl_cache = crl_hashmap_create(HASHMAP_NUM_BUCKETS * 100);
     if (daemon->crl_cache == NULL)
@@ -157,6 +157,9 @@ void daemon_context_free(daemon_ctx* daemon) {
 
     if (daemon->crl_cache != NULL)
 	crl_hashmap_free(daemon->crl_cache);
+
+    if (daemon->inotify != NULL)
+        inotify_cleanup(daemon->inotify);
 
     if (daemon->cache_sem != NULL) {
         sem_destroy(daemon->cache_sem);

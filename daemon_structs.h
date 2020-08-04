@@ -12,6 +12,8 @@
 #include "hashmap_str.h"
 #include "hashmap_crl.h"
 
+#include "inotify.h"
+
 
 /** The maximum length that an error string may be (not including '\0') */
 #define MAX_ERR_STRING 128
@@ -127,6 +129,7 @@ typedef struct ocsp_responder_st ocsp_responder;
 typedef struct socket_ctx_st socket_ctx;
 typedef struct channel_st channel;
 
+
 enum socket_state {
     SOCKET_ERROR = 0,      /** Socket unrecoverably failed operation */
     SOCKET_NEW,            /** Fresh socket ready for `connect` or `listen` */
@@ -153,6 +156,7 @@ struct daemon_ctx_st {
     struct nl_sock* netlink_sock; /** For transmitting to/from kernel module */
     int netlink_family;           /** Netlink protocol; should be SSA family */
     int port;                     /** Port for incoming connections/Netlink */
+
     hmap_t* sock_map;             /** Hashmap for pending server connections */
     hmap_t* sock_map_port;        /** Hashmap for sockets currently in use */
     global_config* settings;      /** Settings loaded in from config file */
@@ -161,6 +165,7 @@ struct daemon_ctx_st {
 
 	hcmap_t* crl_cache;	  /** Stores downloaded CRLs' URLs and revoked serial numbers */
 	sem_t* cache_sem;	  /** Semaphore to protect write operations to CRL cache */
+    inotify_ctx* inotify;         /** Inotify information */
 
     /*
     hsmap_t* ssl_ctx_cache;
@@ -332,7 +337,6 @@ struct socket_ctx_st {
     char err_string[MAX_ERR_STRING+1]; /** String describing TLS/daemon error */
     unsigned int handshake_err_code;   /** TLS error code for verify failure */
 };
-
 
 
 daemon_ctx *daemon_context_new(char* config_path, int port);

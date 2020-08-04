@@ -1,6 +1,8 @@
 #include <event2/bufferevent.h>
 #include <event2/event.h>
 #include <string.h>
+#include <sys/inotify.h>
+#include <unistd.h>
 
 #include "error.h"
 #include "config.h"
@@ -9,7 +11,6 @@
 #include "crl.h"
 
 
-crl_responder* launch_crl_client(revocation_ctx* rev_ctx, char* url);
 int crl_check_times(const ASN1_TIME* thisupd,
 		const ASN1_TIME* nextupd, long nsec, long maxsec);
 char* crl_convert(char* serial);
@@ -631,49 +632,3 @@ int do_crl_response_checks(X509_CRL* response, SSL* ssl) {
 
 	return -1; //TODO: stub
 }
-
-
-
-
-
-
-
-
-
-
-
-/*
-void inotify_cb(struct bufferevent *bev, void *arg) {
-	log_printf(LOG_DEBUG, "Read from crl_cache.txt\n");
-	//read from "crl_cache.txt", "crl_cache_info.txt"
-}
-
-int set_inotify(daemon_ctx *daemon) {
-	int inotify_fd; //,wd;
-	char buf[BUF_LEN] __attribute__ ((aligned(8)));
-
-	inotify_fd = inotify_init();
-	/* if (inotify_fd == -1) {
-		perror("inotify_init");
-		exit(EXIT_FAILURE);
-	}*/
-//	evutil_make_socket_nonblocking(inotify_fd);
-
-	//wd =
-//	inotify_add_watch(inotify_fd, "crl_cache.txt", IN_CLOSE_WRITE);
-	/* if (wd == -1) {
-		perror("inotify_add_watch");
-		exit(EXIT_FAILURE);
-	}*/
-/*
-	struct bufferevent *bev;
-
-	bev = bufferevent_socket_new(daemon->ev_base, inotify_fd, BEV_OPT_CLOSE_ON_FREE);
-
-	bufferevent_setcb(bev, inotify_cb, NULL, NULL, &buf);
-	bufferevent_enable(bev, EV_READ);
-
-	return 0;
-}
-*/
-

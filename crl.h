@@ -8,7 +8,7 @@
 #define MAX_HEADER_SIZE 8192
 #define LEEWAY_90_SECS 90
 #define MAX_CRL_AGE 604800L
-
+#define BUF_LEN sizeof(struct inotify_event) + NAME_MAX + 1
 
 
 /**
