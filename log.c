@@ -72,7 +72,7 @@ int log_init(const char* log_filename, log_level_t level) {
  */
 void log_printf(log_level_t level, const char* format, ...) {
     va_list args;
-    if (level < g_log_level) {
+    if (level < g_log_level || level == LOG_NONE) {
         return;
     }
     if (g_log_file == NULL) {
