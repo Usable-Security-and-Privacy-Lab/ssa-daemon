@@ -260,17 +260,22 @@ int get_peer_identity(socket_ctx* sock_ctx,
  */
 int get_hostname(socket_ctx* sock_ctx, char** data, unsigned int* len) {
 
-    const char* hostname;
-
+    /*
     hostname = SSL_get_servername(sock_ctx->ssl, TLSEXT_NAMETYPE_host_name);
     if (hostname == NULL) {
         set_err_string(sock_ctx, "TLS error: couldn't get the server hostname - %s",
                 ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
         return -EINVAL;
     }
+    */
 
-    *len = strlen(hostname)+1;
-    *data = strdup(hostname);
+    if (strlen(sock_ctx->rem_hostname) == 0) {
+        set_err_string(sock_ctx, "No hostname was set for the given socket");
+        return -EINVAL;
+    }
+
+    *len = strlen(sock_ctx->rem_hostname)+1;
+    *data = strdup(sock_ctx->rem_hostname);
     if (*data == NULL)
         return -ECANCELED;
 
@@ -373,6 +378,7 @@ int get_tls_context(socket_ctx* sock_ctx,
             goto err;
     }
 
+    sock_ctx->has_shared_context = 1;
     *data = context_id;
     *len = sizeof(unsigned long);
     return 0;
