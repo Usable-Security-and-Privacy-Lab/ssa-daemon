@@ -85,18 +85,18 @@ revocation-checks: off
 # 1. Give the path to a file in PEM format containing the entire certificate chain.
 #    The certificates should be in the correct order from server certificate to root certificate.
 # 2. Give the path to a directory containing files that hold one certificate each. The files
-#    may be in PEM format or DER (ASN1). PEM files must end in ".pem" not ".crt", etc. 
-cert-path: test_files/certs/server_chain.pem
+#    may be in PEM format or DER (ASN1). PEM files must end in ".pem" not ".crt", ".cer", etc. 
+#cert-path: test_files/certs/server_chain.pem
 
 # Set the path to the file containing the private key. The file may be in PEM or DER (ASN1) format.
-key-path: test_files/certs/server_key.pem
+#key-path: test_files/certs/server_key.pem
 
 #Multiple certificate chain / key pairs can be provided if desired (One for RSA and one for DSA certificates).
-cert-path: test_files/certs/testing/ecdsa
-key-path: test_files/certs/testing/ecdsa_key.pem
+#cert-path: test_files/certs/testing/ecdsa
+#key-path: test_files/certs/testing/ecdsa_key.pem
 
 cert-path: test_files/certs/testing/rsa
 key-path: test_files/certs/testing/rsa_key.pem 
 
 #cert-path: test_files/certs/testing/dsa
-#key-path: test_files/certs/testing/dsa_key.pem 
+#key-path: test_files/certs/testing/dsa_key.pem

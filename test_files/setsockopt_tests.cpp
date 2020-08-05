@@ -87,7 +87,9 @@ TEST(SetsockoptTests, SetHostnameNull) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
-TEST(SetsockoptTests, SetCertChainCorrect) {
+
+
+TEST(SetsockoptTests, SetCertFileCorrect) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -110,7 +112,140 @@ TEST(SetsockoptTests, SetCertChainCorrect) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
-TEST(SetsockoptTests, SetCertChainWrongPath) {
+TEST(SetsockoptTests, SetCertDirectoryCorrect) {
+
+    TEST_TIMEOUT_BEGIN
+
+    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (fd < 0) 
+        fprintf(stderr, "Socket failed to be created: %s\n", strerror(errno));
+    
+    ASSERT_GE(fd, 0);
+    
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/testing/rsa", strlen("certs/testing/rsa")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    close(fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
+}
+
+TEST(SetsockoptTests, SetTwoCorrectChains) {
+
+    TEST_TIMEOUT_BEGIN
+
+    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (fd < 0) 
+        fprintf(stderr, "Socket failed to be created: %s\n", strerror(errno));
+    
+    ASSERT_GE(fd, 0);
+    
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/testing/rsa", strlen("certs/testing/rsa")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/server_chain.pem", strlen("certs/server_chain.pem")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    close(fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
+}
+
+TEST(SetsockoptTests, SetThreeCorrectChains) {
+
+    TEST_TIMEOUT_BEGIN
+
+    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (fd < 0) 
+        fprintf(stderr, "Socket failed to be created: %s\n", strerror(errno));
+    
+    ASSERT_GE(fd, 0);
+    
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/testing/rsa", strlen("certs/testing/rsa")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/testing/ecdsa", strlen("certs/testing/ecdsa")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+    
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/server_chain.pem", strlen("certs/server_chain.pem")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    close(fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
+}
+
+TEST(SetsockoptTests, SetOneWrongChain) {
+
+    TEST_TIMEOUT_BEGIN
+
+    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (fd < 0) 
+        fprintf(stderr, "Socket failed to be created: %s\n", strerror(errno));
+    
+    ASSERT_GE(fd, 0);
+    
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/testing/rsa", strlen("certs/testing/rsa")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/wrong/path", strlen("certs/wrong/path")+1);
+
+    EXPECT_EQ(setsockopt_ret, -1);
+    EXPECT_EQ(errno, EINVAL);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/testing/ecdsa", strlen("certs/testing/ecdsa")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    close(fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
+}
+
+TEST(SetsockoptTests, SetWrongCertPath) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -125,6 +260,395 @@ TEST(SetsockoptTests, SetCertChainWrongPath) {
 
     EXPECT_EQ(setsockopt_ret, -1);
     EXPECT_EQ(errno, EINVAL);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    close(fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
+}
+
+TEST(SetsockoptTests, SetNullCertPath) {
+
+    TEST_TIMEOUT_BEGIN
+
+    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (fd < 0) 
+        fprintf(stderr, "Socket failed to be created: %s\n", strerror(errno));
+    
+    ASSERT_GE(fd, 0);
+    
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                NULL, 0);
+
+    EXPECT_EQ(setsockopt_ret, -1);
+    EXPECT_EQ(errno, EINVAL);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    close(fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
+}
+
+
+
+TEST(SetsockoptTests, SetCorrectKey) {
+
+    TEST_TIMEOUT_BEGIN
+
+    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (fd < 0) 
+        fprintf(stderr, "Socket failed to be created: %s\n", strerror(errno));
+    
+    ASSERT_GE(fd, 0);
+
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/testing/rsa", strlen("certs/testing/rsa")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+    
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_PRIVATE_KEY, 
+                "certs/testing/rsa_key.pem", strlen("certs/testing/rsa_key.pem")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    close(fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
+}
+
+TEST(SetsockoptTests, SetCorrectECDSAKey) {
+
+    TEST_TIMEOUT_BEGIN
+
+    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (fd < 0) 
+        fprintf(stderr, "Socket failed to be created: %s\n", strerror(errno));
+    
+    ASSERT_GE(fd, 0);
+
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/testing/ecdsa", strlen("certs/testing/ecdsa")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+    
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_PRIVATE_KEY, 
+                "certs/testing/ecdsa_key.pem", strlen("certs/testing/ecdsa_key.pem")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    close(fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
+}
+
+TEST(SetsockoptTests, SetWrongKeyPath) {
+
+    TEST_TIMEOUT_BEGIN
+
+    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (fd < 0) 
+        fprintf(stderr, "Socket failed to be created: %s\n", strerror(errno));
+    
+    ASSERT_GE(fd, 0);
+
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/server_chain.pem", strlen("certs/server_chain.pem")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+    
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_PRIVATE_KEY, 
+                "fake/path/key.pem", strlen("fake/path/key.pem")+1);
+
+    EXPECT_EQ(setsockopt_ret, -1);
+    EXPECT_EQ(errno, EBADF);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    close(fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
+}
+
+TEST(SetsockoptTests, CertKeyMismatch) {
+
+    TEST_TIMEOUT_BEGIN
+
+    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (fd < 0) 
+        fprintf(stderr, "Socket failed to be created: %s\n", strerror(errno));
+    
+    ASSERT_GE(fd, 0);
+
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/testing/rsa", strlen("certs/testing/rsa")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+    
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_PRIVATE_KEY,
+                "certs/testing/dsa_key.pem", strlen("certs/testing/dsa_key.pem")+1);
+
+    EXPECT_EQ(setsockopt_ret, -1);
+    EXPECT_EQ(errno, EPROTO);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    close(fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
+}
+
+TEST(SetsockoptTests, ECDSAKeyMismatch) {
+
+    TEST_TIMEOUT_BEGIN
+
+    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (fd < 0) 
+        fprintf(stderr, "Socket failed to be created: %s\n", strerror(errno));
+    
+    ASSERT_GE(fd, 0);
+
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/testing/rsa", strlen("certs/testing/rsa")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+    
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_PRIVATE_KEY,
+                "certs/testing/ecdsa_key.pem", strlen("certs/testing/ecdsa_key.pem")+1);
+
+    EXPECT_EQ(setsockopt_ret, -1);
+    EXPECT_EQ(errno, EPROTO);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    close(fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
+}
+
+TEST(SetsockoptTests, LoadTwoKeysCorrect) {
+
+    TEST_TIMEOUT_BEGIN
+
+    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (fd < 0) 
+        fprintf(stderr, "Socket failed to be created: %s\n", strerror(errno));
+    
+    ASSERT_GE(fd, 0);
+
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/testing/rsa", strlen("certs/testing/rsa")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+    
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_PRIVATE_KEY,
+                "certs/testing/rsa_key.pem", strlen("certs/testing/rsa_key.pem")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/testing/dsa", strlen("certs/testing/dsa")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+    
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_PRIVATE_KEY,
+                "certs/testing/dsa_key.pem", strlen("certs/testing/dsa_key.pem")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);    
+
+    close(fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
+}
+
+TEST(SetsockoptTests, LoadTwoChainsOneKey) {
+
+    TEST_TIMEOUT_BEGIN
+
+    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (fd < 0) 
+        fprintf(stderr, "Socket failed to be created: %s\n", strerror(errno));
+    
+    ASSERT_GE(fd, 0);
+
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/testing/rsa", strlen("certs/testing/rsa")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/testing/dsa", strlen("certs/testing/dsa")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+    
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_PRIVATE_KEY,
+                "certs/testing/rsa_key.pem", strlen("certs/testing/rsa_key.pem")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);    
+
+    close(fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
+}
+
+TEST(SetsockoptTests, SetKeyWithoutChain) {
+
+    TEST_TIMEOUT_BEGIN
+
+    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (fd < 0) 
+        fprintf(stderr, "Socket failed to be created: %s\n", strerror(errno));
+    
+    ASSERT_GE(fd, 0);
+    
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_PRIVATE_KEY, 
+                "certs/testing/ecdsa_key.pem", strlen("certs/testing/ecdsa_key.pem")+1);
+
+    EXPECT_EQ(setsockopt_ret, -1);
+    EXPECT_EQ(errno, EPROTO);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    close(fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
+}
+
+TEST(SetsockoptTests, LoadTwoChainsBeforeKeys) {
+
+    TEST_TIMEOUT_BEGIN
+
+    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (fd < 0) 
+        fprintf(stderr, "Socket failed to be created: %s\n", strerror(errno));
+    
+    ASSERT_GE(fd, 0);
+
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/testing/rsa", strlen("certs/testing/rsa")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/testing/ecdsa", strlen("certs/testing/ecdsa")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);    
+    
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_PRIVATE_KEY,
+                "certs/testing/rsa_key.pem", strlen("certs/testing/rsa_key.pem")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_PRIVATE_KEY,
+                "certs/testing/ecdsa_key.pem", strlen("certs/testing/ecdsa_key.pem")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    close(fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
+}
+
+TEST(SetsockoptTests, OneCorrectKeyOfTwo) {
+
+    TEST_TIMEOUT_BEGIN
+
+    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TLS);
+    if (fd < 0) 
+        fprintf(stderr, "Socket failed to be created: %s\n", strerror(errno));
+    
+    ASSERT_GE(fd, 0);
+
+    int setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/testing/rsa", strlen("certs/testing/rsa")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_CERTIFICATE_CHAIN, 
+                "certs/testing/ecdsa", strlen("certs/testing/ecdsa")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);    
+    
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_PRIVATE_KEY,
+                "certs/testing/dsa_key.pem", strlen("certs/testing/dsa_key.pem")+1);
+
+    EXPECT_EQ(setsockopt_ret, -1);
+    EXPECT_EQ(errno, EPROTO);
+
+    if (setsockopt_ret < 0)
+        print_socket_error(fd);
+
+    setsockopt_ret = setsockopt(fd, IPPROTO_TLS, TLS_PRIVATE_KEY,
+                "certs/testing/ecdsa_key.pem", strlen("certs/testing/ecdsa_key.pem")+1);
+
+    EXPECT_EQ(setsockopt_ret, 0);
 
     if (setsockopt_ret < 0)
         print_socket_error(fd);

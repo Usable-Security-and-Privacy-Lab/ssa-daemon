@@ -219,7 +219,7 @@ int load_private_key(SSL_CTX* ctx, char* key_path) {
  * in the chain to be loaded into ctx.
  * @returns 1 on success, 0 on error.
  */
-int load_certificates(SSL_CTX* ctx, char* path) {
+int load_certificates(SSL_CTX* ctx, char* path) { // delete this when setsockopt is done
 	DIR* directory = opendir(path);
 
 	if(is_pem_file(path)) {
@@ -253,6 +253,37 @@ int load_certificates(SSL_CTX* ctx, char* path) {
 		log_printf(LOG_ERROR, "[cert-path] must be a pem file or directory.\n");
 		return 0;
 	}
+
+	return 1;
+}
+
+int load_directory_certs(SSL_CTX* ctx, char* path) {
+	DIR* directory = opendir(path);
+
+	if(directory == NULL) {
+		log_printf(LOG_ERROR, "Could not read directory.\n");
+		return 0;
+	}
+	
+	int num_certs = get_directory_size(directory);
+	closedir(directory);
+	X509* cert_list[num_certs];
+	directory = opendir(path);
+
+	int ret = get_directory_certs(cert_list, directory, path);
+	if(ret < 0) {
+		log_printf(LOG_ERROR, "Failed to get certificates from directory.\n");
+		return 0;
+	}
+	
+	ret = add_directory_certs(ctx, cert_list, num_certs);
+	if(ret < 1) {
+		free_certificates(cert_list, num_certs, directory);
+		log_printf(LOG_ERROR, "Failed to add certificates from directory.\n");
+		return 0;
+	}
+
+	free_certificates(cert_list, num_certs, directory);	
 
 	return 1;
 }

@@ -65,4 +65,14 @@ int load_private_key(SSL_CTX* ctx, char* key_path);
  */
 int load_certificates(SSL_CTX* ctx, char* path);
 
+/**
+ * A directory containing certificate files is loaded into ctx. The private key 
+ * should be loaded into ctx after this function is called. 
+ * @param ctx The context that certificates will be loaded into.
+ * @param path The path to a directory containing all certificates
+ * in the chain to be loaded into ctx.
+ * @returns 1 on success, 0 on error.
+ */
+int load_directory_certs(SSL_CTX* ctx, char* path);
+
 #endif
