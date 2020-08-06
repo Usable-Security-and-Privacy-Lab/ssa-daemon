@@ -279,13 +279,13 @@ struct socket_ctx_st {
 
     enum socket_state state; /** The socket's current state @see socket_state */
 
-  SSL_CTX* ssl_ctx;   /** The context of the SSL object (useful for server) */
+    SSL_CTX* ssl_ctx;   /** The context of the SSL object (useful for server) */
     SSL* ssl;           /** The SSL instance associated with \p sockfd */
 
+    int has_shared_context; /** Set if TLS_CONTEXT get/setsockopt used */
 
     channel plain;      /** The non-encrypted channel to the calling program */
     channel secure;     /** The encrypted channel to the external peer */
-
     struct evconnlistener* listener; /** Libevent struct for listening socket */
 
     revocation_ctx rev_ctx; /** Settings/data structs to do with revocation */

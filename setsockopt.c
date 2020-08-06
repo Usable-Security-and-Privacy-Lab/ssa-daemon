@@ -46,6 +46,9 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
 
     int response = 0;
 
+    if (sock_ctx->has_shared_context && option != TLS_HOSTNAME)
+        return -EOPNOTSUPP; /* TODO: determine appropriate errno */
+
     switch (option) {
     case TLS_HOSTNAME:
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
