@@ -101,7 +101,6 @@ TEST_F(AsyncTests, PollSocketConnectRead) {
 
     int write_return = write(socket_fd, 
                 "GET / HTTP/1.1\r\n\r\n", total_write_len);
-    int write_errno = errno;
 
     if (write_return < total_write_len && write_return > 0)
         fprintf(stderr, "Not all of the message was written\n");
