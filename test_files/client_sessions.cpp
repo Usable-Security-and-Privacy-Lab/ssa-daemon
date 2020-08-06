@@ -1,60 +1,19 @@
 #include <gtest/gtest.h>
 
-#include "helper_functions.h"
-#include "timeouts.h"
+#include "testutil/socket_wrappers.h"
+#include "testutil/init_tests.h"
+#include "testutil/timeouts.h"
 
 #define TWO_FDS 2
 #define TEN_FDS 10
 
 
-
-class ClientSessionTests : public testing::Test {
-public:
-    unsigned long tls_context;
-    unsigned long sessionless_context;
-    int context_fd;
-    int no_sessions_fd;
-
-    
-    static void SetUpTestSuite() {
-        /* TODO: launch server here via fork(), execve() */
-    }
-
-
-    virtual void SetUp() {
-        
-        context_fd = create_socket(BLOCKING_SOCKET);
-        if (context_fd < 0)
-            FAIL();
-        set_hostname(context_fd, LOCALHOST);
-
-        get_tls_context(context_fd, SHOULD_SUCCEED, &tls_context);
-
-        no_sessions_fd = create_socket(BLOCKING_SOCKET);
-        if (no_sessions_fd < 0)
-            FAIL();
-
-        set_hostname(no_sessions_fd, LOCALHOST);
-        disable_session_reuse(no_sessions_fd, SHOULD_SUCCEED);
-        get_tls_context(no_sessions_fd, SHOULD_SUCCEED, &sessionless_context);       
-
-    }
-
-    virtual void TearDown() {
-        if (context_fd >= 0)
-            close(context_fd);
-        if (no_sessions_fd >= 0)
-            close(no_sessions_fd);
-    }
-
-    
-    static void TearDownTestSuite() {
-        /* TODO: send kill() signal to server */
-    }
-};
+INIT_TESTS(ClientSessionTests, "configs/default_localhost.yml", "servers/regular")
 
 
 TEST_F(ClientSessionTests, OneSocketNoReuse) {
+
+    TEST_TIMEOUT_BEGIN
 
     bool reused = false;
 
@@ -68,9 +27,13 @@ TEST_F(ClientSessionTests, OneSocketNoReuse) {
 
     close(fd);
     ASSERT_FALSE(reused);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
 TEST_F(ClientSessionTests, TwoTLSContextsNoReuse) {
+
+    TEST_TIMEOUT_BEGIN
 
     bool reused = false;
     int fds[TWO_FDS];
@@ -88,12 +51,24 @@ TEST_F(ClientSessionTests, TwoTLSContextsNoReuse) {
         close(fds[i]);
         ASSERT_FALSE(reused);
     }
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
 TEST_F(ClientSessionTests, TwoSocketSessionReuse) {
 
+    TEST_TIMEOUT_BEGIN
+
+    unsigned long tls_context;
     bool resumed = false;
     int fds[TWO_FDS];
+    int context_fd;
+
+    context_fd = create_socket(BLOCKING_SOCKET);
+    if (context_fd < 0)
+        FAIL();
+    set_hostname(context_fd, LOCALHOST);
+    get_tls_context(context_fd, SHOULD_SUCCEED, &tls_context);
 
     for (int i = 0; i < TWO_FDS; i++) {
         fds[i] = create_socket(BLOCKING_SOCKET);
@@ -109,13 +84,27 @@ TEST_F(ClientSessionTests, TwoSocketSessionReuse) {
         else
             ASSERT_TRUE(resumed);
     }
+
+    close(context_fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
 TEST_F(ClientSessionTests, TenSocketSessionReuse) {
 
+    TEST_TIMEOUT_BEGIN
+
+    unsigned long tls_context;
     int total_resumed = 0;
     bool resumed = false;
     int fds[TEN_FDS];
+    int context_fd;
+    
+    context_fd = create_socket(BLOCKING_SOCKET);
+    if (context_fd < 0)
+        FAIL();
+    set_hostname(context_fd, LOCALHOST);
+    get_tls_context(context_fd, SHOULD_SUCCEED, &tls_context);
 
     for (int i = 0; i < TEN_FDS; i++) {
         fds[i] = create_socket(BLOCKING_SOCKET);
@@ -135,49 +124,86 @@ TEST_F(ClientSessionTests, TenSocketSessionReuse) {
             total_resumed++;
     }
 
+    close(context_fd);
+
     if (total_resumed < 9)
-        fprintf(stderr, "Total sessions resumed: %i\n", total_resumed);
+        fprintf(stderr, "Total sessions resumed: %i (expected 9)\n", total_resumed);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
 TEST_F(ClientSessionTests, TwoSocketDisabledSessionReuse) {
 
+    TEST_TIMEOUT_BEGIN
+
+    unsigned long sessionless_context;
     bool resumed = true;
-    int fds[TWO_FDS];
+    int fd, no_sessions_fd;
+
+
+    no_sessions_fd = create_socket(BLOCKING_SOCKET);
+    if (no_sessions_fd < 0)
+        FAIL();
+
+    set_hostname(no_sessions_fd, LOCALHOST);
+    disable_session_reuse(no_sessions_fd, SHOULD_SUCCEED);
+    get_tls_context(no_sessions_fd, SHOULD_SUCCEED, &sessionless_context);
+
 
     for (int i = 0; i < TWO_FDS; i++) {
-        fds[i] = create_socket(BLOCKING_SOCKET);
-        if (fds[i] < 0)
+        fd = create_socket(BLOCKING_SOCKET);
+        if (fd < 0)
             FAIL();
 
-        set_tls_context(fds[i], SHOULD_SUCCEED, tls_context);
-        disable_session_reuse(fds[i], SHOULD_SUCCEED);
-        connect_to_localhost(fds[i]);
+        set_tls_context(fd, SHOULD_SUCCEED, sessionless_context);
+        connect_to_localhost(fd);
 
-        is_resumed_session(fds[i], SHOULD_SUCCEED, &resumed);
-        close(fds[i]);
+        is_resumed_session(fd, SHOULD_SUCCEED, &resumed);
+        close(fd);
 
         ASSERT_FALSE(resumed);
     }
+
+    close(no_sessions_fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_LONG)
 }
 
 TEST_F(ClientSessionTests, TenSocketDisabledSessionReuse) {
+
+    TEST_TIMEOUT_BEGIN
     
+    unsigned long sessionless_context;
     bool resumed = true;
-    int fds[TEN_FDS];
+    int fd;
+    int no_sessions_fd;
+
+    no_sessions_fd = create_socket(BLOCKING_SOCKET);
+    if (no_sessions_fd < 0)
+        FAIL();
+
+    set_hostname(no_sessions_fd, LOCALHOST);
+    disable_session_reuse(no_sessions_fd, SHOULD_SUCCEED);
+    get_tls_context(no_sessions_fd, SHOULD_SUCCEED, &sessionless_context);
+
 
     for (int i = 0; i < TEN_FDS; i++) {
-        fds[i] = create_socket(BLOCKING_SOCKET);
-        if (fds[i] < 0)
+        fd = create_socket(BLOCKING_SOCKET);
+        if (fd < 0)
             FAIL();
 
-        set_tls_context(fds[i], SHOULD_SUCCEED, sessionless_context);
-        connect_to_localhost(fds[i]);
+        set_tls_context(fd, SHOULD_SUCCEED, sessionless_context);
+        connect_to_localhost(fd);
 
-        is_resumed_session(fds[i], SHOULD_SUCCEED, &resumed);
-        close(fds[i]);
+        is_resumed_session(fd, SHOULD_SUCCEED, &resumed);
+        close(fd);
 
         ASSERT_FALSE(resumed);
     }
+
+    close(no_sessions_fd);
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_VERY_LONG)
 }
 
 TEST_F(ClientSessionTests, DifferentTLSVersionSessionFail) {

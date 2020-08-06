@@ -1,7 +1,8 @@
 #include <gtest/gtest.h>
 
-#include "helper_functions.h"
-#include "timeouts.h"
+#include "testutil/socket_wrappers.h"
+#include "testutil/init_tests.h"
+#include "testutil/timeouts.h"
 
 /* C and C++ struggle to cooperate unless we direct them to */
 extern "C" {
@@ -16,10 +17,12 @@ extern "C" {
 
 }
 
-
 #define HOSTNAME "www.yahoo.com"
 
-TEST(AsyncTests, PollSocketConnect) {
+INIT_TESTS(AsyncTests, "configs/default.yml", "servers/regular")
+
+
+TEST_F(AsyncTests, PollSocketConnect) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -60,7 +63,7 @@ TEST(AsyncTests, PollSocketConnect) {
 }
 
 
-TEST(AsyncTests, PollSocketConnectRead) {
+TEST_F(AsyncTests, PollSocketConnectRead) {
 
     TEST_TIMEOUT_BEGIN
 

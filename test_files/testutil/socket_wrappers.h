@@ -45,7 +45,7 @@ int create_socket(bool is_nonblocking);
 void set_hostname(int fd, std::string hostname);
 void set_hostname_fail(int fd, std::string hostname, int expected_errno);
 
-void get_hostname(int fd, std::string* hostname);
+void get_hostname(int fd, std::string &hostname);
 void get_hostname_fail(int fd, int expected_errno);
 
 void connect_to_host(int fd, std::string hostname, std::string port);

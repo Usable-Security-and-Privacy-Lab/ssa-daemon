@@ -1,7 +1,8 @@
 #include <gtest/gtest.h>
 
-#include "helper_functions.h"
-#include "timeouts.h"
+#include "testutil/socket_wrappers.h"
+#include "testutil/init_tests.h"
+#include "testutil/timeouts.h"
 
 
 void do_connection_test(std::string hostname, 
@@ -26,13 +27,13 @@ void do_connection_test(std::string hostname,
 }
 
 #define TEST_CONNECT_FAIL(testname, hostname, port)                 \
-    TEST(BadSSLTests, testname) {                                   \
+    TEST_F(BadSSLTests, testname) {                                 \
         do_connection_test(hostname, port, SHOULD_FAIL);            \
     }
 
 
 #define TEST_CONNECT_PASS(testname, hostname, port)                 \
-    TEST(BadSSLTests, testname) {                                   \
+    TEST_F(BadSSLTests, testname) {                                 \
         do_connection_test(hostname, port, SHOULD_SUCCEED);         \
     }
 
@@ -40,10 +41,12 @@ void do_connection_test(std::string hostname,
 
 
 
+INIT_TESTS(BadSSLTests, "configs/default.yml", "servers/regular")
+
+
 /*******************************************************************************
  *                TESTS THAT SHOULD NOT CONNECT SUCCESSFULLY
  ******************************************************************************/
-
 
 TEST_CONNECT_FAIL(Expired, "expired.badssl.com", "443")
 TEST_CONNECT_FAIL(WrongHost, "wrong.host.badssl.com", "443")

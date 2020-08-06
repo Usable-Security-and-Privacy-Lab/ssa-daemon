@@ -4,8 +4,9 @@
 #include <stdlib.h>
 #include <string>
 
-#include "helper_functions.h"
-#include "timeouts.h"
+#include "testutil/init_tests.h"
+#include "testutil/socket_wrappers.h"
+#include "testutil/timeouts.h"
 
 
 void run_connection_test(std::string hostname) {
@@ -24,9 +25,12 @@ void run_connection_test(std::string hostname) {
 }
 
 #define TEST_CONNECT_PASS(testname, hostname)                       \
-    TEST(Top500WebsitesTest, testname) {                            \
+    TEST_F(Top500Websites, testname) {                              \
         run_connection_test(hostname);                              \
     }
+
+
+INIT_TESTS(Top500Websites, "configs/default_localhost.yml", "servers/default")
 
 
 /* top 500 websites per `moz.com` */
@@ -531,35 +535,3 @@ TEST_CONNECT_PASS(khanacademy_org, "khanacademy.org")
 TEST_CONNECT_PASS(ameblo_jp, "ameblo.jp")
 TEST_CONNECT_PASS(plos_org, "plos.org")
 TEST_CONNECT_PASS(ebay_co_uk, "ebay.co.uk")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

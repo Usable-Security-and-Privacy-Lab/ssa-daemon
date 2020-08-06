@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "helper_functions.h"
+#include "socket_wrappers.h"
 
 
 extern "C" {
@@ -15,7 +15,7 @@ extern "C" {
 #include <string.h>
 #include <unistd.h>
 
-#include "../in_tls.h"
+#include "../../in_tls.h"
 }
 
 
