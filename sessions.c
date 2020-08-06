@@ -202,15 +202,16 @@ int session_resumption_setup(SSL* ssl, char* hostname_port) {
         } else {
             SSL_CTX_remove_session(ctx, session);
             SSL_SESSION_free(session);
-
         }
     }
 
-    ret = SSL_set_session(ssl, session);
-    if (ret != 1)
-        SSL_CTX_remove_session(ctx, session);
+    if (session != NULL) {
+        ret = SSL_set_session(ssl, session);
+        if (ret != 1)
+            SSL_CTX_remove_session(ctx, session);
 
-    SSL_SESSION_free(session);
+        SSL_SESSION_free(session);
+    }
 
     return 0;
 err:
