@@ -1,28 +1,34 @@
+CC = gcc
+CPP = g++
+FLAGS=-Wall -Wno-deprecated-declarations
+CXX_LIBS=-lgtest_main -lgtest -pthread
 
-CXXFLAGS=-Wall -Wno-deprecated-declarations
-GTESTFLAGS=-lgtest_main -lgtest -pthread
-SSLFLAGS=-lssl -lcrypto
 
-all: helper_functions.o badssl top_500 socket_api_tests client_sessions
+C_SOURCES := $(wildcard testutil/*.c) #TODO: will testutil/ work?
+CXX_SOURCES := $(wildcard testutil/*.cpp)
+HEADERS := $(wildcard testutil/*.h)
+OBJECTS = $(C_SOURCES:.c=.o) $(CXX_SOURCES:.cpp=.o) #TODO: will concatenating multiple work?
 
-badssl: badssl.cpp timeouts.h helper_functions.h helper_functions.o
-	g++ $(CXXFLAGS) -o badssl badssl.cpp timeouts.h helper_functions.h helper_functions.o $(GTESTFLAGS)
+TEST_SOURCES := $(wildcard *.cpp)
+TESTS: $(TEST_SOURCES:.cpp=)
 
-top_500: top_500.cpp timeouts.h helper_functions.h helper_functions.o
-	g++ $(CXXFLAGS) -o top_500 top_500.cpp timeouts.h helper_functions.h helper_functions.o $(GTESTFLAGS)
+test: $(TESTS)
 
-socket_api_tests: socket_api_tests.cpp timeouts.h helper_functions.h helper_functions.o
-	g++ $(CXXFLAGS) -o socket_api_tests socket_api_tests.cpp timeouts.h helper_functions.h helper_functions.o $(GTESTFLAGS)
+$(TEST_SOURCES): $(OBJECTS)
+	$(CPP) $(FLAGS) $(HEADERS) $(OBJECTS) $(CXX_LIBS) -o $@
 
-client_sessions: client_sessions.cpp timeouts.h helper_functions.h helper_functions.o
-	g++ $(CXXFLAGS) -o client_sessions client_sessions.cpp timeouts.h helper_functions.h helper_functions.o $(GTESTFLAGS)
+testutil/%.o: testutil/%.c
+	$(CC) -c $(FLAGS) $< -o $@
 
-helper_functions.o: helper_functions.cpp helper_functions.h
-	g++ -c $(CXXFLAGS) helper_functions.cpp helper_functions.h $(GTESTFLAGS)
+testutil/%.o: testutil/%.cpp
+	$(CPP) -c $(FLAGS) $< $(CXX_LIBS) -o $@
 
-clean:
-	rm -f helper_functions.o
+
+clean: clean-objects
 	rm -f badssl
 	rm -f top_500
 	rm -f setsockopt_tests
 	rm -f sessions_client
+
+clean-objects:
+	rm -f testutil/*.o
