@@ -81,6 +81,7 @@
 static const int TLS_1_2 = 0x0303;
 static const int TLS_1_3 = 0x0304;
 
+/*
 __attribute__((unused)) static char* tls_version_str(int version) {
     if (version == TLS_1_2)
         return "TLS 1.2";
@@ -88,6 +89,7 @@ __attribute__((unused)) static char* tls_version_str(int version) {
         return "TLS 1.3";
     return "Unknown version number";
 }
+*/
 
 
 /* Internal use only */
