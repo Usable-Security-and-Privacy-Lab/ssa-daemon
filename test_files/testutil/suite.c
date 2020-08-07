@@ -39,8 +39,8 @@ void sigchild_fail_handler(int signal) {
         }
 
         if (server_pid != -1) {
-            kill(daemon_pid, SIGINT);
-            waitpid(daemon_pid, NULL, 0);
+            kill(server_pid, SIGINT);
+            waitpid(server_pid, NULL, 0);
         }
         exit(1);
     }
@@ -70,6 +70,8 @@ void start_daemon(const char* daemon_config, int use_valgrind) {
     daemon_pid = fork();
     if (daemon_pid == 0) {
 
+        setpgid(0, 0);
+
         if (use_valgrind) {
             char* env[1] = {NULL};
             char* flags[10] = {"/usr/bin/sudo", "-s", pid_env, "valgrind", 
@@ -90,8 +92,6 @@ void start_daemon(const char* daemon_config, int use_valgrind) {
         exit(1);
         
     }
-
-    setpgid(0, getppid());
 
     ret = sigwait(&set, &returned_sig);
     if (ret > 0 || returned_sig != SIGIO) {
@@ -117,6 +117,7 @@ void start_server(const char* server_path) {
     if (server_pid == 0) {
         close(0);
         close(1);
+        close(2);
         char* args[2] = {strdup(server_path), NULL};
         execv(server_path, args);
 
@@ -141,26 +142,30 @@ void cleanup() {
 
     signal(SIGCHLD, NULL);
 
-    ret = kill(server_pid, SIGINT);
-    if (ret < 0)
-        perror("server kill failed\n");
-    else
-        waitpid(server_pid, NULL, 0);
+    if (server_pid != -1) {
+        ret = kill(server_pid, SIGINT);
+        if (ret < 0)
+            perror("server kill failed\n");
+        else
+            waitpid(server_pid, NULL, 0);
+    }
 
     /* killing a sudoed process requires sudo permissions... :( */
     if (fork() == 0) {
         char daemon_pid_str[128] = {0};
-        snprintf(daemon_pid_str, 127, "%i", (int) -getpgid(daemon_pid));
+        snprintf(daemon_pid_str, 127, "%i", (int) -daemon_pid);
 
-        char* flags[5] = {"/usr/bin/sudo", "kill", "2", daemon_pid_str, NULL};
+        char* flags[4] = {"/usr/bin/sudo", "kill", daemon_pid_str, NULL};
         char* env[1] = {NULL};
-
         execve("/usr/bin/sudo", flags, env);
 
-        fprintf(stderr, "\nDaemon cleanup execve failed; execute `sudo kill %i`\n",
+        fprintf(stderr, "\nDaemon cleanup failed; execute `sudo kill %i`\n",
                     daemon_pid);
     }
 
     waitpid(daemon_pid, NULL, 0);
+
+    server_pid = -1;
+    daemon_pid = -1;
     //sleep(1); /* give time for valgrind to print out messages */
 }
