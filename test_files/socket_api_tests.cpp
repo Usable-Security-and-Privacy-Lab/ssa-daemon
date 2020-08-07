@@ -63,7 +63,7 @@ TEST_F(SocketAPITests, SocketWrongType) {
     }
 }
 
-TEST(SocketAPITests, SocketWithNonblockType) {
+TEST_F(SocketAPITests, SocketWithNonblockType) {
 
     int fd = create_socket(NONBLOCKING_SOCKET); 
     if (fd < 0)
@@ -72,7 +72,7 @@ TEST(SocketAPITests, SocketWithNonblockType) {
     close(fd);
 }
 
-TEST(SocketAPITests, ConnectWithNonblockSocket) {
+TEST_F(SocketAPITests, ConnectWithNonblockSocket) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -89,7 +89,7 @@ TEST(SocketAPITests, ConnectWithNonblockSocket) {
 }
 
 
-TEST(SocketAPITests, DoubleConnectFail) {
+TEST_F(SocketAPITests, DoubleConnectFail) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -107,7 +107,7 @@ TEST(SocketAPITests, DoubleConnectFail) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_LONG)
 }
 
-TEST(SocketAPITests, ConnectThenListenFail) {
+TEST_F(SocketAPITests, ConnectThenListenFail) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -139,7 +139,7 @@ TEST(SocketAPITests, ConnectThenListenFail) {
 
 
 
-TEST(SocketAPITests, ConnectThenBindFail) {
+TEST_F(SocketAPITests, ConnectThenBindFail) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -175,9 +175,9 @@ TEST(SocketAPITests, ConnectThenBindFail) {
 
     TEST_TIMEOUT_FAIL_END(TIMEOUT_LONG)
 }
+/*
 
-
-TEST(SocketAPITests, ConnectThenAcceptFail) {
+TEST_F(SocketAPITests, ConnectThenAcceptFail) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -206,3 +206,4 @@ TEST(SocketAPITests, ConnectThenAcceptFail) {
 
     TEST_TIMEOUT_FAIL_END(TIMEOUT_LONG)
 }
+*/
