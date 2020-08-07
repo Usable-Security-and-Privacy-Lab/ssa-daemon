@@ -16,7 +16,6 @@
 int set_CA_certificates(socket_ctx *sock_ctx, char* path, socklen_t len);
 int set_certificate_chain(socket_ctx* sock_ctx, char* path, socklen_t len);
 int set_private_key(socket_ctx* sock_ctx, char* path, socklen_t len);
-int set_tls_compression(socket_ctx* sock_ctx, int* value, socklen_t len);
 int set_tls_context(socket_ctx* sock_ctx, unsigned long* data, socklen_t len);
 int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, socklen_t len);
 int set_session_resumption(socket_ctx* sock_ctx, int* reuse, socklen_t len);
@@ -84,12 +83,6 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
             break;
         response = set_private_key(sock_ctx, (char*) value, len);
-        break;
-
-    case TLS_COMPRESSION:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-            break;
-        response = set_tls_compression(sock_ctx, (int*) value, len);
         break;
 
     case TLS_REVOCATION_CHECKS:
@@ -324,35 +317,6 @@ int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, socklen_t len) {
 
     log_printf(LOG_INFO, "Hostname set to %s\n", sock_ctx->rem_hostname);
 
-    return 0;
-}
-
-
-/**
- * Enables or disables compression for a given socket.
- * @param sock_ctx The context of the socket to disable compression for.
- * @param value a '1' to enable compression, or '0' to disable it.
- * @param len The size of \p value (should be sizeof(int)).
- * @returns 0 on success, or -EINVAL on failure.
- */
-int set_tls_compression(socket_ctx* sock_ctx, int* value, socklen_t len) {
-
-    global_config* settings = sock_ctx->daemon->settings;
-    int compression_enabled = *value;
-
-    if (len != sizeof(int))
-        return -EINVAL;
-
-    if (compression_enabled == 1 && settings->tls_compression == 0)
-        return -EPROTO;
-
-    if (compression_enabled == 1)
-        SSL_CTX_clear_options(sock_ctx->ssl_ctx, SSL_OP_NO_COMPRESSION);
-    else if (compression_enabled == 0)
-        SSL_CTX_set_options(sock_ctx->ssl_ctx, SSL_OP_NO_COMPRESSION);
-    else
-        return -EINVAL;
-    
     return 0;
 }
 

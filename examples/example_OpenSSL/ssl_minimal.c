@@ -101,7 +101,7 @@ SSL_CTX *create_ready_CTX() {
     SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
 	SSL_CTX_set_cipher_list(ctx, SECURE_CIPHER_LIST);
 	SSL_CTX_set_ciphersuites(ctx, SECURE_CIPERSUITES);
-    SSL_CTX_set_options(ctx, SSL_OP_NO_COMPRESSION | SSL_OP_NO_TICKET);
+    SSL_CTX_set_options(ctx, SSL_OP_NO_COMPRESSION);
 
 	return ctx;
 }

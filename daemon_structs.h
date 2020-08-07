@@ -173,7 +173,6 @@ struct global_config_st {
     char** ciphersuites; /** List of acceptable TLS 1.3 ciphers to use */
     int ciphersuite_cnt; /** Length of \p ciphersuites */
 
-    int tls_compression; /** 1 if compression enabled, 0, if disabled */
     int session_tickets; /** 1 if session tickets enabled, 0 otherwise */
     int session_timeout; /** Length of time before session will expire */
     int max_chain_depth; /** Number of certificates acceptable in cert chain */

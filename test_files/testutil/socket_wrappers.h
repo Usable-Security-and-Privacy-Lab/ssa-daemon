@@ -74,8 +74,5 @@ void disable_session_reuse(int fd, bool should_succeed);
 void enable_session_reuse(int fd, bool should_succeed);
 void is_resumed_session(int fd, bool should_succeed, bool* is_resumed);
 
-void enable_compression(int fd, bool should_succeed);
-void disable_compression(int fd, bool should_succeed);
-void get_compression(int fd, bool should_succeed, bool* enabled);
 
 #endif

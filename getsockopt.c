@@ -18,7 +18,6 @@ int get_hostname(socket_ctx* sock_ctx, char** data, unsigned int* len);
 int get_chosen_cipher(socket_ctx* sock_ctx, char** data, unsigned int* len);
 int get_session_resumed(socket_ctx* sock_ctx, int** data, unsigned int *len);
 int get_session_reuse(socket_ctx* sock_ctx, int** data, unsigned int* len);
-int get_tls_compression(socket_ctx* sock_ctx, int** data, unsigned int* len);
 int get_tls_context(socket_ctx* sock_ctx, 
             unsigned long** data, unsigned int* len);
 
@@ -85,10 +84,6 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_CONNECTED)) != 0)
             break;
         get_chosen_cipher(sock_ctx, (char**) data, len);
-        break;
-
-    case TLS_COMPRESSION:
-        response = get_tls_compression(sock_ctx, (int**) data, len);
         break;
 
     case TLS_REVOCATION_CHECKS:
@@ -303,48 +298,6 @@ int get_chosen_cipher(socket_ctx* sock_ctx, char** data, unsigned int* len) {
     if (*data == NULL)
         return -ECANCELED;
 
-    return 0;
-}
-
-
-
-/**
- * Determines whether compression is enabled or disabled for a given socket. 
- * If the socket is connected to an endpoint, this function determines whether 
- * the current connection is using TLS compression. 
- * @param sock_ctx The context of the socket to check TLS compression for. 
- * @returns 0 on success, or -ECANCELED if a fatal error occurred. 
- */
-int get_tls_compression(socket_ctx* sock_ctx, int** data, unsigned int* len) {
-
-    if (*len != sizeof(int))
-        return -EINVAL;
-
-    int* compression_enabled = malloc(sizeof(int));
-    if (compression_enabled == NULL)
-        return -ECANCELED;
-
-    if (sock_ctx->state == SOCKET_CONNECTED) {
-        SSL_SESSION* session = SSL_get0_session(sock_ctx->ssl);
-        if (session == NULL) {
-            free(compression_enabled);
-            return -ECANCELED;
-        }
-
-        *compression_enabled = SSL_SESSION_get_compress_id(session) ? 1 : 0;
-    
-    } else {
-        int opts = SSL_CTX_get_options(sock_ctx->ssl_ctx);
-
-        if (opts & SSL_OP_NO_COMPRESSION)
-            *compression_enabled = 0;
-        else
-            *compression_enabled = 1;
-    }
-
-    *data = compression_enabled;
-    *len = sizeof(int);
-    
     return 0;
 }
 
