@@ -41,7 +41,7 @@ void do_connection_test(std::string hostname,
 
 
 
-INIT_TESTS(BadSSLTests, "configs/default.yml", "servers/regular")
+INIT_TESTS(BadSSLTests, "configs/default.yml", NULL)
 
 
 /*******************************************************************************
