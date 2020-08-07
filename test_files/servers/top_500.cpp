@@ -30,7 +30,7 @@ void run_connection_test(std::string hostname) {
     }
 
 
-INIT_TESTS(Top500Websites, "configs/default_localhost.yml", "servers/default")
+INIT_TESTS(Top500Websites, "configs/default.yml", NULL)
 
 
 /* top 500 websites per `moz.com` */

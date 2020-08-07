@@ -71,7 +71,8 @@ $(EXEC): $(OBJECTS)
 
 # To remove generated files
 clean:
-	rm -f $(EXEC) $(OBJECTS)
+	rm -f $(EXEC)
+	rm -f *.o
 
 sharedobject:
 	$(MAKE) -C $(PRELOAD_PATH)
