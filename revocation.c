@@ -2,7 +2,7 @@
 
 #include <event2/bufferevent.h>
 
-#include "crl.h"
+#include "crl_callbacks.h"
 #include "error.h"
 #include "hashmap.h"
 #include "log.h"
@@ -24,17 +24,20 @@ int check_stapled_response(revocation_ctx* rev_ctx, SSL* ssl, OCSP_CERTID* id);
  */
 void do_cert_chain_revocation_checks(socket_ctx* sock_ctx) {
 
-    revocation_ctx* rev_ctx = &sock_ctx->rev_ctx;
     int ret;
 
-    ret = revocation_context_setup(rev_ctx, sock_ctx);
-    if (ret != 0)
+    revocation_ctx* rev_ctx = revocation_context_setup(sock_ctx);
+
+    if (rev_ctx == NULL)
         goto err;
+
 
     for (int i = 0; i < rev_ctx->total_to_check; i++) {
         ret = begin_revocation_checks(rev_ctx, sock_ctx->ssl, i);
-        if (ret != 0)
+log_printf(LOG_ERROR, "beginning checks\n");
+        if (ret != 0) {
             goto err;
+	}
     }
 
     if (rev_ctx->left_to_check == 0)
@@ -51,6 +54,7 @@ err:
                 "chain could not be checked for revocation");
 
     fail_revocation_checks(rev_ctx);
+
 }
 
 /**
@@ -69,10 +73,12 @@ int begin_revocation_checks(revocation_ctx *rev_ctx, SSL* ssl, int cert_index) {
 
     OCSP_CERTID* id;
     int ret;
-    
+    X509* cert;
+
     id = get_ocsp_certid(rev_ctx, cert_index);
     if (id == NULL)
         goto err;
+
 
     if (has_cached_checks(rev_ctx->checks)) {
 
@@ -90,7 +96,21 @@ int begin_revocation_checks(revocation_ctx *rev_ctx, SSL* ssl, int cert_index) {
             OCSP_CERTID_free(id);
             return -2;
         }
+
+	cert = sk_X509_value(rev_ctx->certs, cert_index);
+	if (cert == NULL)
+		goto err;
+
+	ret = check_crl_cache(rev_ctx->daemon->crl_cache, cert);
+
+	if (ret) {
+		OCSP_CERTID_free(id);
+		//free cert?
+		return(-2);
+	}
+
     }
+
 
     if (has_stapled_checks(rev_ctx->checks)) {
         
@@ -114,21 +134,25 @@ int begin_revocation_checks(revocation_ctx *rev_ctx, SSL* ssl, int cert_index) {
         ret = launch_ocsp_checks(rev_ctx, cert_index, id);
         rev_ctx->responders_at[cert_index] = ret;
     }
-        
-    /*
-    if (has_crl_checks(rev_ctx->checks))
-        crl_urls = retrieve_crl_urls(subject, &crl_url_cnt);
 
-    if (crl_url_cnt > 0) {
-        ret = launch_crl_checks(rev_ctx, crl_urls, crl_url_cnt);
-        rev_ctx->crl_responders_at[cert_index] = ret;
-        if (ret > 0)
-            rev_ctx->responders_at[cert_index] += 1;
+/*       
+    if (has_crl_checks(rev_ctx->checks)) {
+	ret = launch_crl_checks(rev_ctx, cert_index);
+	if (ret == -1) {
+		rev_ctx->left_to_check -= 1;
+	        OCSP_CERTID_free(id);
+		return 0;
+	}
+	rev_ctx->crl_responders_at[cert_index] = ret;
+//	if (ret > 0)
+//		rev_ctx->responders_at[cert_index] += 1;
+	log_printf(LOG_DEBUG, "index: %d, num_responders: %d\n", cert_index, rev_ctx->crl_responders_at[cert_index]);
+
     }
+*/
 
-    */
 
-    if (rev_ctx->responders_at[cert_index] == 0)
+    if (rev_ctx->responders_at[cert_index] == 0 && rev_ctx->crl_responders_at[cert_index] == 0)
         goto err;
 
     OCSP_CERTID_free(id);
@@ -168,15 +192,50 @@ void pass_individual_rev_check(ocsp_responder* ocsp_resp) {
 
 }
 
+
+/**
+ * Designates a given certificate being queried for by a responder as valid and 
+ * unrevoked, and cancels all other bufferevents querying responders for the 
+ * same certificate. If no more certificates are left to be checked, this 
+ * function will also pass the revocation checks and report handshake success
+ * to the kernel over netlink.
+ * @param crl_resp The crl responder that successfully verified its given
+ * certificate.
+ */
+void pass_individual_crl_check(crl_responder* crl_resp) {
+
+    revocation_ctx* rev_ctx = crl_resp->rev_ctx;
+
+    crl_responder* curr = rev_ctx->crl_responders;
+    while (curr != NULL) {
+        if (curr->cert_position != 292)
+		if (crl_resp->cert_position != 292)
+
+           		 crl_responder_shutdown(curr);
+            /* TODO: actually take out the node from the linked list */
+        
+        curr = curr->next;
+    }
+
+    rev_ctx->left_to_check -= 1;
+log_printf(LOG_DEBUG, "about to pass?\n");
+    if (rev_ctx->left_to_check == 0) {
+	log_printf(LOG_DEBUG, "about to pass.\n");
+        pass_revocation_checks(rev_ctx);
+	}
+
+}
+
 /**
  * Reports handshake success to the kernel over netlink, and shuts down any 
  * bufferevents still performing revocation checks.
  * @param rev_ctx The revocation context of the socket.
  */
 void pass_revocation_checks(revocation_ctx *rev_ctx) {
-
+log_printf(LOG_DEBUG, "pass_revocation_checks\n");
     netlink_handshake_notify_kernel(rev_ctx->daemon, rev_ctx->id, NOTIFY_SUCCESS);
     revocation_context_cleanup(rev_ctx);
+
 }
 
 
@@ -199,7 +258,9 @@ void fail_revocation_checks(revocation_ctx* rev_ctx) {
     sock_ctx->state = SOCKET_ERROR;
 
     netlink_handshake_notify_kernel(daemon, id, -EPROTO);
-    revocation_context_cleanup(rev_ctx);
+
+    if(sock_ctx->rev_ctx != NULL)
+	revocation_context_cleanup(rev_ctx);
 
 }
 
@@ -555,14 +616,15 @@ int get_http_body_len(char* response) {
  * re-allocates the buffer within resp_ctx to the correct size for the body and sets
  * the flag in responder indicating that the buffer contains only the response
  * body.
- * @param resp_ctx The given responder to modify the buffer of.
+ * @param generic_resp The given responder to modify the buffer of (ocsp or crl, cast to ocsp).
  * @returns 0 on success, or if an error occurred.
  */
-int start_reading_body(ocsp_responder* ocsp_resp) {
 
-    unsigned char* body_start;
-    int header_len;
-    int body_len;
+int start_reading_body(void* generic_resp) {
+	ocsp_responder* ocsp_resp = (ocsp_responder*) generic_resp;
+	unsigned char* body_start;
+	int header_len;
+	int body_len;
 
     if (is_bad_http_response((char*) ocsp_resp->buffer))
         return -1;
@@ -593,12 +655,15 @@ int start_reading_body(ocsp_responder* ocsp_resp) {
 
 
 /**
- * Determines whether the given ocsp responder has finished reading all of
- * the data it needs to.
- * @param resp_ctx The ocsp responder to check.
+ * Determines whether the given responder has finished reading all of
+ * the data it needs to. 
+ * @param generic_resp The responder to check (ocsp or crl, cast to ocsp).
  * @returns 1 if done, 0 if not done.
  */
-int done_reading_body(ocsp_responder* resp_ctx) {
-    return resp_ctx->is_reading_body 
-                && (resp_ctx->tot_read == resp_ctx->buf_size);
+
+int done_reading_body(void* generic_resp) {
+	ocsp_responder* ocsp_resp = (ocsp_responder*) generic_resp;
+	return ocsp_resp->is_reading_body 
+                && (ocsp_resp->tot_read == ocsp_resp->buf_size);
 }
+

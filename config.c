@@ -943,3 +943,4 @@ void global_settings_free(global_config* settings) {
 
     free(settings);
 }
+

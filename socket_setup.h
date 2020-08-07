@@ -67,5 +67,7 @@ int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd);
  */
 int associate_fd(socket_ctx* sock_ctx, evutil_socket_t ifd);
 
+long get_tls_version(enum tls_version version);
+
 
 #endif

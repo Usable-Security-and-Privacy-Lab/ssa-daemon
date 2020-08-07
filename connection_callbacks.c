@@ -141,14 +141,15 @@ void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
     channel* startpoint = (bev == sock_ctx->secure.bev)
             ? &sock_ctx->secure : &sock_ctx->plain;
 
-
-    if (events & BEV_EVENT_EOF)
+    if (events & BEV_EVENT_EOF) {
         handle_event_eof(sock_ctx, startpoint, endpoint);
-    else if (events & BEV_EVENT_ERROR)
+    }
+    else if (events & BEV_EVENT_ERROR) {
         handle_event_error(sock_ctx, ssl_err, startpoint, endpoint);
-    else if (events & BEV_EVENT_CONNECTED)
+    }
+    else if (events & BEV_EVENT_CONNECTED) {
         handle_client_event_connected(sock_ctx, daemon, id, startpoint);
-
+    }
 
     /* Connection closed--usually due to error, EOF or timeout */
     if (endpoint->closed == 1 && startpoint->closed == 1) {
@@ -276,9 +277,9 @@ void handle_client_event_connected(socket_ctx* sock_ctx,
     else
         log_printf(LOG_DEBUG, "Session not reused...\n");
 
-
-    if (has_revocation_checks(sock_ctx->rev_ctx.checks) && 
+    if (has_revocation_checks(sock_ctx->rev_ctx->checks) && 
                 !SSL_session_reused(sock_ctx->ssl))
+
         do_cert_chain_revocation_checks(sock_ctx);
     else
         netlink_handshake_notify_kernel(daemon, id, NOTIFY_SUCCESS);

@@ -38,14 +38,14 @@
 #include <event2/util.h>
 
 #include "daemon.h"
-#include "daemon_structs.h"
+//#include "daemon_structs.h"
 #include "error.h"
 #include "getsockopt.h"
-#include "in_tls.h"
 #include "log.h"
 #include "netlink.h"
 #include "setsockopt.h"
 #include "socket_setup.h"
+//#include "in_tls.h"
 
 #define MAX_UPGRADE_SOCKET  18
 
@@ -699,6 +699,7 @@ void getsockopt_cb(daemon_ctx* daemon,
         clear_global_and_socket_errors(sock_ctx);
     
     response = do_getsockopt_action(sock_ctx, option, &data, &len);
+
     if (response != 0) {
         netlink_notify_kernel(daemon, id, response);
         return;
@@ -799,7 +800,6 @@ err:
 void connect_cb(daemon_ctx* daemon, unsigned long id,
         struct sockaddr* int_addr, int int_addrlen,
         struct sockaddr* rem_addr, int rem_addrlen, int blocking) {
-
     socket_ctx* sock_ctx;
     int response;
     int ret;

@@ -16,6 +16,7 @@
 #include "error.h"
 #include "log.h"
 #include "sessions.h"
+#include "socket_setup.h"
 
 #define UBUNTU_DEFAULT_CA "/etc/ssl/certs/ca-certificates.crt"
 #define FEDORA_DEFAULT_CA "/etc/pki/tls/certs/ca-bundle.crt"
@@ -42,7 +43,7 @@
 
 
 /* SSL_CTX loading */
-long get_tls_version(enum tls_version version);
+
 int load_certificate_authority(SSL_CTX* ctx, char* CA_path);
 int load_cipher_list(SSL_CTX* ctx, char** list, int num);
 int load_ciphersuites(SSL_CTX* ctx, char** list, int num);
@@ -499,7 +500,8 @@ int prepare_SSL_client(socket_ctx* sock_ctx) {
 
     int ret;
 
-    if (has_revocation_checks(sock_ctx->rev_ctx.checks))
+    if (has_revocation_checks(sock_ctx->rev_ctx->checks))
+
         ret = SSL_CTX_set_tlsext_status_type(sock_ctx->ssl_ctx, 
                     TLSEXT_STATUSTYPE_ocsp);
     else

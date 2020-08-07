@@ -5,10 +5,10 @@
 
 #include "cipher_selection.h"
 #include "error.h"
-#include "in_tls.h"
 #include "log.h"
 #include "sessions.h"
 #include "setsockopt.h"
+//#include "in_tls.h"
 
 
 
@@ -16,6 +16,8 @@
 int set_CA_certificates(socket_ctx *sock_ctx, char* path, socklen_t len);
 int set_certificate_chain(socket_ctx* sock_ctx, char* path, socklen_t len);
 int set_private_key(socket_ctx* sock_ctx, char* path, socklen_t len);
+int set_min_version(socket_ctx* sock_ctx, int* version, socklen_t len);
+int set_max_version(socket_ctx* sock_ctx, int* version, socklen_t len);
 int set_tls_context(socket_ctx* sock_ctx, unsigned long* data, socklen_t len);
 int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, socklen_t len);
 int set_session_resumption(socket_ctx* sock_ctx, int* reuse, socklen_t len);
@@ -83,6 +85,20 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
             break;
         response = set_private_key(sock_ctx, (char*) value, len);
+        break;
+
+    case TLS_VERSION_MIN:
+	if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+//2, SOCKET_NEW, SOCKET_LISTENING) != 0) TODO: can listening sockets change version settings?
+            break;
+        response = set_min_version(sock_ctx, (int*) value, len);
+        break;
+
+    case TLS_VERSION_MAX:
+	if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+//2, SOCKET_NEW, SOCKET_LISTENING) != 0) TODO: can listening sockets change version settings?
+            break;
+        response = set_max_version(sock_ctx, (int*) value, len);
         break;
 
     case TLS_REVOCATION_CHECKS:
@@ -258,6 +274,52 @@ err:
     return -EBADF;
 }
 
+int set_min_version(socket_ctx *sock_ctx, int* version, socklen_t len) {
+
+    int response = 0;
+    if (*version != TLS_1_2 && *version != TLS_1_3) {
+        response = -EINVAL;
+        log_printf(LOG_DEBUG, "Set TLS_VERSION_MIN not TLS 1.2 or 1.3\n");
+    }
+    if (*version < get_tls_version(sock_ctx->daemon->settings->min_tls_version)) {
+        response = -EINVAL;
+        log_printf(LOG_DEBUG, "Set TLS_VERSION_MIN less than min in config file\n");
+    }
+    if (*version > SSL_CTX_get_max_proto_version(sock_ctx->ssl_ctx)) {
+        response = -EINVAL;
+        log_printf(LOG_DEBUG, "Set TLS_VERSION_MIN greater than current max\n");
+    }
+    if (!response)
+        response = (SSL_CTX_set_min_proto_version(sock_ctx->ssl_ctx, *version) - 1);
+        //we return 0 on success and -1 on failure
+    return response;
+}
+
+
+int set_max_version(socket_ctx *sock_ctx, int* version, socklen_t len) {
+
+    int response = 0;
+    if (*version != TLS_1_2 && *version != TLS_1_3) {
+        response = -EINVAL;
+        log_printf(LOG_DEBUG, "Set TLS_VERSION_MAX not TLS 1.2 or 1.3\n");
+    }
+/*
+    if (*version < get_tls_version(sock_ctx->daemon->settings->max_tls_version)) {
+        response = -EINVAL;
+        log_printf(LOG_DEBUG, "Set TLS_VERSION_MAX less than max in config file\n");
+    }
+*/ //TODO: what kind of settings should be discouraged for max version?
+    if (*version < SSL_CTX_get_min_proto_version(sock_ctx->ssl_ctx)) {
+        response = -EINVAL;
+        log_printf(LOG_DEBUG, "Set TLS_VERSION_MAX less than current min\n");
+    }
+    if (!response)
+        response = (SSL_CTX_set_max_proto_version(sock_ctx->ssl_ctx, *version) - 1);
+        //we return 0 on success and -1 on failure
+    return response;
+}
+
+
 /**
  * Sets the trusted Certificate Authority certificates for the given 
  * connection conn to those found in the file specified by path.
@@ -405,9 +467,9 @@ int set_revocation_checks(socket_ctx* sock_ctx, int* enabled, socklen_t len) {
         return -EPROTO; /* fail if disabling when config has checks enforced */
     
     if (*enabled == 1)
-        turn_on_revocation_checks(sock_ctx->rev_ctx.checks);
+        turn_on_revocation_checks(sock_ctx->rev_ctx->checks);
     else if (*enabled == 0)
-        turn_off_revocation_checks(sock_ctx->rev_ctx.checks);
+        turn_off_revocation_checks(sock_ctx->rev_ctx->checks);
     else
         return -EINVAL;
 
@@ -425,9 +487,9 @@ int set_ocsp_stapled_checks(socket_ctx* sock_ctx, int* enabled, socklen_t len) {
         return -EPROTO; /* fail if enabling when config disables it */
     
     if (*enabled == 1)
-        turn_on_stapled_checks(sock_ctx->rev_ctx.checks);
+        turn_on_stapled_checks(sock_ctx->rev_ctx->checks);
     else if (*enabled == 0)
-        turn_off_stapled_checks(sock_ctx->rev_ctx.checks);
+        turn_off_stapled_checks(sock_ctx->rev_ctx->checks);
     else
         return -EINVAL;
 
@@ -445,9 +507,9 @@ int set_ocsp_checks(socket_ctx* sock_ctx, int* enabled, socklen_t len) {
         return -EPROTO; /* fail if enabling when config disables it */
     
     if (*enabled == 1)
-        turn_on_ocsp_checks(sock_ctx->rev_ctx.checks);
+        turn_on_ocsp_checks(sock_ctx->rev_ctx->checks);
     else if (*enabled == 0)
-        turn_off_ocsp_checks(sock_ctx->rev_ctx.checks);
+        turn_off_ocsp_checks(sock_ctx->rev_ctx->checks);
     else
         return -EINVAL;
 
@@ -465,9 +527,9 @@ int set_crl_checks(socket_ctx* sock_ctx, int* enabled, socklen_t len) {
         return -EPROTO; /* fail if enabling when config disables it */
     
     if (*enabled == 1)
-        turn_on_crl_checks(sock_ctx->rev_ctx.checks);
+        turn_on_crl_checks(sock_ctx->rev_ctx->checks);
     else if (*enabled == 0)
-        turn_off_crl_checks(sock_ctx->rev_ctx.checks);
+        turn_off_crl_checks(sock_ctx->rev_ctx->checks);
     else
         return -EINVAL;
 
@@ -485,9 +547,9 @@ int set_rev_cache_checks(socket_ctx* sock_ctx, int* enabled, socklen_t len) {
         return -EPROTO; /* fail if enabling when config disables it */
     
     if (*enabled == 1)
-        turn_on_cached_checks(sock_ctx->rev_ctx.checks);
+        turn_on_cached_checks(sock_ctx->rev_ctx->checks);
     else if (*enabled == 0)
-        turn_off_cached_checks(sock_ctx->rev_ctx.checks);
+        turn_off_cached_checks(sock_ctx->rev_ctx->checks);
     else
         return -EINVAL;
 

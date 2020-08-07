@@ -6,9 +6,13 @@
 #include <event2/util.h>
 #include <openssl/ssl.h>
 #include <openssl/ocsp.h>
+#include <semaphore.h>
 
 #include "hashmap.h"
 #include "hashmap_str.h"
+#include "hashmap_crl.h"
+
+#include "inotify.h"
 
 
 /** The maximum length that an error string may be (not including '\0') */
@@ -125,6 +129,7 @@ typedef struct ocsp_responder_st ocsp_responder;
 typedef struct socket_ctx_st socket_ctx;
 typedef struct channel_st channel;
 
+
 enum socket_state {
     SOCKET_ERROR = 0,      /** Socket unrecoverably failed operation */
     SOCKET_NEW,            /** Fresh socket ready for `connect` or `listen` */
@@ -151,11 +156,17 @@ struct daemon_ctx_st {
     struct nl_sock* netlink_sock; /** For transmitting to/from kernel module */
     int netlink_family;           /** Netlink protocol; should be SSA family */
     int port;                     /** Port for incoming connections/Netlink */
+
     hmap_t* sock_map;             /** Hashmap for pending server connections */
     hmap_t* sock_map_port;        /** Hashmap for sockets currently in use */
     global_config* settings;      /** Settings loaded in from config file */
 
     hsmap_t* revocation_cache;    /** Stores OCSP cert revocation statuses */
+
+	hcmap_t* crl_cache;	  /** Stores downloaded CRLs' URLs and revoked serial numbers */
+	sem_t* cache_sem;	  /** Semaphore to protect write operations to CRL cache */
+    inotify_ctx* inotify;         /** Inotify information */
+
     /*
     hsmap_t* ssl_ctx_cache;
     */
@@ -236,14 +247,19 @@ struct revocation_ctx_st {
     int left_to_check;  /** # certificates in chain not yet checked */
 
     ocsp_responder* ocsp_responders; /** Array of ocsp responders */
-    crl_responder* crl_responders;   /** Array of crl responders */
+    crl_responder* crl_responders;   /** Linked list of crl responders */
 
     X509_STORE* store;     /** Trusted CA certs to verify responses against */
     STACK_OF(X509)* certs; /** Chain of certificates received from peer */
 };
 
 
-
+/** ocsp_responder and crl_responder are different structs but share a similar purpose
+ * therefore they share some simple functions. In order to make this possible,
+ * the two structs' shared attributes should be kept at the beginning of their
+ * definitions (because they are passed in as void pointers and cast as ocsp_responder
+ * structs in these functions).
+*/
 struct ocsp_responder_st {
 
     revocation_ctx* rev_ctx; /** ctx of revocation check being performed */
@@ -253,20 +269,33 @@ struct ocsp_responder_st {
 
     int cert_position;       /** cert chain position of cert being verified */
 
-    OCSP_CERTID* certid;     /** certificate's ID for the OCSP request/resp */
-
     unsigned char* buffer;   /** byte buffer to store HTTP response in */
     int buf_size;            /** # of bytes that can be stored in buffer */
     int tot_read;            /** # of bytes currently stored in buffer */
     int is_reading_body;     /** 0 if HTTP header being read, 1 otherwise */
 
     ocsp_responder* next;    /** Pointer to the next responder in the list */
+
+    OCSP_CERTID* certid;     /** certificate's ID for the OCSP request/resp */
 };
 
 struct crl_responder_st {
 
-    struct bufferevent* bev; /** Bufferevent reading/writing CRL response */
+	revocation_ctx* rev_ctx;
+
+	struct bufferevent* bev; /** Bufferevent reading/writing CRL response */
+	char* url;
+
+	int cert_position;
+
+	unsigned char* buffer;
+	int buf_size;
+	int tot_read;
+	int is_reading_body;
+
     crl_responder* next;     /** Pointer to the next responder in the list */
+
+	const char* hostname;
 };
 
 
@@ -287,7 +316,8 @@ struct socket_ctx_st {
     channel secure;     /** The encrypted channel to the external peer */
     struct evconnlistener* listener; /** Libevent struct for listening socket */
 
-    revocation_ctx rev_ctx; /** Settings/data structs to do with revocation */
+
+    revocation_ctx* rev_ctx; /** Settings/data structs to do with revocation */
 
     struct sockaddr int_addr; /** Internal address--the program using SSA */
     int int_addrlen;          /** The size of \p int_addr */
@@ -308,7 +338,6 @@ struct socket_ctx_st {
 };
 
 
-
 daemon_ctx *daemon_context_new(char* config_path, int port);
 void daemon_context_free(daemon_ctx* daemon);
 
@@ -319,11 +348,14 @@ void socket_shutdown(socket_ctx* sock_ctx);
 void socket_context_free(socket_ctx* sock_ctx);
 void socket_context_erase(socket_ctx* sock_ctx, int port);
 
-int revocation_context_setup(revocation_ctx* ctx, socket_ctx* sock_ctx);
+revocation_ctx* revocation_context_setup(socket_ctx* sock_ctx);
 void revocation_context_cleanup(revocation_ctx* ctx);
 
 void ocsp_responder_shutdown(ocsp_responder* resp);
 void ocsp_responder_free(ocsp_responder* resp);
+
+void crl_responder_shutdown(crl_responder* resp);
+void crl_responder_free(crl_responder* resp);
 
 int check_socket_state(socket_ctx* sock_ctx, int num, ...);
 

@@ -407,6 +407,7 @@ void ocsp_responder_read_cb(struct bufferevent* bev, void* arg) {
     }
 
     return;
+
 err:
     ocsp_responder_shutdown(ocsp_resp);
 
@@ -510,3 +511,4 @@ err:
 
     return -1;
 }
+
