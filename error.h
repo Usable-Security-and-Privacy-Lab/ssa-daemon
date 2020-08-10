@@ -2,6 +2,7 @@
 #define SSA_ERROR_H
 
 #include "daemon_structs.h"
+#include "log.h"
 
 
 #define NO_ERROR 0
@@ -17,6 +18,8 @@ int set_socket_error(socket_ctx* sock_ctx, unsigned long ssl_err);
 void set_err_string(socket_ctx* sock_ctx, char* string, ...);
 void set_badfd_err_string(socket_ctx* sock_ctx);
 void set_wrong_state_err_string(socket_ctx* sock_ctx);
+
+void log_global_error(enum log_level level, char *message);
 
 void clear_global_errors();
 void clear_socket_error(socket_ctx* sock_ctx);

@@ -17,10 +17,10 @@ void set_wrong_state_err_string(socket_ctx* sock_ctx);
  * @returns 1 if an error string was found, or 0 otherwise.
  */
 int has_error_string(socket_ctx* sock_ctx) {
-	if (strlen(sock_ctx->err_string) > 0)
-		return 1;
-	else
-		return 0;
+    if (strlen(sock_ctx->err_string) > 0)
+        return 1;
+    else
+        return 0;
 }
 
 
@@ -116,7 +116,7 @@ int set_socket_error(socket_ctx* sock_ctx, unsigned long ssl_err) {
 
     set_err_string(sock_ctx, "Internal daemon error: check logs for details");
     log_printf(LOG_ERROR, "Internal daemon error during handshake: %s\n", 
-                ERR_error_string(ssl_err, NULL));
+                reason_str);
 
 
     if (sock_ctx->state == SOCKET_CONNECTING 
@@ -138,17 +138,39 @@ void set_err_string(socket_ctx* sock_ctx, char* string, ...) {
 
     int error = errno;
 
-	if (sock_ctx == NULL)
-		return;
+    if (sock_ctx == NULL)
+        return;
 
-	va_list args;
-	clear_socket_error(sock_ctx);
+    va_list args;
+    clear_socket_error(sock_ctx);
 
-	va_start(args, string);
-	vsnprintf(sock_ctx->err_string, MAX_ERR_STRING, string, args);
-	va_end(args);
+    va_start(args, string);
+    vsnprintf(sock_ctx->err_string, MAX_ERR_STRING, string, args);
+    va_end(args);
 
     errno = error;
+}
+
+
+/**
+ * Logs an error found within either errno or OpenSSL's error queue.
+ * @param level The log level to print the log to (i.e. LOG_WARNING).
+ * @param message The message to print before the error (this function prints
+ * it in a way similar to `perror()`).
+ */
+void log_global_error(enum log_level level, char *message) {
+
+    const char *error_string;
+
+    if (errno != 0)
+        error_string = strerror(errno);
+    else
+        error_string = ERR_reason_error_string(ERR_get_error());
+        
+
+    log_printf(level, "%s: %s\n", message, error_string);
+
+    clear_global_errors();
 }
 
 
@@ -170,7 +192,7 @@ void clear_global_errors() {
  */
 void clear_socket_error(socket_ctx* sock_ctx) {
 
-	memset(sock_ctx->err_string, 0, MAX_ERR_STRING + 1);
+    memset(sock_ctx->err_string, 0, MAX_ERR_STRING + 1);
     sock_ctx->handshake_err_code = NO_ERROR;
 }
 
@@ -188,20 +210,28 @@ void clear_global_and_socket_errors(socket_ctx* sock_ctx) {
 }
 
 
-
+/**
+ * Sets the error string for when an operation is attempted on a socket that 
+ * is in the SOCK_ERROR state.
+ * @param sock_ctx The context of the socket to set the error string for.
+ */
 void set_badfd_err_string(socket_ctx* sock_ctx) {
-	if (sock_ctx == NULL)
-		return;
+    if (sock_ctx == NULL)
+        return;
 
     set_err_string(sock_ctx, "SSA daemon socket error: given socket "
                 "previously failed an operation in an unrecoverable way");
 }
 
-
+/**
+ * Sets the error string for when an  operation is attempted on a socket that
+ * is in the wrong state for such an operation to be done.
+ * @param sock_ctx The context of the socket to set the error string for.
+ */
 void set_wrong_state_err_string(socket_ctx* sock_ctx) {
-	if (sock_ctx == NULL)
-		return;
+    if (sock_ctx == NULL)
+        return;
 
-	set_err_string(sock_ctx, "SSA daemon error: given socket is not in the "
+    set_err_string(sock_ctx, "SSA daemon error: given socket is not in the "
                 "right state to perform the requested operation");
 }

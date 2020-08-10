@@ -14,22 +14,24 @@
 #include "error.h"
 #include "log.h"
 #include "certificate.h"
+#include "sessions.h"
+#include "socket_setup.h"
 
 #define UBUNTU_DEFAULT_CA "/etc/ssl/certs/ca-certificates.crt"
 #define FEDORA_DEFAULT_CA "/etc/pki/tls/certs/ca-bundle.crt"
 
 #define DEFAULT_CIPHER_LIST "ECDHE-ECDSA-AES256-GCM-SHA384:"  \
-							"ECDHE-RSA-AES256-GCM-SHA384:"    \
-							"ECDHE-ECDSA-CHACHA20-POLY1305:"  \
-							"ECDHE-RSA-CHACHA20-POLY1305:"    \
-							"ECDHE-ECDSA-AES128-GCM-SHA256:"  \
-							"ECDHE-RSA-AES128-GCM-SHA256"
+                            "ECDHE-RSA-AES256-GCM-SHA384:"    \
+                            "ECDHE-ECDSA-CHACHA20-POLY1305:"  \
+                            "ECDHE-RSA-CHACHA20-POLY1305:"    \
+                            "ECDHE-ECDSA-AES128-GCM-SHA256:"  \
+                            "ECDHE-RSA-AES128-GCM-SHA256"
 
 #define DEFAULT_CIPHERSUITES "TLS_AES_256_GCM_SHA384:"       \
                              "TLS_AES_128_GCM_SHA256:"       \
-							 "TLS_CHACHA20_POLY1305_SHA256:" \
-							 "TLS_AES_128_CCM_SHA256:"       \
-							 "TLS_AES_128_CCM_8_SHA256"
+                             "TLS_CHACHA20_POLY1305_SHA256:" \
+                             "TLS_AES_128_CCM_SHA256:"       \
+                             "TLS_AES_128_CCM_8_SHA256"
 
 #define DEBUG_TEST_CA "test_files/certs/rootCA.pem"
 #define DEBUG_CERT_CHAIN "test_files/certs/server_chain.pem"
@@ -40,7 +42,7 @@
 
 
 /* SSL_CTX loading */
-long get_tls_version(enum tls_version version);
+
 int load_certificate_authority(SSL_CTX* ctx, char* CA_path);
 int load_cipher_list(SSL_CTX* ctx, char** list, int num);
 int load_ciphersuites(SSL_CTX* ctx, char** list, int num);
@@ -52,36 +54,40 @@ int get_ciphers_strlen(STACK_OF(SSL_CIPHER)* ciphers);
 int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len);
 int check_key_cert_pair(socket_ctx* sock_ctx);
 
-
-
-
+/**
+ * Allocates an SSL_CTX struct and populates it with the settings found in 
+ * \p settings. 
+ * @param settings a struct filled with the settings that should be applied
+ * to the SSL_CTX.
+ * @returns A pointer to an allocated SSL_CTX struct, or NULL on error.
+ */
 SSL_CTX* SSL_CTX_create(global_config* settings) {
 
     SSL_CTX* ctx = NULL;
-	long tls_version;
-	int ret;
+    long tls_version;
+    int ret;
 
-	ctx = SSL_CTX_new(TLS_method());
-	if (ctx == NULL)
-		goto err;
+    ctx = SSL_CTX_new(TLS_method());
+    if (ctx == NULL)
+        goto err;
 
-	SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
+    SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
 
+    if (settings->session_resumption)
+        SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_BOTH);
+    else 
+        SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_OFF);
 
-	if (!settings->tls_compression)
-		SSL_CTX_set_options(ctx, 
-                    SSL_CTX_get_options(ctx) | SSL_OP_NO_COMPRESSION);
-    else
-        SSL_CTX_set_options(ctx, 
-                    SSL_CTX_get_options(ctx) & ~SSL_OP_NO_COMPRESSION);
     
+    if (!settings->tls_compression)
+        SSL_CTX_set_options(ctx, SSL_OP_NO_COMPRESSION);
+    else
+        SSL_CTX_clear_options(ctx, SSL_OP_NO_COMPRESSION);
 
     if (!settings->session_tickets)
-        SSL_CTX_set_options(ctx, 
-                    SSL_CTX_get_options(ctx) | SSL_OP_NO_TICKET);
+        SSL_CTX_set_options(ctx, SSL_OP_NO_TICKET);
     else
-        SSL_CTX_set_options(ctx,
-                    SSL_CTX_get_options(ctx) & ~SSL_OP_NO_TICKET);
+        SSL_CTX_clear_options(ctx, SSL_OP_NO_TICKET);
     
 
     tls_version = get_tls_version(settings->min_tls_version);
@@ -142,12 +148,13 @@ SSL_CTX* SSL_CTX_create(global_config* settings) {
 
 	return ctx;
 err:
-	if (ERR_peek_error())
-		log_printf(LOG_ERROR, "OpenSSL error initializing client SSL_CTX: %s\n",
-				ERR_error_string(ERR_get_error(), NULL));
-	
-	if (ctx != NULL)
-		SSL_CTX_free(ctx);
+    if (ERR_peek_error())
+        log_printf(LOG_ERROR, "OpenSSL error initializing client SSL_CTX: %s\n",
+                ERR_error_string(ERR_get_error(), NULL));
+    
+    if (ctx != NULL)
+        SSL_CTX_free(ctx);
+
     return NULL;
 }
 
@@ -159,16 +166,11 @@ err:
  * @param conn The connection to assign a new client SSL struct to.
  * @returns 0 on success; -errno otherwise.
  */
-int client_SSL_new(socket_ctx* sock_ctx) {
+// int client_SSL_new(socket_ctx* sock_ctx) {
 
-	sock_ctx->ssl = SSL_new(sock_ctx->ssl_ctx);
-	if (sock_ctx->ssl == NULL)
-		return determine_and_set_error(sock_ctx);
 
-    SSL_set_verify(sock_ctx->ssl, SSL_VERIFY_PEER, NULL);
 
-	return 0;
-}
+
 
 /**
  * Allocates and sets the correct settings for the bufferevents of a given 
@@ -184,155 +186,154 @@ int client_SSL_new(socket_ctx* sock_ctx) {
 int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
 
     daemon_ctx* daemon = sock_ctx->daemon;
-    int response;
+    enum bufferevent_ssl_state state;
+    bufferevent_event_cb event_cb;
     int ret;
 
-    enum bufferevent_ssl_state state = (plain_fd == NO_FD)
-            ? BUFFEREVENT_SSL_CONNECTING : BUFFEREVENT_SSL_ACCEPTING;
-
-    bufferevent_event_cb event_cb = (plain_fd == NO_FD)
-            ? client_bev_event_cb : server_bev_event_cb;
+    if (plain_fd == NO_FD) {
+        state = BUFFEREVENT_SSL_CONNECTING;
+        event_cb = client_bev_event_cb;
+    
+    } else {
+        state = BUFFEREVENT_SSL_ACCEPTING;
+        event_cb = server_bev_event_cb;
+    }
 
     clear_global_and_socket_errors(sock_ctx);
 
     sock_ctx->secure.bev = bufferevent_openssl_socket_new(daemon->ev_base,
-            sock_ctx->sockfd, sock_ctx->ssl, state, 0);
-    if (sock_ctx->secure.bev == NULL) {
-        log_printf(LOG_ERROR, "Creating OpenSSL bufferevent failed: %i %s\n",
-                EVUTIL_SOCKET_ERROR(), strerror(EVUTIL_SOCKET_ERROR()));
-
-        response = -ENOMEM;
+                sock_ctx->sockfd, sock_ctx->ssl, state, BEV_OPT_CLOSE_ON_FREE);
+    if (sock_ctx->secure.bev == NULL)
         goto err;
-    }
 
-	bufferevent_setcb(sock_ctx->secure.bev, common_bev_read_cb,
-			common_bev_write_cb, event_cb, sock_ctx);
+    bufferevent_openssl_set_allow_dirty_shutdown(sock_ctx->secure.bev, 1);
 
     ret = bufferevent_enable(sock_ctx->secure.bev, EV_READ | EV_WRITE);
-	if (ret < 0) {
-        log_printf(LOG_ERROR, "Enabling bufferevent failed: %i %s\n",
-                EVUTIL_SOCKET_ERROR(), strerror(EVUTIL_SOCKET_ERROR()));
-
-        response = -ECANCELED;
-		goto err;
-	}
-
-    /*
-	#if LIBEVENT_VERSION_NUMBER >= 0x02010000
-	bufferevent_openssl_set_allow_dirty_shutdown(sock_ctx->secure.bev, 1);
-	#endif
-    */
+    if (ret < 0)
+        goto err;
 
     sock_ctx->plain.bev = bufferevent_socket_new(daemon->ev_base,
-			plain_fd, BEV_OPT_CLOSE_ON_FREE);
-    if (sock_ctx->plain.bev == NULL) {
-        log_printf(LOG_ERROR, "Creating plain bufferevent failed: %i %s\n",
-                EVUTIL_SOCKET_ERROR(), strerror(EVUTIL_SOCKET_ERROR()));
-
-        response = -ENOMEM;
+                plain_fd, BEV_OPT_CLOSE_ON_FREE);
+    if (sock_ctx->plain.bev == NULL)
         goto err;
+
+    bufferevent_setcb(sock_ctx->secure.bev, common_bev_read_cb,
+            common_bev_write_cb, event_cb, sock_ctx);
+    bufferevent_setcb(sock_ctx->plain.bev, common_bev_read_cb,
+            common_bev_write_cb, event_cb, sock_ctx);
+
+     return 0;
+err:
+    log_global_error(LOG_ERROR, "Failed to set up bufferevents for connection");
+
+    if (sock_ctx->plain.bev != NULL) {
+        bufferevent_free(sock_ctx->plain.bev);
+        sock_ctx->plain.bev = NULL;
+
+    } else if (plain_fd != NO_FD) {
+        close(plain_fd);
     }
 
-	bufferevent_setcb(sock_ctx->plain.bev, common_bev_read_cb,
-			common_bev_write_cb, event_cb, sock_ctx);
+    if (sock_ctx->secure.bev != NULL) {
+        bufferevent_free(sock_ctx->secure.bev);
 
-
-    /*
-    struct timeval read_timeout = {
-			.tv_sec = EXT_CONN_TIMEOUT,
-			.tv_usec = 0,
-	};
+        sock_ctx->secure.bev = NULL;
+        sock_ctx->ssl = NULL;
+        sock_ctx->sockfd = NO_FD;
+    }
     
-	ret = bufferevent_set_timeouts(sock_ctx->secure.bev, &read_timeout, NULL);
-    */
+    sock_ctx->state = SOCKET_ERROR;
 
-    return 0;
-err:
-    if (sock_ctx->plain.bev != NULL)
-        bufferevent_free(sock_ctx->plain.bev);
-    else if (plain_fd != NO_FD)
-        close(plain_fd);
-
-    if (sock_ctx->secure.bev != NULL)
-        bufferevent_free(sock_ctx->plain.bev);
-
-    return response;
+    return -ECANCELED;
 }
 
 
-int prepare_SSL_connection(socket_ctx* sock_ctx, int is_client) {
+/**
+ * Prepares the given socket context for a TLS connection with an endpoint. 
+ * This function mostly has to do with setting up the `SSL` object used by 
+ * the socket--allocation, setting it to perform certificate verification, 
+ * giving it a session to resume (if one exists), and assigning it the hostname 
+ * in \p sock_ctx.
+ * @param sock_ctx The context of the socket to prepare an SSL object for. 
+ * @returns 0 on success, or a negative errno value if an error occurred.
+ */
+int prepare_SSL_client(socket_ctx* sock_ctx) {
 
-    SSL_SESSION* session;
-    daemon_ctx* daemon = sock_ctx->daemon;
-    int response;
     int ret;
 
-    clear_global_and_socket_errors(sock_ctx);
-
-    if (is_client && has_revocation_checks(sock_ctx->rev_ctx.checks)) {
+    if (has_revocation_checks(sock_ctx->rev_ctx->checks))
 
         ret = SSL_CTX_set_tlsext_status_type(sock_ctx->ssl_ctx, 
                     TLSEXT_STATUSTYPE_ocsp);
-        if (ret != 1)
-            goto err;
-    }
+    else
+        ret = SSL_CTX_set_tlsext_status_type(sock_ctx->ssl_ctx, 0);
 
-    /* turn off internal caching--we implement our own */
-    SSL_CTX_set_session_cache_mode(sock_ctx->ssl_ctx, SSL_SESS_CACHE_OFF);
+    if (ret != 1)
+        goto err;
 
-    ret = client_SSL_new(sock_ctx);
-    if (sock_ctx->ssl == NULL) {
-        response = -ENOMEM;
+    sock_ctx->ssl = SSL_new(sock_ctx->ssl_ctx);
+    if (sock_ctx->ssl == NULL)
+        goto err;
+
+    SSL_set_verify(sock_ctx->ssl, SSL_VERIFY_PEER, NULL);
+
+    if (strlen(sock_ctx->rem_hostname) <= 0) {
+        set_err_string(sock_ctx, "TLS error: "
+                    "hostname required for verification (via setsockopt())");
         goto err;
     }
 
-    if (is_client) {
-        if (strlen(sock_ctx->rem_hostname) <= 0) {
-            set_err_string(sock_ctx, "TLS error: "
-                    "hostname required for verification (via setsockopt())");
-                goto err;
-        }
-
-        ret = SSL_set_tlsext_host_name(sock_ctx->ssl, sock_ctx->rem_hostname);
-        if (ret != 1) {
-            log_printf(LOG_ERROR, "Connection setup error: "
-                    "couldn't assign the socket's hostname for SNI\n");
-            goto err;
-        }
-
-        ret = SSL_set1_host(sock_ctx->ssl, sock_ctx->rem_hostname);
-        if (ret != 1) {
-            log_printf(LOG_ERROR, "Connection setup error: "
-                    "couldn't assign the socket's hostname for validation\n");
-            goto err;
-        }
+    ret = SSL_set_tlsext_host_name(sock_ctx->ssl, sock_ctx->rem_hostname);
+    if (ret != 1) {
+        log_printf(LOG_ERROR, "Connection setup error: "
+                "couldn't assign the socket's hostname for SNI\n");
+        goto err;
     }
 
-    session = str_hashmap_get(daemon->session_cache, sock_ctx->rem_hostname);
-    if (session != NULL) {
-        log_printf(LOG_INFO, "Using previously cached session for %s\n", 
-                   sock_ctx->rem_hostname);
-        int ret = str_hashmap_del(daemon->session_cache, sock_ctx->rem_hostname);
-        if (ret != 0)
-            log_printf(LOG_ERROR, "failed to delete cached session...\n");
+    ret = SSL_set1_host(sock_ctx->ssl, sock_ctx->rem_hostname);
+    if (ret != 1) {
+        log_printf(LOG_ERROR, "Connection setup error: "
+                "couldn't assign the socket's hostname for validation\n");
+        goto err;
+    }
+    if (session_resumption_enabled(sock_ctx->ssl_ctx)) {
+        char* host_port = get_hostname_port_str(sock_ctx);
+        if (host_port == NULL)
+            goto err;
 
-        if (SSL_SESSION_is_resumable(session))
-            SSL_set_session(sock_ctx->ssl, session); /* could fail */
-        else
-            log_printf(LOG_WARNING, "Cached session not used--insecure settings\n");
-
-        SSL_SESSION_free(session);
+        ret = session_resumption_setup(sock_ctx->ssl, host_port);
+        if (ret != 0) {
+            free(host_port);
+            goto err;
+        }
     }
 
     return 0;
 err:
-    if (!has_error_string(sock_ctx))
-        response = determine_and_set_error(sock_ctx);
 
     if (sock_ctx->ssl != NULL)
         SSL_free(sock_ctx->ssl);
+    sock_ctx->ssl = NULL;
 
-    return response;
+    if (has_error_string(sock_ctx))
+        return -EPROTO;
+
+    return -ECANCELED;
+}
+
+
+/**
+ * Allocates an SSL object for a connection accepted by a server.
+ * @param sock_ctx The context of the socket to prepare the SSL object for.
+ * @returns 0 on success, or a negative errno on failure.
+ */
+int prepare_SSL_server(socket_ctx* sock_ctx) {
+
+    sock_ctx->ssl = SSL_new(sock_ctx->ssl_ctx);
+    if (sock_ctx->ssl == NULL)
+        return -ECANCELED;
+
+    return 0;
 }
 
 
@@ -351,30 +352,30 @@ err:
  */
 long get_tls_version(enum tls_version version) {
 
-	long tls_version = 0;
+    long tls_version = 0;
 
-	switch(version) {
-	case TLS_DEFAULT_ENUM:
-		tls_version = TLS_MAX_VERSION;
-		break;
-	case TLS1_0_ENUM:
-		tls_version = TLS1_VERSION;
-		break;
-	case TLS1_1_ENUM:
-		tls_version = TLS1_1_VERSION;
-		break;
-	case TLS1_2_ENUM:
-		tls_version = TLS1_2_VERSION;
-		break;
-	case TLS1_3_ENUM:
-		tls_version = TLS1_3_VERSION;
-		break;
-	default:
-		/* shouldn't happen */
-		log_printf(LOG_ERROR, "Unknown TLS version specified\n");
-	}
+    switch(version) {
+    case TLS_DEFAULT_ENUM:
+        tls_version = TLS_MAX_VERSION;
+        break;
+    case TLS1_0_ENUM:
+        tls_version = TLS1_VERSION;
+        break;
+    case TLS1_1_ENUM:
+        tls_version = TLS1_1_VERSION;
+        break;
+    case TLS1_2_ENUM:
+        tls_version = TLS1_2_VERSION;
+        break;
+    case TLS1_3_ENUM:
+        tls_version = TLS1_3_VERSION;
+        break;
+    default:
+        /* shouldn't happen */
+        log_printf(LOG_ERROR, "Unknown TLS version specified\n");
+    }
 
-	return tls_version;
+    return tls_version;
 }
 
 /**
@@ -387,28 +388,28 @@ long get_tls_version(enum tls_version version) {
  */
 int load_cipher_list(SSL_CTX* ctx, char** list, int num) {
 
-	char* ciphers;
-	int ret;
+    char* ciphers;
+    int ret;
 
-	ret = concat_ciphers(list, num, &ciphers);
-	if (ret != 1)
-		return 0;
+    ret = concat_ciphers(list, num, &ciphers);
+    if (ret != 1)
+        return 0;
 
-	ret = SSL_CTX_set_cipher_list(ctx, ciphers);
-	if (ret != 1)
-		goto end;
-	
-	/* returns some false negatives... but it's the best we've got */
-	if (sk_SSL_CIPHER_num(SSL_CTX_get_ciphers(ctx)) < num) {
-		/* Fewer ciphers were added than were specified */
-		log_printf(LOG_ERROR, "Some cipher names were not recognized\n");
-		ret = 0;
-		goto end;
-	}
+    ret = SSL_CTX_set_cipher_list(ctx, ciphers);
+    if (ret != 1)
+        goto end;
+    
+    /* returns some false negatives... but it's the best we've got */
+    if (sk_SSL_CIPHER_num(SSL_CTX_get_ciphers(ctx)) < num) {
+        /* Fewer ciphers were added than were specified */
+        log_printf(LOG_ERROR, "Some cipher names were not recognized\n");
+        ret = 0;
+        goto end;
+    }
 
 end:
-	free(ciphers);
-	return ret;
+    free(ciphers);
+    return ret;
 }
 
 /**
@@ -421,26 +422,26 @@ end:
  */
 int load_ciphersuites(SSL_CTX* ctx, char** list, int num) {
 
-	char* ciphers;
-	int ret;
+    char* ciphers;
+    int ret;
 
-	ret = concat_ciphers(list, num, &ciphers);
-	if (ret != 1)
-		return 0;
+    ret = concat_ciphers(list, num, &ciphers);
+    if (ret != 1)
+        return 0;
 
-	ret = SSL_CTX_set_ciphersuites(ctx, ciphers);
-	if (ret != 1)
-		goto end;
+    ret = SSL_CTX_set_ciphersuites(ctx, ciphers);
+    if (ret != 1)
+        goto end;
 
-	if (sk_SSL_CIPHER_num(SSL_CTX_get_ciphers(ctx)) < num) {
-		log_printf(LOG_ERROR, "Some cipher names were not recognized\n");
-		ret = 0;
-		goto end;
-	}
+    if (sk_SSL_CIPHER_num(SSL_CTX_get_ciphers(ctx)) < num) {
+        log_printf(LOG_ERROR, "Some cipher names were not recognized\n");
+        ret = 0;
+        goto end;
+    }
 
 end:
-	free(ciphers);
-	return ret;
+    free(ciphers);
+    return ret;
 }
 
 /**
@@ -455,39 +456,39 @@ end:
  */
 int concat_ciphers(char** list, int num, char** out) {
 
-	char* ciphers;
-	int offset = 0;
-	int len = 0;
+    char* ciphers;
+    int offset = 0;
+    int len = 0;
 
-	for (int i = 0; i < num; i++)
-		len += strlen(list[i]) + 1; /* +1 for colon (or '\0' at end) */
+    for (int i = 0; i < num; i++)
+        len += strlen(list[i]) + 1; /* +1 for colon (or '\0' at end) */
 
     ciphers = malloc(len);
-	if (ciphers == NULL) {
-		log_printf(LOG_ERROR, "Malloc failed while loading cipher list: %s\n",
-				strerror(errno));
-		return 0;
-	}
+    if (ciphers == NULL) {
+        log_printf(LOG_ERROR, "Malloc failed while loading cipher list: %s\n",
+                strerror(errno));
+        return 0;
+    }
 
-	for (int i = 0; i < num; i++) {
-		int cipher_len = strlen(list[i]);
+    for (int i = 0; i < num; i++) {
+        int cipher_len = strlen(list[i]);
 
-		memcpy(&ciphers[offset], list[i], cipher_len);
-		ciphers[offset + cipher_len] = ':';
+        memcpy(&ciphers[offset], list[i], cipher_len);
+        ciphers[offset + cipher_len] = ':';
 
-		offset += cipher_len + 1;
-	}
+        offset += cipher_len + 1;
+    }
 
-	ciphers[len - 1] = '\0';
+    ciphers[len - 1] = '\0';
 
-	if (len != offset) {
-		log_printf(LOG_DEBUG, "load_cipher_list had unexpected results\n");
-		free(ciphers);
-		return 0;
-	}
+    if (len != offset) {
+        log_printf(LOG_WARNING, "load_cipher_list had unexpected results\n");
+        free(ciphers);
+        return 0;
+    }
 
-	*out = ciphers;
-	return 1;
+    *out = ciphers;
+    return 1;
 }
 
 /**
@@ -504,42 +505,42 @@ int concat_ciphers(char** list, int num, char** out) {
  */
 int load_certificate_authority(SSL_CTX* ctx, char* CA_path) {
 
-	struct stat file_stats;
+    struct stat file_stats;
 
-	if (CA_path == NULL) { /* No CA file given--search for one based on system */
-		if (access(UBUNTU_DEFAULT_CA, F_OK) != -1) {
-			CA_path = UBUNTU_DEFAULT_CA;
-			log_printf(LOG_INFO, "Found the Ubuntu CA file.\n");
-		
-		} else if(access(FEDORA_DEFAULT_CA, F_OK) != -1) {
-			CA_path = FEDORA_DEFAULT_CA;
-			log_printf(LOG_INFO, "Found the Fedora CA file.\n");
-		
-		} else { /* UNSUPPORTED OS */
-			log_printf(LOG_ERROR, "Unable to find valid CA location.\n");
-			return 0;
-		}
-	}
+    if (CA_path == NULL) { /* No CA file given--search for one based on system */
+        if (access(UBUNTU_DEFAULT_CA, F_OK) != -1) {
+            CA_path = UBUNTU_DEFAULT_CA;
+            /* log_printf(LOG_INFO, "Found the Ubuntu CA file.\n"); */
+        
+        } else if(access(FEDORA_DEFAULT_CA, F_OK) != -1) {
+            CA_path = FEDORA_DEFAULT_CA;
+            /* log_printf(LOG_INFO, "Found the Fedora CA file.\n"); */
+        
+        } else { /* UNSUPPORTED OS */
+            /* log_printf(LOG_ERROR, "Unable to find valid CA location.\n"); */
+            return 0;
+        }
+    }
 
-	
-	if (stat(CA_path, &file_stats) != 0) {
-		log_printf(LOG_ERROR, "Failed to access CA file %s: %s\n", 
-				CA_path, strerror(errno));
-		return 0;
-	}
+    
+    if (stat(CA_path, &file_stats) != 0) {
+        log_printf(LOG_ERROR, "Failed to access CA file %s: %s\n", 
+                CA_path, strerror(errno));
+        return 0;
+    }
 
-	if (S_ISREG(file_stats.st_mode)) {
-		/* is a file */
-		return SSL_CTX_load_verify_locations(ctx, CA_path, NULL);
+    if (S_ISREG(file_stats.st_mode)) {
+        /* is a file */
+        return SSL_CTX_load_verify_locations(ctx, CA_path, NULL);
 
-	} else if (S_ISDIR(file_stats.st_mode)) {
-		/* is a directory */
-		return SSL_CTX_load_verify_locations(ctx, NULL, CA_path);
+    } else if (S_ISDIR(file_stats.st_mode)) {
+        /* is a directory */
+        return SSL_CTX_load_verify_locations(ctx, NULL, CA_path);
 
-	} else {
-		log_printf(LOG_ERROR, "Loading CA certs--path not file or directory\n");
-		return 0;
-	}
+    } else {
+        log_printf(LOG_ERROR, "Loading CA certs--path not file or directory\n");
+        return 0;
+    }
 }
 
 
@@ -553,18 +554,16 @@ int load_certificate_authority(SSL_CTX* ctx, char* CA_path) {
  */
 int associate_fd(socket_ctx* sock_ctx, evutil_socket_t ifd) {
 
-	/* Possibility of failure is acutally none in current libevent code */
-	if (bufferevent_setfd(sock_ctx->plain.bev, ifd) != 0)
-		goto err;
+    /* Possibility of failure is acutally none in current libevent code */
+    if (bufferevent_setfd(sock_ctx->plain.bev, ifd) != 0)
+        goto err;
 
-	/* This function *unlikely* to fail, but if we want to be really robust...*/
-	if (bufferevent_enable(sock_ctx->plain.bev, EV_READ | EV_WRITE) != 0)
-		goto err;
+    /* This function *unlikely* to fail, but if we want to be really robust...*/
+    if (bufferevent_enable(sock_ctx->plain.bev, EV_READ | EV_WRITE) != 0)
+        goto err;
 
-	log_printf(LOG_INFO, "plaintext channel bev enabled\n");
-	return 0;
+    return 0;
 err:
-	log_printf(LOG_ERROR, "associate_fd failed.\n");
-	return -ECONNABORTED; /* Only happens while client is connecting */
+    log_printf(LOG_ERROR, "associate_fd failed.\n");
+    return -ECONNABORTED; /* Only happens while client is connecting */
 }
-

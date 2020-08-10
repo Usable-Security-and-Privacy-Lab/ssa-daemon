@@ -32,7 +32,8 @@ appropriately.
   `EBADF`        | No socket exists in the daemon that is associated with `sockfd`.
   `EBADFD`       | The socket that `sockfd` refers to is in a bad state (for instance, it already failed a previous call to `listen`).
   `EOPNOTSUPP`   | The socket that `sockfd` refers to is already being used or has been used (for instance, `connect()` or `listen()` have already been called on it).
-   other errors  | Consult the POSIX man pages for `listen()`
+  `ECANCELED`    | The SSA daemon encountered an internal failure while preparing the socket to listen. Consult the logs for more information.
+   other errors  | An error occurred within the `listen()` function (if the failure is from the internal daemon socket, it will be logged).
 
   
 ## NOTES

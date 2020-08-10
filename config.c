@@ -16,8 +16,8 @@
 #define MAX_STRLIST_SIZE 100
 
 /* These are all of the possible config labels. To add, define another here
- * and add it to the if/else chain in parse_next_<client/server>_setting().
- * Note that these should be in lowercase--it's what we convert input to. */
+* and add it to the if/else chain in parse_next_<client/server>_setting().
+* Note that these should be in lowercase--it's what we convert input to. */
 #define CA_PATH         "ca-path"
 #define CIPHER_LIST     "cipher-list"
 #define CIPHERSUITES    "ciphersuites"
@@ -35,6 +35,7 @@
 #define OCSP_CHECKS     "revocation-ocsp"
 #define CRL_CHECKS      "revocation-crl"
 #define CACHED_CHECKS   "revocation-cached"
+#define SESSION_REUSE   "session-resumption"
 
 
 /* different values that we accept in place of just 'true' or 'false' */
@@ -62,7 +63,6 @@
 #define TLS1_3_ALT_STRING "1.3"
 
 
-global_config* default_settings_new();
 
 int parse_next_setting(yaml_parser_t* parser, global_config* settings);
 
@@ -90,111 +90,96 @@ void log_parser_error(yaml_parser_t parser);
 /*******************************************************************************
  *              UNDERSTANDING THIS FILE (AND LIBYAML IN GENERAL)
  *******************************************************************************
- *
- * In libyaml (and YAML in general), .yml configuration files can be represented
- * by a sequence of tokens, or 'events'. This series of events always starts 
- * with a STREAM_START event and ends with a STREAM_END event, to indicate the 
- * start and end of a given file. Furthermore, a file may have one or multiple
- * 'documents' within it. The start of a document is designated by three dashes,
- * '---'; the end of a document can be designated the same way if another 
- * document is to be started immediately after it, or by three dots '...' if it
- * is the last document in the file. If only one document exists in a file, 
- * these are implied and do not need to be added (this is what we do).
- * Then, if one uses a set of one or more key:value pairs within the document,
- * these are designated by MAPPING_START and MAPPING_END tokens wrapped around
- * the set of them. If a list (designated by dashes '-') is found in the 
- * document, they are designated by a SEQUENCE_START and SEQUENCE_END event
- * at the start and end of the list. Other than that, every value scanned is
- * represented by a SCALAR event (there are more possibilities than this but 
- * this is all we'll use).
- *  
- * So, if you had the document:
- * ---
- * client: hello
- * ...
- * 
- * It would be represented by the following tokens:
- * STREAM_START
- * DOCUMENT_START
- * MAPPING_START
- * SCALAR ('client')
- * SCALAR('hello')
- * MAPPING_END
- * DOCUMENT_END
- * STREAM_END
- * 
- * Similarly, the following document:
- * client:
- *   min-tls-version: 1.2
- *   cipher-list:
- *     - cipher-1
- *     - cipher-2
- *     - cipher-3
- *   tls-compression: off
- * 
- * Would be represented by the following tokens:
- * STREAM_START
- * DOCUMENT_START
- * MAPPING_START
- * SCALAR ('client')
- * MAPPING_START
- * SCALAR ('min-tls-version')
- * SCALAR ('1.2')
- * SCALAR ('cipher-list')
- * SEQUENCE_START
- * SCALAR ('cipher-1')
- * SCALAR ('cipher-2')
- * SCALAR ('cipher-3')
- * SEQUENCE_END
- * SCALAR ('tls-compression')
- * SCALAR ('off')
- * MAPPING_END
- * MAPPING_END
- * DOCUMENT_END
- * STREAM_END
- * 
- * You'll notice that MAPPING_START/END and SEQUENCE START/END only wraps
- * around the entire set of tokens, not around each one. A corollary of this
- * is that key:value pairs are only implied, with one after the other. Lastly,
- * the key:value pair with the list has a SCALAR key, and then the entire list
- * covered by SEQUENCE_START and SEQUENCE_END is the value of that key.
- * 
- */
-
-/*******************************************************************************
- *                             DEFAULT SETTINGS
- ******************************************************************************/
-
-global_config* default_settings_new() {
-
-    global_config* settings = calloc(1, sizeof(global_config));
-    if (settings == NULL)
-        return NULL;
-
-    settings->min_tls_version = TLS1_2_ENUM;
-    settings->max_tls_version = TLS1_3_ENUM;
-
-    settings->max_chain_depth = 10;
-    settings->ct_checks = 1;
-
-    /* checks on by default (struct is calloc'd to 0); these are redundant */
-    turn_on_revocation_checks(settings->revocation_checks);
-    turn_on_cached_checks(settings->revocation_checks);
-    turn_on_stapled_checks(settings->revocation_checks);
-    turn_on_ocsp_checks(settings->revocation_checks);
-    turn_on_crl_checks(settings->revocation_checks);
-
-
-
-
-    return settings;
-}
-
+*
+* In libyaml (and YAML in general), .yml configuration files can be represented
+* by a sequence of tokens, or 'events'. This series of events always starts 
+* with a STREAM_START event and ends with a STREAM_END event, to indicate the 
+* start and end of a given file. Furthermore, a file may have one or multiple
+* 'documents' within it. The start of a document is designated by three dashes,
+* '---'; the end of a document can be designated the same way if another 
+* document is to be started immediately after it, or by three dots '...' if it
+* is the last document in the file. If only one document exists in a file, 
+* these are implied and do not need to be added (this is what we do).
+* Then, if one uses a set of one or more key:value pairs within the document,
+* these are designated by MAPPING_START and MAPPING_END tokens wrapped around
+* the set of them. If a list (designated by dashes '-') is found in the 
+* document, they are designated by a SEQUENCE_START and SEQUENCE_END event
+* at the start and end of the list. Other than that, every value scanned is
+* represented by a SCALAR event (there are more possibilities than this but 
+* this is all we'll use).
+*  
+* So, if you had the document:
+* ---
+* client: hello
+* ...
+* 
+* It would be represented by the following tokens:
+* STREAM_START
+* DOCUMENT_START
+* MAPPING_START
+* SCALAR ('client')
+* SCALAR('hello')
+* MAPPING_END
+* DOCUMENT_END
+* STREAM_END
+* 
+* Similarly, the following document:
+* client:
+*   min-tls-version: 1.2
+*   cipher-list:
+*     - cipher-1
+*     - cipher-2
+*     - cipher-3
+*   tls-compression: off
+* 
+* Would be represented by the following tokens:
+* STREAM_START
+* DOCUMENT_START
+* MAPPING_START
+* SCALAR ('client')
+* MAPPING_START
+* SCALAR ('min-tls-version')
+* SCALAR ('1.2')
+* SCALAR ('cipher-list')
+* SEQUENCE_START
+* SCALAR ('cipher-1')
+* SCALAR ('cipher-2')
+* SCALAR ('cipher-3')
+* SEQUENCE_END
+* SCALAR ('tls-compression')
+* SCALAR ('off')
+* MAPPING_END
+* MAPPING_END
+* DOCUMENT_END
+* STREAM_END
+* 
+* You'll notice that MAPPING_START/END and SEQUENCE START/END only wraps
+* around the entire set of tokens, not around each one. A corollary of this
+* is that key:value pairs are only implied, with one after the other. Lastly,
+* the key:value pair with the list has a SCALAR key, and then the entire list
+* covered by SEQUENCE_START and SEQUENCE_END is the value of that key.
+* 
+*/
 
 /*******************************************************************************
  *    THE IMPORTANT STUFF (WHERE TO ADD ADDITIONAL CONFIG SETTINGS EASILY)
  ******************************************************************************/
 
+
+/**
+ * Parses the next key:value pair from the loaded configuration file. This 
+ * function is called iteratively on every setting found in the configuration 
+ * file, so the if/else chain found in this function checks to see if the 'key'
+ * received from the file matches up with any of the accepted labels. If it
+ * does match one of the labels, a more tailored function will be called to 
+ * parse the 'value' and verify that it is within its acceptable range.
+ * @param parser The yaml config parser that provides the next token to parse
+ *  (such as the token for the 'key' or the token(s) for the 'value')
+ * @param config The struct to populate with setting information as key:value
+ * pairs are parsed from the .yml config file.
+ * @returns 1 if all settings have been parsed; 0 if the next setting was 
+ * successfully parsed from the .yml config file; or -1 if an error occurred.
+ */
 int parse_next_setting(yaml_parser_t* parser, global_config* config) {
 
     yaml_event_t event;
@@ -222,7 +207,7 @@ int parse_next_setting(yaml_parser_t* parser, global_config* config) {
     str_tolower(label);
 
     /* This is the list of all possible client setting labels;
-     * ADD ADDITIONAL SETTINGS AS NEEDS BE HERE (as well as to the struct) */
+    * ADD ADDITIONAL SETTINGS AS NEEDS BE HERE (as well as to the struct) */
     if (strcmp(label, CA_PATH) == 0) {
         ret = parse_string(parser, &config->ca_path);
 
@@ -255,6 +240,9 @@ int parse_next_setting(yaml_parser_t* parser, global_config* config) {
     } else if (strcmp(label, SESSION_TICKETS) == 0) {
         ret = parse_boolean(parser, &config->session_tickets);
 
+    } else if (strcmp(label, SESSION_REUSE) == 0) {
+        ret = parse_boolean(parser, &config->session_resumption);
+
     } else if (strcmp(label, REV_CHECKS) == 0) {
         int has_checks;
         ret = parse_boolean(parser, &has_checks);
@@ -286,9 +274,9 @@ int parse_next_setting(yaml_parser_t* parser, global_config* config) {
             turn_off_stapled_checks(config->revocation_checks);
 
     } else if (strcmp(label, CERT_PATH) == 0) {
-        if (config->cert_cnt >= MAX_CERTKEY_PAIRS) {
+        if (config->cert_cnt >= MAX_CERTS) {
             log_printf(LOG_ERROR, "Config: Maximum keys (%i) exceeded\n", 
-                    MAX_CERTKEY_PAIRS);
+                    MAX_CERTS);
             ret = -1;
         } else {
             ret = parse_string(parser, &config->certificates[config->cert_cnt]);
@@ -296,9 +284,9 @@ int parse_next_setting(yaml_parser_t* parser, global_config* config) {
         }
 
     } else if (strcmp(label, KEY_PATH) == 0) {
-        if (config->key_cnt >= MAX_CERTKEY_PAIRS) {
+        if (config->key_cnt >= MAX_CERTS) {
             log_printf(LOG_ERROR, "Config: Maximum keys (%i) exceeded\n", 
-                    MAX_CERTKEY_PAIRS);
+                    MAX_CERTS);
             ret = -1;
         } else {
             ret = parse_string(parser, &config->private_keys[config->key_cnt]);
@@ -316,10 +304,10 @@ int parse_next_setting(yaml_parser_t* parser, global_config* config) {
 
 
 /*
- *******************************************************************************
- *      USE THESE FUNCTIONS TO PARSE INFO INTO THE GLOBAL_CONFIG STRUCT
- *******************************************************************************
- */ 
+*******************************************************************************
+*      USE THESE FUNCTIONS TO PARSE INFO INTO THE GLOBAL_CONFIG STRUCT
+*******************************************************************************
+*/ 
 
 /* Helpful parsing functions */
 
@@ -531,17 +519,23 @@ int parse_tls_version(yaml_parser_t* parser, enum tls_version* version) {
 
 /**
  *******************************************************************************
- *   FUNCTIONS TO PARSE THE CONFIG FILE AND ENSURE IT'S CORRECTLY FORMATTED
- *******************************************************************************
- */
+*       FUNCTIONS TO PARSE THE CONFIG FILE AND ENSURE CORRECT FORMAT
+*******************************************************************************
+*/
 
 
 /**
  * Parses a given config file and fills an allocated global_config struct 
- * with the configurations.
+ * with the configurations to be used by the daemon. Once the parser has 
+ * finished reading in information from the .yml config file, the global_config
+ * struct should remain unchanged--any modifications of settings (such as by
+ * `setsockopt() or `getsockopt()` calls) should only affect individual 
+ * connections, not the overarching configuration of the daemon.
  * @param file_path The path to the .yml config file, or NULL if the default
  * file path is desired.
- * @returns A pointer to a new global_config struct, or NULL on error.
+ * @returns A pointer to a newly allocated global_config struct, or NULL on 
+ * error. If the file specified by file_path cannot be opened, this function
+ * will fail.
  */
 global_config* parse_config(char* file_path) {
     
@@ -559,11 +553,9 @@ global_config* parse_config(char* file_path) {
 
     input = fopen(file_path, "r");
     if (input == NULL) {
-        log_printf(LOG_WARNING, 
-                "Couldn't find config file--using default settings...\n");
-
-        yaml_parser_delete(&parser);
-        return default_settings_new();
+        log_printf(LOG_ERROR, 
+                "Couldn't find configuration file in specified path...\n");
+        return NULL;
     }
 
     settings = calloc(1, sizeof(global_config));
@@ -687,9 +679,9 @@ int parse_settings(yaml_parser_t* parser, global_config* settings) {
 
 /**
  *******************************************************************************
- *                HELPER FUNCTIONS FOR PARSING/STRING CHECKING
- *******************************************************************************
- */
+*                HELPER FUNCTIONS FOR PARSING/STRING CHECKING
+*******************************************************************************
+*/
 
 
 /**
@@ -929,34 +921,33 @@ void log_parser_error(yaml_parser_t parser) {
  */
 void global_settings_free(global_config* settings) {
 
-    if (settings != NULL) {
-        if (settings->ca_path != NULL)
-            free(settings->ca_path);
-        
-        if (settings->cipher_list != NULL) {
-            for (int i = 0; i < settings->cipher_list_cnt; i++) {
-                free(settings->cipher_list[i]);
-            }
-            free(settings->cipher_list);
-        }
+    if (settings->ca_path != NULL)
+        free(settings->ca_path);
 
-        if (settings->ciphersuites != NULL) {
-            for (int i = 0; i < settings->ciphersuite_cnt; i++) {
-                free(settings->ciphersuites[i]);
-            }
-            free(settings->ciphersuites);
+    if (settings->cipher_list != NULL) {
+        for (int i = 0; i < settings->cipher_list_cnt; i++) {
+            free(settings->cipher_list[i]);
         }
-
-        for (int i = 0; i < settings->cert_cnt; i++) {
-            if (settings->certificates[i] != NULL)
-                free(settings->certificates[i]);
-        }
-
-        for (int i = 0; i < settings->key_cnt; i++) {
-            if (settings->private_keys[i] != NULL)
-                free(settings->private_keys[i]);
-        }
-
-        free(settings);
+        free(settings->cipher_list);
     }
+
+    if (settings->ciphersuites != NULL) {
+        for (int i = 0; i < settings->ciphersuite_cnt; i++) {
+            free(settings->ciphersuites[i]);
+        }
+        free(settings->ciphersuites);
+    }
+
+    for (int i = 0; i < settings->cert_cnt; i++) {
+        if (settings->certificates[i] != NULL)
+            free(settings->certificates[i]);
+    }
+
+    for (int i = 0; i < settings->key_cnt; i++) {
+        if (settings->private_keys[i] != NULL)
+            free(settings->private_keys[i]);
+    }
+
+    free(settings);
 }
+

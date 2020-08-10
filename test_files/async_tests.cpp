@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "helper_functions.h"
 #include "timeouts.h"
 
 /* C and C++ struggle to cooperate unless we direct them to */
@@ -15,117 +16,19 @@ extern "C" {
 
 }
 
-extern "C" {
 
-    #define HOSTNAME "www.yahoo.com"
-    #define PORT "443"
-}
+#define HOSTNAME "www.yahoo.com"
 
+TEST(AsyncTests, PollSocketConnect) {
 
+    TEST_TIMEOUT_BEGIN
 
-class AsyncTests : public testing::Test {
-public:
-    struct sockaddr* address;
-    socklen_t addrlen;
-
-    int fd;
-
-    AsyncTests() {
-        struct addrinfo hints = {0};
-
-        result = NULL;
-
-        hints.ai_socktype = SOCK_STREAM;
-        hints.ai_family = AF_INET;
-
-        getaddrinfo(HOSTNAME, PORT, &hints, &result);
-
-        if (result == NULL) {
-            printf("Couldn't resolve DNS.\n");
-            exit(1);
-        }
-
-        address = result->ai_addr;
-        addrlen = result->ai_addrlen;
-    }
-
-    ~AsyncTests() {
-        freeaddrinfo(result);
-    }
-
-    virtual void SetUp() {
-        fd = -1;
-    }
-
-    virtual void TearDown() {
-
-        if (fd != -1)
-            close(fd);
-    }
-
-
-private:
-    struct addrinfo* result;
-};
-
-void print_socket_error(int fd) {
-
-    char reason[256] = {0};
-    socklen_t reason_len = 256;
-    int error;
-    socklen_t error_len = sizeof(error);
-    int ret;
-
-    fprintf(stderr, "System call failed.\n");
-    fprintf(stderr, "Current errno code is %i: %s\n", errno, strerror(errno));
-
-    ret = getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &error_len);
-    if (ret == 0)
-        fprintf(stderr, "Getsockopt errno code is %i: %s\n",
-                    error, strerror(error));
-    else
-        fprintf(stderr, "Couldn't get getsockopt errno code\n");
-
-    ret = getsockopt(fd, IPPROTO_TLS,
-                TLS_ERROR, reason, &reason_len);
-    if (ret != 0)
-        fprintf(stderr, "Couldn't get TLS error string\n");
-    else
-        fprintf(stderr, "TLS error string: %s\n", reason);
-}
-
-
-TEST_F(AsyncTests, PollSocketConnect) {
-
-    int fd = socket(AF_INET, 
-                SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TLS);
-    int socket_errno = errno;
-
+    int fd = create_socket(BLOCKING_SOCKET);
     if (fd < 0)
-        fprintf(stderr, "Socket creation failed with errno %i: %s\n", 
-                    socket_errno, strerror(socket_errno));
+        FAIL();
 
-    EXPECT_EQ(socket_errno, 0);
-    ASSERT_GE(fd, 0);
-
-    int hostname_setsockopt_return = setsockopt(fd, 
-                IPPROTO_TLS, TLS_REMOTE_HOSTNAME, HOSTNAME, strlen(HOSTNAME)+1);
-    int hostname_errno = errno;
-
-    if (hostname_setsockopt_return != 0)
-        print_socket_error(fd);
-
-    EXPECT_EQ(hostname_errno, 0);
-    ASSERT_EQ(hostname_setsockopt_return, 0);
-
-    int connect_return = connect(fd, address, addrlen);
-    int connect_errno = errno;
-
-    if (connect_return == -1 && errno != EINPROGRESS)
-        print_socket_error(fd);
-
-    EXPECT_EQ(connect_errno, EINPROGRESS);
-    ASSERT_EQ(connect_return, -1);
+    set_hostname(fd, HOSTNAME);
+    connect_to_host_fail(fd, HOSTNAME, HTTPS_PORT, EINPROGRESS);
 
     struct pollfd fdstruct = {0};
     fdstruct.fd = fd;
@@ -138,7 +41,7 @@ TEST_F(AsyncTests, PollSocketConnect) {
     ASSERT_EQ(poll_return, 1);
 
     if (fdstruct.revents & POLLERR)
-        print_socket_error(fd);
+        print_socket_error(fd, "poll() revents POLERR");
 
     ASSERT_FALSE(fdstruct.revents & POLLERR);
     ASSERT_FALSE(fdstruct.revents & POLLHUP);
@@ -151,46 +54,22 @@ TEST_F(AsyncTests, PollSocketConnect) {
     ASSERT_TRUE(fdstruct.revents & POLLIN);
     ASSERT_TRUE(fdstruct.revents & POLLOUT);
 
-    int connect_2nd_return = connect(fd, address, addrlen);
-    int connect_2nd_errno = errno;
+    connect_to_host(fd, HOSTNAME, HTTPS_PORT);
 
-    EXPECT_EQ(connect_2nd_return, -1);
-    EXPECT_EQ(connect_2nd_errno, EISCONN);
-        
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_LONG)
 }
 
 
-TEST_F(AsyncTests, PollSocketConnectRead) {
+TEST(AsyncTests, PollSocketConnectRead) {
 
-    int socket_fd = socket(AF_INET, 
-                SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TLS);
-    int socket_errno = errno;
+    TEST_TIMEOUT_BEGIN
 
+    int socket_fd = create_socket(NONBLOCKING_SOCKET);
     if (socket_fd < 0)
-        fprintf(stderr, "Socket creation failed with errno %i: %s\n", 
-                    socket_errno, strerror(socket_errno));
+        FAIL();
 
-    EXPECT_EQ(socket_errno, 0);
-    ASSERT_GE(socket_fd, 0);
-
-    int hostname_setsockopt_return = setsockopt(socket_fd, 
-                IPPROTO_TLS, TLS_REMOTE_HOSTNAME, HOSTNAME, strlen(HOSTNAME)+1);
-    int hostname_errno = errno;
-
-    if (hostname_setsockopt_return != 0)
-        print_socket_error(socket_fd);
-
-    EXPECT_EQ(hostname_errno, 0);
-    ASSERT_EQ(hostname_setsockopt_return, 0);
-
-    int connect_return = connect(socket_fd, address, addrlen);
-    int connect_errno = errno;
-
-    if (connect_return == -1 && errno != EINPROGRESS)
-        print_socket_error(socket_fd);
-
-    ASSERT_EQ(connect_return, -1);
-    ASSERT_EQ(connect_errno, EINPROGRESS);
+    set_hostname(socket_fd, HOSTNAME);
+    connect_to_host_fail(socket_fd, HOSTNAME, HTTPS_PORT, EINPROGRESS);
 
     struct pollfd fdstruct = {0};
     fdstruct.fd = socket_fd;
@@ -203,7 +82,7 @@ TEST_F(AsyncTests, PollSocketConnectRead) {
     ASSERT_EQ(poll_return, 1);
 
     if (fdstruct.revents & POLLERR)
-        print_socket_error(socket_fd);
+        print_socket_error(socket_fd, "poll() revents POLLERR");
 
     ASSERT_FALSE(fdstruct.revents & POLLERR);
     ASSERT_FALSE(fdstruct.revents & POLLHUP);
@@ -226,7 +105,7 @@ TEST_F(AsyncTests, PollSocketConnectRead) {
     else if (write_return == 0)
         fprintf(stderr, "Unexpected EOF\n");
     else if (write_return < 0)
-        print_socket_error(fd);
+        print_socket_error(socket_fd, "write()");
 
    ASSERT_EQ(write_return, total_write_len);
 
@@ -234,7 +113,7 @@ TEST_F(AsyncTests, PollSocketConnectRead) {
     int total_read_len = 0;
     int curr_read_len = 0;
 
-    curr_read_len = read(fd, buf, 10000);
+    curr_read_len = read(socket_fd, buf, 10000);
     EXPECT_EQ(curr_read_len, -1);
     EXPECT_EQ(errno, EAGAIN);
 
@@ -244,7 +123,7 @@ TEST_F(AsyncTests, PollSocketConnectRead) {
 
     ASSERT_TRUE(fdstruct.revents & POLLIN);
 
-    curr_read_len = read(fd, &buf[total_read_len], 10000-total_read_len);
+    curr_read_len = read(socket_fd, &buf[total_read_len], 10000-total_read_len);
     int read_errno = errno;
 
     EXPECT_EQ(read_errno, 0);
@@ -256,6 +135,8 @@ TEST_F(AsyncTests, PollSocketConnectRead) {
     } else if (curr_read_len == 0) {
         fprintf(stderr, "Unexpected EOF on file descriptor\n");
     } else {
-        print_socket_error(fd);
+        print_socket_error(socket_fd, "read()");
     }
+
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_LONG)
 }

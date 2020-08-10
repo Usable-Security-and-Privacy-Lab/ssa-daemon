@@ -24,7 +24,6 @@ then
 fi
 
 ./badssl
-./setsockopt_tests
 ./socket_api_tests
 
 

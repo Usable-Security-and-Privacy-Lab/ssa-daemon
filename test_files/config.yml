@@ -7,7 +7,7 @@
 # TLS Protocols include TLS-1.0, TLS-1.1, TLS-1.2 and TLS-1.3. Note that 
 # SSLv2 and SSLv3 cannot be enabled (due to considerable security flaws).
 # protocols lower than TLS-1.2 are considered deprecated and insecure by most browsers.
-min-tls-version: 1.2 # Default: 1.3
+min-tls-version: 1.2 # Default: 1.2
 max-tls-version: 1.3 # Default: 1.3
 
 # The following is commented out since the SSA Daemon does a decent job at finding
@@ -21,7 +21,7 @@ CA-path: test_files/certs/testing/CAs # use this for testing our server
 # about authorization tokens, secret web cookies or other sensitive information 
 # passed in HTTP requests/responses since message lengths are not hidden by encryption.
 # It should be kept disabled unless other mitigations are put in place.
-tls-compression: disabled # Default: disabled
+tls-compression: enabled # Default: disabled
 
 # Session Tickets posess a vulnerability in them for TLS 1.2 and lower.
 # For more info, see here: https://blog.filippo.io/we-need-to-talk-about-session-tickets/
@@ -76,8 +76,10 @@ verify-cert-transparency: disabled
 # Default: enabled
 
 # Certificate Revocation checks are important in determining the authenticity of a webiste.
-revocation-checks: off
+revocation-checks: disabled
 # Default: enabled
+
+session-resumption: enabled
 
 
 # Set the path to the certificate chain to be provided to clients.
