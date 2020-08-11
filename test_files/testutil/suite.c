@@ -13,6 +13,9 @@
 static pid_t daemon_pid = -1;
 static pid_t server_pid = -1;
 
+void kill_daemon();
+void validate();
+
 
 void sigchild_fail_handler(int signal) {
 
@@ -33,10 +36,8 @@ void sigchild_fail_handler(int signal) {
 
     if (daemon_ret > 0 || server_ret > 0) {
         
-        if (daemon_pid != -1) {
-            kill(daemon_pid, SIGINT);
-            waitpid(daemon_pid, NULL, 0);
-        }
+        if (daemon_pid != -1)
+            kill_daemon();
 
         if (server_pid != -1) {
             kill(server_pid, SIGINT);
@@ -48,9 +49,10 @@ void sigchild_fail_handler(int signal) {
     errno = original_errno;
 }
 
-void sigio_stub_handler (int signal) {
+void sigio_dummy(int signal) {
     return;
 }
+
 
 
 void start_daemon(const char* daemon_config, int use_valgrind) {
@@ -62,27 +64,29 @@ void start_daemon(const char* daemon_config, int use_valgrind) {
     sigaddset(&set, SIGIO);
 
     signal(SIGCHLD, sigchild_fail_handler);
-    signal(SIGIO, sigio_stub_handler);
+    signal(SIGIO, sigio_dummy);
 
     char pid_env[128] = {0};
     snprintf(pid_env, 127, "TESTING_PROCESS=%i", getpid());
 
+    validate();
+
     daemon_pid = fork();
     if (daemon_pid == 0) {
 
-        setpgid(0, 0);
+        setpgrp();
 
         if (use_valgrind) {
             char* env[1] = {NULL};
-            char* flags[10] = {"/usr/bin/sudo", "-s", pid_env, "valgrind", 
-                        "--leak-check=full", "--track-fds=yes" , 
+            char* flags[9] = {"/usr/bin/sudo", pid_env, "valgrind",
+                        "--leak-check=full", "--track-fds=yes", 
                         ".././ssa_daemon", "-s", strdup(daemon_config), NULL};
 
             execve("/usr/bin/sudo", flags, env);
 
         } else {
             char* env[1] = {NULL};
-            char* flags[7] = {"/usr/bin/sudo", "-s", pid_env, 
+            char* flags[6] = {"/usr/bin/sudo", pid_env, 
                         ".././ssa_daemon", "-s", strdup(daemon_config), NULL};
 
             execve("/usr/bin/sudo", flags, env);
@@ -90,16 +94,14 @@ void start_daemon(const char* daemon_config, int use_valgrind) {
 
         fprintf(stderr, "\nDaemon execve failed\n");
         exit(1);
-        
     }
+
+    
 
     ret = sigwait(&set, &returned_sig);
     if (ret > 0 || returned_sig != SIGIO) {
-        int stat;
-
         perror("sigwait() failed--unable to start daemon\n");
-        kill(daemon_pid, SIGINT);
-        waitpid(daemon_pid, &stat, 0);
+        cleanup();
         exit(1);
     }
 }
@@ -127,12 +129,28 @@ void start_server(const char* server_path) {
 
     ret = sigwait(&set, &returned_sig);
     if (ret > 0 || returned_sig != SIGIO) {
-        int stat;
-
         perror("sigwait() failed--unable to start server\n");
-        kill(daemon_pid, SIGINT);
-        waitpid(daemon_pid, &stat, 0);
+        cleanup();
         exit(1);
+    }
+}
+
+void validate() {
+    static int is_validated = 0;
+
+    if (!is_validated) {
+        int pid = fork();
+        if (pid == 0) {
+            char* env[1] = { NULL };
+            char* flags[3] = { "sudo", "-v", NULL };
+            execve("/usr/bin/sudo", flags, env);
+
+            printf("sudo execve failed\n");
+            exit(1);
+        }
+
+        waitpid(pid, NULL, 0);
+        is_validated = 1;
     }
 }
 
@@ -149,11 +167,20 @@ void cleanup() {
         else
             waitpid(server_pid, NULL, 0);
     }
+    server_pid = -1;
+
+    kill_daemon();
+    //sleep(1); /* give time for valgrind to print out messages */
+}
+
+void kill_daemon() {
+
+    signal(SIGCHLD, NULL);
 
     /* killing a sudoed process requires sudo permissions... :( */
     if (fork() == 0) {
         char daemon_pid_str[128] = {0};
-        snprintf(daemon_pid_str, 127, "%i", (int) -daemon_pid);
+        snprintf(daemon_pid_str, 127, "%i", (int) daemon_pid);
 
         char* flags[4] = {"/usr/bin/sudo", "kill", daemon_pid_str, NULL};
         char* env[1] = {NULL};
@@ -165,7 +192,5 @@ void cleanup() {
 
     waitpid(daemon_pid, NULL, 0);
 
-    server_pid = -1;
     daemon_pid = -1;
-    //sleep(1); /* give time for valgrind to print out messages */
 }
