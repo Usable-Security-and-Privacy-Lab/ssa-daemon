@@ -8,6 +8,7 @@
 #include "log.h"
 #include "sessions.h"
 #include "setsockopt.h"
+#include "certificate.h"
 //#include "in_tls.h"
 
 
@@ -186,12 +187,11 @@ int set_certificate_chain(socket_ctx* sock_ctx, char* path, socklen_t len) {
 
     } else if (S_ISDIR(file_stats.st_mode)) {
         /* is a directory */
-        /* TODO: add functionality for reading from folder.
-         * See man fts for functions needed to do this */
-
-        /* stub */
-        response = -EINVAL;
-        goto err;
+        ret = load_directory_certs(sock_ctx->ssl_ctx, path);
+        if (ret != 1) {
+			response = -ECANCELED; 
+			goto err;
+		}
     } else {
         /* could be a link, a socket, etc */
         response = -EINVAL;
@@ -253,20 +253,6 @@ int set_private_key(socket_ctx* sock_ctx, char* path, socklen_t len) {
     if (ret == 1) /* ASN.1 key loaded */
         return check_key_cert_pair(sock_ctx);  
     else
-        clear_global_errors();
-
-    ret = SSL_CTX_use_PrivateKey_file(sock_ctx->ssl_ctx, 
-                path, SSL_FILETYPE_PEM);
-    if (ret == 1) /* pem RSA key loaded */
-        return check_key_cert_pair(sock_ctx); 
-    else
-        clear_global_errors();
-
-    ret = SSL_CTX_use_RSAPrivateKey_file(sock_ctx->ssl_ctx, 
-                path, SSL_FILETYPE_ASN1);
-    if (ret == 1) /* ASN.1 RSA key loaded */
-        return check_key_cert_pair(sock_ctx);
-    else
         goto err;
 
     return 0;
@@ -277,6 +263,18 @@ err:
             ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
     return -EBADF;
 }
+
+/**
+ * Requires clients to provide certificates to servers. 
+ * 
+ */
+// int set_trusted_peer_certificates(socket_ctx *sock_ctx, char* arg) {
+
+// 	int flags = SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
+// 	SSL_CTX_set_verify(sock_ctx->ssl_ctx, flags, NULL); // what to do if this fails?
+
+// 	return 0;
+// }
 
 int set_min_version(socket_ctx *sock_ctx, int* version, socklen_t len) {
 
