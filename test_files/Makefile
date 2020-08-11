@@ -16,9 +16,9 @@ SERVERS := $(patsubst %.c,%,$(SERVER_FILES))
 TESTS := $(patsubst %.cpp,%,$(TEST_FILES))
 
 
-test: $(OBJECTS) $(SERVERS) $(TESTS) $(ALL_TESTS)
+all: $(OBJECTS) $(SERVERS) $(TESTS) $(ALL_TESTS)
 
-run:
+test: $(ALL_TESTS)
 	./$(ALL_TESTS)
 
 $(ALL_TESTS): $(OBJECTS) $(TEST_FILES)
