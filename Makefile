@@ -13,7 +13,7 @@ OBJECTS = $(SOURCES:.c=.o)
 
 TEST_C_UTIL := $(wildcard test_files/testutil/*.c)
 TEST_CXX_UTIL := $(wildcard test_files/testutil/*.cpp)
-TEST_OBJECTS = $(TEST_C_UTIL:.c=.o) $(TEST_CXX_UTIL:.cpp=.o)
+TEST_OBJECTS := $(TEST_C_UTIL:.c=.o) $(TEST_CXX_UTIL:.cpp=.o)
 
 SERVER_FILES := $(wildcard test_files/servers/*.c)
 TEST_FILES = $(wildcard test_files/*.cpp)
@@ -47,7 +47,7 @@ clean:
 	rm -f test_files/$(TEST_EXEC)
 	rm -f $(TESTS)
 	rm -f $(TEST_SERVERS)
-	rm -f tests/testutil/*.o tests/testutil/*.h.gch
+	rm -f test_files/testutil/*.o tests/testutil/*.h.gch
 
 
 # Main target
