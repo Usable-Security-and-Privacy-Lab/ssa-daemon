@@ -13,6 +13,7 @@ OBJECTS = $(SOURCES:.c=.o)
 
 TEST_C_UTIL := $(wildcard test_files/testutil/*.c)
 TEST_CXX_UTIL := $(wildcard test_files/testutil/*.cpp)
+TEST_HEADERS := $(wildcard test_files/testutil/*.h)
 TEST_OBJECTS := $(TEST_C_UTIL:.c=.o) $(TEST_CXX_UTIL:.cpp=.o)
 
 SERVER_FILES := $(wildcard test_files/servers/*.c)
@@ -37,7 +38,7 @@ debug: $(EXEC)
 release: FLAGS += $(RELEASE_FLAGS)
 release: $(EXEC)
 
-test: debug $(TEST_SERVERS) test_files/$(TEST_EXEC) $(TESTS) 
+test: debug $(TEST_HEADERS) $(TEST_SERVERS) test_files/$(TEST_EXEC) $(TESTS) 
 	cd test_files && ./$(TEST_EXEC)
 
 # To remove generated files
