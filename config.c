@@ -840,7 +840,7 @@ char* utf8_to_ascii(unsigned char* src, ssize_t len) {
 void str_tolower(char* string) {
     if (string == NULL)
         return;
-    for (int i = 0; i < strlen(string); i++)
+    for (unsigned int i = 0; i < strlen(string); i++)
         string[i] = tolower(string[i]);
 }
 
