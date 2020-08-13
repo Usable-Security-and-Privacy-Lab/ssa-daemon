@@ -205,15 +205,3 @@ TEST_F(ClientSessionTests, TenSocketDisabledSessionReuse) {
 
     TEST_TIMEOUT_FAIL_END(TIMEOUT_VERY_LONG)
 }
-
-TEST_F(ClientSessionTests, DifferentTLSVersionSessionFail) {
-
-    fprintf(stderr, "TODO: need to implement\n");
-}
-
-TEST_F(ClientSessionTests, DifferentCipherSessionFail) {
-
-    fprintf(stderr, "TODO: need to implement\n");
-}
-
-
