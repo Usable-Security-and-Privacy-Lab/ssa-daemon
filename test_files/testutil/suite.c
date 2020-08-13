@@ -178,7 +178,8 @@ void kill_daemon() {
     signal(SIGCHLD, NULL);
 
     /* killing a sudoed process requires sudo permissions... :( */
-    if (fork() == 0) {
+    int kill_pid = fork();
+    if (kill_pid == 0) {
         char daemon_pid_str[128] = {0};
         snprintf(daemon_pid_str, 127, "%i", (int) daemon_pid);
 
@@ -189,7 +190,7 @@ void kill_daemon() {
         fprintf(stderr, "\nDaemon cleanup failed; execute `sudo kill %i`\n",
                     daemon_pid);
     }
-
+    waitpid(kill_pid, NULL, 0);
     waitpid(daemon_pid, NULL, 0);
 
     daemon_pid = -1;

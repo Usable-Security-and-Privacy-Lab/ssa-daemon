@@ -12,13 +12,13 @@ extern "C" {
 #define INIT_TESTS(name, daemon_config, server_path)             \
 class name : public ::testing::Test {                            \
 public:                                                          \
-    static void SetUpTestSuite() {                               \
+    static void SetUpTestCase() {                                \
         start_daemon(((std::string) daemon_config).c_str(), 1);  \
         if (server_path != NO_SERVER)                            \
             start_server(((std::string) server_path).c_str());   \
     }                                                            \
                                                                  \
-    static void TearDownTestSuite() {                            \
+    static void TearDownTestCase() {                             \
         cleanup();                                               \
     }                                                            \
 };
@@ -26,13 +26,13 @@ public:                                                          \
 #define INIT_TESTS_NO_VALGRIND(name, daemon_config, server_path) \
 class name : public ::testing::Test {                            \
 public:                                                          \
-    static void SetUpTestSuite() {                               \
+    static void SetUpTestCase() {                                \
         start_daemon(((std::string) daemon_config).c_str(), 0);  \
         if (server_path != NO_SERVER)                            \
             start_server(((std::string) server_path).c_str());   \
     }                                                            \
                                                                  \
-    static void TearDownTestSuite() {                            \
+    static void TearDownTestCase() {                             \
         cleanup();                                               \
     }                                                            \
 };
