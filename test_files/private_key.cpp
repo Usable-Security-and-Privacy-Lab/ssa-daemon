@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
-#include "timeouts.h"
+#include "testutil/timeouts.h"
+#include "testutil/init_tests.h"
 
 /* C and C++ struggle to cooperate unless we direct them to */
 extern "C" {
@@ -12,7 +13,7 @@ extern "C" {
 
 }
 
-
+INIT_TESTS(PrivateKeyTests, "configs/default_localhost.yml", NULL)
 
 void print_socket_error(int fd) {
 
@@ -36,7 +37,7 @@ void print_socket_error(int fd) {
 
 
 
-TEST(SetsockoptTests, SetCorrectKey) {
+TEST(PrivateKeyTests, SetCorrectKey) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -67,7 +68,7 @@ TEST(SetsockoptTests, SetCorrectKey) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
-TEST(SetsockoptTests, SetCorrectECDSAKey) {
+TEST(PrivateKeyTests, SetCorrectECDSAKey) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -98,7 +99,7 @@ TEST(SetsockoptTests, SetCorrectECDSAKey) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
-TEST(SetsockoptTests, SetWrongKeyPath) {
+TEST(PrivateKeyTests, SetWrongKeyPath) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -130,7 +131,7 @@ TEST(SetsockoptTests, SetWrongKeyPath) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
-TEST(SetsockoptTests, CertKeyMismatch) {
+TEST(PrivateKeyTests, CertKeyMismatch) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -162,7 +163,7 @@ TEST(SetsockoptTests, CertKeyMismatch) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
-TEST(SetsockoptTests, ECDSAKeyMismatch) {
+TEST(PrivateKeyTests, ECDSAKeyMismatch) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -194,7 +195,7 @@ TEST(SetsockoptTests, ECDSAKeyMismatch) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
-TEST(SetsockoptTests, LoadTwoKeysCorrect) {
+TEST(PrivateKeyTests, LoadTwoKeysCorrect) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -241,7 +242,7 @@ TEST(SetsockoptTests, LoadTwoKeysCorrect) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
-TEST(SetsockoptTests, LoadTwoChainsOneKey) {
+TEST(PrivateKeyTests, LoadTwoChainsOneKey) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -280,7 +281,7 @@ TEST(SetsockoptTests, LoadTwoChainsOneKey) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
-TEST(SetsockoptTests, SetKeyWithoutChain) {
+TEST(PrivateKeyTests, SetKeyWithoutChain) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -304,7 +305,7 @@ TEST(SetsockoptTests, SetKeyWithoutChain) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
-TEST(SetsockoptTests, LoadTwoChainsBeforeKeys) {
+TEST(PrivateKeyTests, LoadTwoChainsBeforeKeys) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -351,7 +352,7 @@ TEST(SetsockoptTests, LoadTwoChainsBeforeKeys) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
-TEST(SetsockoptTests, OneCorrectKeyOfTwo) {
+TEST(PrivateKeyTests, OneCorrectKeyOfTwo) {
 
     TEST_TIMEOUT_BEGIN
 

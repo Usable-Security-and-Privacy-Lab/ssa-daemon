@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
-#include "timeouts.h"
+#include "testutil/timeouts.h"
+#include "testutil/init_tests.h"
 
 /* C and C++ struggle to cooperate unless we direct them to */
 extern "C" {
@@ -12,9 +13,9 @@ extern "C" {
 
 }
 
+INIT_TESTS(ServerChainTests, "configs/default_localhost.yml", NULL)
 
-
-TEST(SetsockoptTests, SetCertFileCorrect) {
+TEST(ServerChainTests, SetCertFileCorrect) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -37,7 +38,7 @@ TEST(SetsockoptTests, SetCertFileCorrect) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
-TEST(SetsockoptTests, SetCertDirectoryCorrect) {
+TEST(ServerChainTests, SetCertDirectoryCorrect) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -60,7 +61,7 @@ TEST(SetsockoptTests, SetCertDirectoryCorrect) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
-TEST(SetsockoptTests, SetTwoCorrectChains) {
+TEST(ServerChainTests, SetTwoCorrectChains) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -91,7 +92,7 @@ TEST(SetsockoptTests, SetTwoCorrectChains) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
-TEST(SetsockoptTests, SetThreeCorrectChains) {
+TEST(ServerChainTests, SetThreeCorrectChains) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -130,7 +131,7 @@ TEST(SetsockoptTests, SetThreeCorrectChains) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
-TEST(SetsockoptTests, SetOneWrongChain) {
+TEST(ServerChainTests, SetOneWrongChain) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -167,7 +168,7 @@ TEST(SetsockoptTests, SetOneWrongChain) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
-TEST(SetsockoptTests, SetWrongCertPath) {
+TEST(ServerChainTests, SetWrongCertPath) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -188,7 +189,7 @@ TEST(SetsockoptTests, SetWrongCertPath) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
-TEST(SetsockoptTests, SetNullCertPath) {
+TEST(ServerChainTests, SetNullCertPath) {
 
     TEST_TIMEOUT_BEGIN
 
