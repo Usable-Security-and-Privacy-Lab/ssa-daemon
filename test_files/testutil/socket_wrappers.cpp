@@ -38,21 +38,21 @@ void print_socket_error(int fd, const std::string source) {
     int ret;
     socklen_t errno_len = sizeof(sock_err);
 
+    fprintf(stderr, "%s failed--returned errno %i: %s\n", 
+                source.c_str(), errno_err, strerror(errno_err));
+
+
     ret = getsockopt(fd, SOL_SOCKET, SO_ERROR, &sock_err, &errno_len);
     if (ret == 0) {
-        errno = sock_err;
+        fprintf(stderr, "SO_ERROR getsockopt returned errno %i: %s\n", 
+                sock_err, strerror(sock_err));
     }
-
-    fprintf(stderr, "%s failed--returned errno %i: %s\n", 
-                source.c_str(), errno, strerror(errno));
 
     ret = getsockopt(fd, IPPROTO_TLS, TLS_ERROR, buf, &buf_len);
     if (ret == 0)
-        fprintf(stderr, "Daemon err string: %s\n",
-                    buf);
+        fprintf(stderr, "Daemon TLS_ERROR error string: %s\n", buf);
     else
-        fprintf(stderr, "Daemon had no err string\n");
-    
+        fprintf(stderr, "Daemon TLS_ERROR getsockopt returned no err string\n");
 
     errno = errno_err;
 }
@@ -164,7 +164,9 @@ void set_hostname_fail(int fd, std::string hostname, int expected_errno) {
 void get_hostname(int fd, std::string* hostname) {
 
     socklen_t hostname_len = 256;
-    char hostname_char[hostname_len] = {0};
+    char hostname_char[hostname_len];
+
+    memset(hostname_char, 0, hostname_len);
 
     int ret = getsockopt(fd, IPPROTO_TLS, TLS_HOSTNAME,
                 &hostname_char, &hostname_len);
@@ -195,7 +197,9 @@ void get_hostname(int fd, std::string* hostname) {
 void get_hostname_fail(int fd, int expected_errno) {
 
     socklen_t hostname_len = 256;
-    char hostname_char[hostname_len] = {'a'};
+    char hostname_char[hostname_len];
+
+    memset(hostname_char, 0, hostname_len);
 
     int ret = getsockopt(fd, IPPROTO_TLS, TLS_HOSTNAME,
                 &hostname_char, &hostname_len);

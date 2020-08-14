@@ -140,6 +140,9 @@ void level_printf(log_level_t level) {
         case LOG_FATAL:
             strcpy(level_str, "FATAL: ");
             break;
+        default:
+            strcpy(level_str, "UNKNOWN LOG LEVEL: ");
+            break;
     }
     fprintf(g_log_file, "%s", level_str);
     return;

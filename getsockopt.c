@@ -122,6 +122,7 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
 
     case TLS_CACHED_REV_CHECKS:
         response = get_cached_checks(sock_ctx, (int**) data, len);
+        break;
 
     case TLS_CONTEXT:
         if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)

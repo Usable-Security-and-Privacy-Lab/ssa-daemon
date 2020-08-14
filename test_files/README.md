@@ -28,7 +28,8 @@ in place of `gcc`.
   (`cd /usr/src/gtest`). 
   3. Make the source files into a library using cmake 
   (`sudo cmake CmakeLists.txt` followed by `sudo make`).
-  4. Copy the library files to the appropriate library folder 
+  4. Go to the 'lib' directory (`cd lib`)
+  5. Copy the library files to the appropriate library folder 
   (`sudo cp *.a /usr/lib`). 
 - Download the SSA kernel module from 
 [here](https://github.com/Usable-Security-and-Privacy-Lab/ssa), build 

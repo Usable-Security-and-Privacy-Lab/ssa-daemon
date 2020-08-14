@@ -8,10 +8,10 @@
 #define TEN_FDS 10
 
 
-INIT_TESTS(ClientSessionTests, "configs/default_localhost.yml", "servers/regular")
+INIT_TESTS(ServerSessionTests, "configs/default_localhost.yml", "servers/no_sessions")
 
 
-TEST_F(ClientSessionTests, OneSocketNoReuse) {
+TEST_F(ServerSessionTests, OneSocketNoReuse) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -31,7 +31,7 @@ TEST_F(ClientSessionTests, OneSocketNoReuse) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
-TEST_F(ClientSessionTests, TwoTLSContextsNoReuse) {
+TEST_F(ServerSessionTests, TwoTLSContextsNoReuse) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -55,7 +55,7 @@ TEST_F(ClientSessionTests, TwoTLSContextsNoReuse) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
-TEST_F(ClientSessionTests, TwoSocketSessionReuse) {
+TEST_F(ServerSessionTests, TwoSocketSessionReuse) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -79,10 +79,7 @@ TEST_F(ClientSessionTests, TwoSocketSessionReuse) {
         is_resumed_session(fds[i], SHOULD_SUCCEED, &resumed);
         close(fds[i]);
 
-        if (i == 0)
-            ASSERT_FALSE(resumed);
-        else
-            ASSERT_TRUE(resumed);
+        ASSERT_FALSE(resumed);
     }
 
     close(context_fd);
@@ -90,7 +87,7 @@ TEST_F(ClientSessionTests, TwoSocketSessionReuse) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
 }
 
-TEST_F(ClientSessionTests, TenSocketSessionReuse) {
+TEST_F(ServerSessionTests, TenSocketSessionReuse) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -115,24 +112,21 @@ TEST_F(ClientSessionTests, TenSocketSessionReuse) {
         is_resumed_session(fds[i], SHOULD_SUCCEED, &resumed);
         close(fds[i]);
 
-        if (i == 0)
-            ASSERT_FALSE(resumed);
-        else
-            EXPECT_TRUE(resumed);
-        
+        EXPECT_FALSE(resumed);
+
         if (resumed)
             total_resumed++;
     }
 
     close(context_fd);
 
-    if (total_resumed < 9)
-        fprintf(stderr, "Total sessions resumed: %i (expected 9)\n", total_resumed);
+    if (total_resumed > 0)
+        fprintf(stderr, "Total sessions resumed: %i (expected 0)\n", total_resumed);
 
-    TEST_TIMEOUT_FAIL_END(TIMEOUT_SHORT)
+    TEST_TIMEOUT_FAIL_END(TIMEOUT_LONG)
 }
 
-TEST_F(ClientSessionTests, TwoSocketDisabledSessionReuse) {
+TEST_F(ServerSessionTests, TwoSocketDisabledSessionReuse) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -169,7 +163,7 @@ TEST_F(ClientSessionTests, TwoSocketDisabledSessionReuse) {
     TEST_TIMEOUT_FAIL_END(TIMEOUT_LONG)
 }
 
-TEST_F(ClientSessionTests, TenSocketDisabledSessionReuse) {
+TEST_F(ServerSessionTests, TenSocketDisabledSessionReuse) {
 
     TEST_TIMEOUT_BEGIN
     
@@ -205,15 +199,4 @@ TEST_F(ClientSessionTests, TenSocketDisabledSessionReuse) {
 
     TEST_TIMEOUT_FAIL_END(TIMEOUT_VERY_LONG)
 }
-
-TEST_F(ClientSessionTests, DifferentTLSVersionSessionFail) {
-
-    fprintf(stderr, "TODO: need to implement\n");
-}
-
-TEST_F(ClientSessionTests, DifferentCipherSessionFail) {
-
-    fprintf(stderr, "TODO: need to implement\n");
-}
-
 

@@ -18,7 +18,7 @@ typedef struct hqnode {
  * @param key A unique null-terminated string to be used as the identifier.
  */
 static int hash(hqueue_t* queue, char* key) {
-    int i;
+    unsigned int i;
     int hash_val = 0;
     
     for (i = 0; i < strlen(key); ++i)

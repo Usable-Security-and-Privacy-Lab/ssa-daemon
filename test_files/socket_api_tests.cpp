@@ -21,6 +21,8 @@ INIT_TESTS(SocketAPITests, "configs/default_localhost.yml", "servers/regular")
 TEST_F(SocketAPITests, SocketCreation) {
 
     int fd = create_socket(BLOCKING_SOCKET);
+    if (fd < 0)
+        FAIL();
     close(fd);
 }
 

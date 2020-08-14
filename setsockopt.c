@@ -441,12 +441,19 @@ int set_session_resumption(socket_ctx* sock_ctx, int* reuse, socklen_t len) {
     if (*reuse == 1 && settings->session_resumption == 0)
         return -EPROTO;
 
-    if (*reuse == 1)
+    if (*reuse == 1) {
         SSL_CTX_set_session_cache_mode(sock_ctx->ssl_ctx, SSL_SESS_CACHE_BOTH);
-    else if (*reuse == 0)
+        SSL_CTX_set_num_tickets(sock_ctx->ssl_ctx, 2); /* 2 is default */
+        SSL_CTX_clear_options(sock_ctx->ssl_ctx, 
+                    SSL_OP_NO_TICKET | SSL_OP_NO_RENEGOTIATION);
+    } else if (*reuse == 0) {
         SSL_CTX_set_session_cache_mode(sock_ctx->ssl_ctx, SSL_SESS_CACHE_OFF);
-    else
+        SSL_CTX_set_num_tickets(sock_ctx->ssl_ctx, 0);
+        SSL_CTX_set_options(sock_ctx->ssl_ctx, 
+                    SSL_OP_NO_TICKET | SSL_OP_NO_RENEGOTIATION);
+    } else {
         return -EINVAL;
+    }
 
     /* BUG: Servers with these settings may still *send* tickets; they just 
      * won't accept them as valid once presented. See `SSL_CTX_set_num_tickets`
