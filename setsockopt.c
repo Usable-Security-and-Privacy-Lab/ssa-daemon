@@ -19,7 +19,6 @@ int set_certificate_chain(socket_ctx* sock_ctx, char* path, socklen_t len);
 int set_private_key(socket_ctx* sock_ctx, char* path, socklen_t len);
 int set_min_version(socket_ctx* sock_ctx, int* version, socklen_t len);
 int set_max_version(socket_ctx* sock_ctx, int* version, socklen_t len);
-int set_tls_compression(socket_ctx* sock_ctx, int* value, socklen_t len);
 int set_tls_context(socket_ctx* sock_ctx, unsigned long* data, socklen_t len);
 int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, socklen_t len);
 int set_session_resumption(socket_ctx* sock_ctx, int* reuse, socklen_t len);
@@ -48,6 +47,9 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
             int option, void* value, socklen_t len) {
 
     int response = 0;
+
+    if (sock_ctx->has_shared_context && option != TLS_HOSTNAME)
+        return -EOPNOTSUPP; /* TODO: determine appropriate errno */
 
     switch (option) {
     case TLS_HOSTNAME:
@@ -98,12 +100,6 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
 //2, SOCKET_NEW, SOCKET_LISTENING) != 0) TODO: can listening sockets change version settings?
             break;
         response = set_max_version(sock_ctx, (int*) value, len);
-        break;
-
-    case TLS_COMPRESSION:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-            break;
-        response = set_tls_compression(sock_ctx, (int*) value, len);
         break;
 
     case TLS_REVOCATION_CHECKS:
@@ -386,35 +382,6 @@ int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, socklen_t len) {
 
 
 /**
- * Enables or disables compression for a given socket.
- * @param sock_ctx The context of the socket to disable compression for.
- * @param value a '1' to enable compression, or '0' to disable it.
- * @param len The size of \p value (should be sizeof(int)).
- * @returns 0 on success, or -EINVAL on failure.
- */
-int set_tls_compression(socket_ctx* sock_ctx, int* value, socklen_t len) {
-
-    global_config* settings = sock_ctx->daemon->settings;
-    int compression_enabled = *value;
-
-    if (len != sizeof(int))
-        return -EINVAL;
-
-    if (compression_enabled == 1 && settings->tls_compression == 0)
-        return -EPROTO;
-
-    if (compression_enabled == 1)
-        SSL_CTX_clear_options(sock_ctx->ssl_ctx, SSL_OP_NO_COMPRESSION);
-    else if (compression_enabled == 0)
-        SSL_CTX_set_options(sock_ctx->ssl_ctx, SSL_OP_NO_COMPRESSION);
-    else
-        return -EINVAL;
-    
-    return 0;
-}
-
-
-/**
  * Sets the SSL context of the given socket to be identical to another 
  * socket. The other socket is retrieved via its ID, which is passed in 
  * through \p data.
@@ -474,12 +441,19 @@ int set_session_resumption(socket_ctx* sock_ctx, int* reuse, socklen_t len) {
     if (*reuse == 1 && settings->session_resumption == 0)
         return -EPROTO;
 
-    if (*reuse == 1)
+    if (*reuse == 1) {
         SSL_CTX_set_session_cache_mode(sock_ctx->ssl_ctx, SSL_SESS_CACHE_BOTH);
-    else if (*reuse == 0)
+        SSL_CTX_set_num_tickets(sock_ctx->ssl_ctx, 2); /* 2 is default */
+        SSL_CTX_clear_options(sock_ctx->ssl_ctx, 
+                    SSL_OP_NO_TICKET | SSL_OP_NO_RENEGOTIATION);
+    } else if (*reuse == 0) {
         SSL_CTX_set_session_cache_mode(sock_ctx->ssl_ctx, SSL_SESS_CACHE_OFF);
-    else
+        SSL_CTX_set_num_tickets(sock_ctx->ssl_ctx, 0);
+        SSL_CTX_set_options(sock_ctx->ssl_ctx, 
+                    SSL_OP_NO_TICKET | SSL_OP_NO_RENEGOTIATION);
+    } else {
         return -EINVAL;
+    }
 
     /* BUG: Servers with these settings may still *send* tickets; they just 
      * won't accept them as valid once presented. See `SSL_CTX_set_num_tickets`

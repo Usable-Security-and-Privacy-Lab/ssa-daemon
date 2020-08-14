@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "helper_functions.h"
+#include "socket_wrappers.h"
 
 
 extern "C" {
@@ -15,7 +15,7 @@ extern "C" {
 #include <string.h>
 #include <unistd.h>
 
-#include "../in_tls.h"
+#include "../../in_tls.h"
 }
 
 
@@ -34,18 +34,25 @@ void print_socket_error(int fd, const std::string source) {
     char buf[256] = {0};
     socklen_t buf_len = 255;
     int errno_err = errno;
+    int sock_err;
     int ret;
+    socklen_t errno_len = sizeof(sock_err);
 
     fprintf(stderr, "%s failed--returned errno %i: %s\n", 
                 source.c_str(), errno_err, strerror(errno_err));
 
+
+    ret = getsockopt(fd, SOL_SOCKET, SO_ERROR, &sock_err, &errno_len);
+    if (ret == 0) {
+        fprintf(stderr, "SO_ERROR getsockopt returned errno %i: %s\n", 
+                sock_err, strerror(sock_err));
+    }
+
     ret = getsockopt(fd, IPPROTO_TLS, TLS_ERROR, buf, &buf_len);
     if (ret == 0)
-        fprintf(stderr, "Daemon err string: %s\n",
-                    buf);
+        fprintf(stderr, "Daemon TLS_ERROR error string: %s\n", buf);
     else
-        fprintf(stderr, "Daemon had no err string\n");
-    
+        fprintf(stderr, "Daemon TLS_ERROR getsockopt returned no err string\n");
 
     errno = errno_err;
 }
@@ -94,6 +101,8 @@ void resolve_dns(std::string host, std::string port,
 int create_socket(bool is_nonblocking) {
 
     int fd;
+
+    errno = 0;
     
     if (is_nonblocking)
         fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TLS);
@@ -105,7 +114,7 @@ int create_socket(bool is_nonblocking) {
     } else if (errno != 0) {
         fprintf(stderr, "Unexpected errno with socket() success: %i %s\n", 
                 errno, strerror(errno));
-        ADD_FAILURE();
+        //ADD_FAILURE();
     }
 
     return fd;
@@ -155,7 +164,9 @@ void set_hostname_fail(int fd, std::string hostname, int expected_errno) {
 void get_hostname(int fd, std::string* hostname) {
 
     socklen_t hostname_len = 256;
-    char hostname_char[hostname_len] = {0};
+    char hostname_char[hostname_len];
+
+    memset(hostname_char, 0, hostname_len);
 
     int ret = getsockopt(fd, IPPROTO_TLS, TLS_HOSTNAME,
                 &hostname_char, &hostname_len);
@@ -186,7 +197,9 @@ void get_hostname(int fd, std::string* hostname) {
 void get_hostname_fail(int fd, int expected_errno) {
 
     socklen_t hostname_len = 256;
-    char hostname_char[hostname_len] = {'a'};
+    char hostname_char[hostname_len];
+
+    memset(hostname_char, 0, hostname_len);
 
     int ret = getsockopt(fd, IPPROTO_TLS, TLS_HOSTNAME,
                 &hostname_char, &hostname_len);
@@ -548,74 +561,6 @@ void is_resumed_session(int fd, bool should_succeed, bool* is_resumed) {
         *is_resumed = false;
     } else {
         fprintf(stderr, "TLS_RESUMED_SESSION getsockopt() return != 0 or 1\n");
-        close(fd);
-        FAIL();
-    }
-}
-
-
-void enable_compression(int fd, bool should_succeed) {
-
-    socklen_t len = sizeof(int);
-    int enabled = 1;
-    int ret;
-    
-    ret = setsockopt(fd, IPPROTO_TLS, TLS_COMPRESSION, &enabled, len);
-    if (ret < 0 && should_succeed) {
-        print_socket_error(fd, "TLS_COMPRESSION setsockopt()\n");
-        close(fd);
-        FAIL();
-    
-    } else if (ret == 0 && !should_succeed) {
-        fprintf(stderr, "TLS_COMPRESSION setsockopt() succeeded when it shouldn't\n");
-        close(fd);
-        FAIL();
-    }
-}
-
-void disable_compression(int fd, bool should_succeed) {
-
-    socklen_t len = sizeof(int);
-    int enabled = 0;
-    int ret;
-    
-    ret = setsockopt(fd, IPPROTO_TLS, TLS_COMPRESSION, &enabled, len);
-    if (ret < 0 && should_succeed) {
-        print_socket_error(fd, "TLS_COMPRESSION setsockopt()\n");
-        close(fd);
-        FAIL();
-    
-    } else if (ret == 0 && !should_succeed) {
-        fprintf(stderr, "TLS_COMPRESSION setsockopt() succeeded when it shouldn't\n");
-        close(fd);
-        FAIL();
-    }
-}
-
-void get_compression(int fd, bool should_succeed, bool* enabled) {
-
-    socklen_t len = sizeof(int);
-    int compression = -1;
-    int ret;
-    
-    ret = getsockopt(fd, IPPROTO_TLS, TLS_COMPRESSION, &compression, &len);
-    if (ret < 0 && should_succeed) {
-        print_socket_error(fd, "TLS_COMPRESSION getsockopt()\n");
-        close(fd);
-        FAIL();
-    
-    } else if (ret == 0 && !should_succeed) {
-        fprintf(stderr, "TLS_COMPRESSION getsockopt() succeeded when it shouldn't\n");
-        close(fd);
-        FAIL();
-    }
-
-    if (compression == 1) {
-        *enabled = true;
-    } else if (compression == 0) {
-        *enabled = false;
-    } else {
-        fprintf(stderr, "TLS_COMPRESSION getsockopt() return != 0 or 1\n");
         close(fd);
         FAIL();
     }

@@ -33,6 +33,13 @@ int main() {
         perror("socket() failed");
         exit(1);
     }
+    
+    int enabled = 1;
+    ret = setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &enabled, sizeof(enabled));
+    if (ret != 0) {
+        perror("REUSEADDR setsockopt failed");
+        exit(1);
+    }
 
     ret = bind(fd, (struct sockaddr*)&addr, sizeof(addr));
     if (ret != 0) {
@@ -66,7 +73,7 @@ int main() {
         socklen_t addr_len = sizeof(addr);
         int c_fd = accept(fd, (struct sockaddr*)&addr, &addr_len);
         if (c_fd < 0 && errno == ECONNABORTED) {
-            printf("connection dropped\n");
+            printf("connection closed.\n");
             continue;
         }
 

@@ -72,7 +72,7 @@ int log_init(const char* log_filename, log_level_t level) {
  */
 void log_printf(log_level_t level, const char* format, ...) {
     va_list args;
-    if (level < g_log_level) {
+    if (level < g_log_level || level == LOG_NONE) {
         return;
     }
     if (g_log_file == NULL) {
@@ -139,6 +139,9 @@ void level_printf(log_level_t level) {
             break;
         case LOG_FATAL:
             strcpy(level_str, "FATAL: ");
+            break;
+        default:
+            strcpy(level_str, "UNKNOWN LOG LEVEL: ");
             break;
     }
     fprintf(g_log_file, "%s", level_str);

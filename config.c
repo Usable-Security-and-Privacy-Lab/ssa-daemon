@@ -21,7 +21,6 @@
 #define CA_PATH         "ca-path"
 #define CIPHER_LIST     "cipher-list"
 #define CIPHERSUITES    "ciphersuites"
-#define TLS_COMPRESSION "tls-compression"
 #define SESSION_TICKETS "session-tickets"
 #define MIN_TLS_VERSION "min-tls-version"
 #define MAX_TLS_VERSION "max-tls-version"
@@ -130,7 +129,6 @@ void log_parser_error(yaml_parser_t parser);
 *     - cipher-1
 *     - cipher-2
 *     - cipher-3
-*   tls-compression: off
 * 
 * Would be represented by the following tokens:
 * STREAM_START
@@ -146,8 +144,6 @@ void log_parser_error(yaml_parser_t parser);
 * SCALAR ('cipher-2')
 * SCALAR ('cipher-3')
 * SEQUENCE_END
-* SCALAR ('tls-compression')
-* SCALAR ('off')
 * MAPPING_END
 * MAPPING_END
 * DOCUMENT_END
@@ -218,9 +214,6 @@ int parse_next_setting(yaml_parser_t* parser, global_config* config) {
     } else if (strcmp(label, CIPHERSUITES) == 0) {
         ret = parse_string_list(parser,
                 &config->ciphersuites, &config->ciphersuite_cnt);
-
-    } else if (strcmp(label, TLS_COMPRESSION) == 0) {
-        ret = parse_boolean(parser, &config->tls_compression);
 
     } else if (strcmp(label, MIN_TLS_VERSION) == 0) {
         ret = parse_tls_version(parser, &config->min_tls_version);
@@ -847,7 +840,7 @@ char* utf8_to_ascii(unsigned char* src, ssize_t len) {
 void str_tolower(char* string) {
     if (string == NULL)
         return;
-    for (int i = 0; i < strlen(string); i++)
+    for (unsigned int i = 0; i < strlen(string); i++)
         string[i] = tolower(string[i]);
 }
 

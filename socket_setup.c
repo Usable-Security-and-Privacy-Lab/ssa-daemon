@@ -73,16 +73,16 @@ SSL_CTX* SSL_CTX_create(global_config* settings) {
 
     SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
 
-    if (settings->session_resumption)
+    if (settings->session_resumption) {
         SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_BOTH);
-    else 
+    } else {
         SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_OFF);
+        SSL_CTX_set_num_tickets(ctx, 0);
+        SSL_CTX_set_options(ctx, SSL_OP_NO_TICKET | SSL_OP_NO_RENEGOTIATION);
+    }
 
-    
-    if (!settings->tls_compression)
-        SSL_CTX_set_options(ctx, SSL_OP_NO_COMPRESSION);
-    else
-        SSL_CTX_clear_options(ctx, SSL_OP_NO_COMPRESSION);
+
+    SSL_CTX_set_options(ctx, SSL_OP_NO_COMPRESSION);
 
     if (!settings->session_tickets)
         SSL_CTX_set_options(ctx, SSL_OP_NO_TICKET);

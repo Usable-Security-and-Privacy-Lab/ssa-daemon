@@ -45,7 +45,7 @@ int create_socket(bool is_nonblocking);
 void set_hostname(int fd, std::string hostname);
 void set_hostname_fail(int fd, std::string hostname, int expected_errno);
 
-void get_hostname(int fd, std::string* hostname);
+void get_hostname(int fd, std::string &hostname);
 void get_hostname_fail(int fd, int expected_errno);
 
 void connect_to_host(int fd, std::string hostname, std::string port);
@@ -74,8 +74,5 @@ void disable_session_reuse(int fd, bool should_succeed);
 void enable_session_reuse(int fd, bool should_succeed);
 void is_resumed_session(int fd, bool should_succeed, bool* is_resumed);
 
-void enable_compression(int fd, bool should_succeed);
-void disable_compression(int fd, bool should_succeed);
-void get_compression(int fd, bool should_succeed, bool* enabled);
 
 #endif

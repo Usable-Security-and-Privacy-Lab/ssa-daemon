@@ -65,6 +65,11 @@ int main(int argc, char* argv[]) {
     ret = run_daemon(PORT, config_path);
 
     log_close();
+
+    /* close stdin, stdout, stderr */
+    for (int i = 0; i <= 2; i++)
+        close(i);
+
     return ret;
 }
 
@@ -85,6 +90,10 @@ int parse_input(int argc, char* argv[], enum log_level *level, char** path) {
             
             } else if (argv[1][1] == 'd') {
                 *level = LOG_DEBUG;
+
+            } else if (argv[1][1] == 's') {
+                *level = LOG_NONE;
+
             } else {
                 printf("unrecognized flag \'%s\'\n", argv[1]);
                 return -1;

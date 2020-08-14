@@ -88,6 +88,7 @@ int run_daemon(int port, char* config_path) {
 
     struct event* sev_pipe = NULL;
     struct event* sev_int = NULL;
+    struct event* sev_term = NULL;
     struct event* nl_ev = NULL;
 
     daemon = daemon_context_new(config_path, port);
@@ -110,13 +111,27 @@ int run_daemon(int port, char* config_path) {
         goto err;
     evsignal_add(sev_int, NULL);
 
+    sev_term = evsignal_new(daemon->ev_base, SIGTERM, signal_cb, daemon->ev_base);
+    if (sev_term == NULL)
+        goto err;
+    evsignal_add(sev_term, NULL);
+
+
+    LOG_I("Set signal handlers\n");
+
 
     /* Set up server socket with event base */
     server_sock = create_server_socket(port, PF_INET, SOCK_STREAM);
+    if (server_sock < 0) {
+        LOG_F("Daemon server socket creation failed\n");
+    }
+
     listener = evconnlistener_new(daemon->ev_base, accept_cb, (void*) daemon,
             LEV_OPT_CLOSE_ON_FREE | LEV_OPT_THREADSAFE, SOMAXCONN, server_sock);
     if (listener == NULL)
         goto err;
+
+    LOG_I("Created listening server socket\n");
 
     evconnlistener_set_error_cb(listener, accept_error_cb);
 
@@ -131,13 +146,17 @@ int run_daemon(int port, char* config_path) {
     if (event_add(nl_ev, NULL) != 0)
         goto err;
 
-    SSL_COMP_add_compression_method(1, COMP_zlib());
+
+    char* env = getenv("TESTING_PROCESS");
+    if (env != NULL) {
+        int testing_pid = strtol(env, NULL, 10); /* TODO: error checking */
+        kill(testing_pid, SIGIO);
+        LOG_I("SIGIO sent to %i (meant for testing only)\n", testing_pid);
+    }
 
     /* Main event loop */
     if (event_base_dispatch(daemon->ev_base) != 0)
         goto err;
-
-
 
     log_printf(LOG_INFO, "Main event loop terminated\n");
 
@@ -149,6 +168,7 @@ int run_daemon(int port, char* config_path) {
     event_free(nl_ev);
     event_free(sev_pipe);
     event_free(sev_int);
+    event_free(sev_term);
 
     daemon_context_free(daemon); //Free last
     OPENSSL_cleanup();
@@ -156,7 +176,7 @@ int run_daemon(int port, char* config_path) {
     return EXIT_SUCCESS;
 err:
 
-    printf("An error occurred setting up the daemon: %s\n", strerror(errno));
+    LOG_F("Fatal error occurred during daemon setup. Closing...\n");
 
 
     if (listener != NULL)
@@ -167,6 +187,8 @@ err:
         event_free(sev_pipe);
     if (sev_int != NULL)
         event_free(sev_int);
+    if (sev_term != NULL)
+        event_free(sev_term);
 
     if (daemon != NULL)
         daemon_context_free(daemon);
@@ -204,15 +226,7 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
         sock = socket(AF_UNIX, type | SOCK_NONBLOCK, 0);
         if (sock == -1) {
             log_printf(LOG_ERROR, "socket: %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-
-        strcpy(bind_addr.sun_path+1, port_buf);
-        ret = bind(sock, (struct sockaddr*)&bind_addr, sizeof(sa_family_t) + 1 + strlen(port_buf));
-        if (ret == -1) {
-            log_printf(LOG_ERROR, "bind: %s\n", strerror(errno));
-            EVUTIL_CLOSESOCKET(sock);
-            exit(EXIT_FAILURE);
+            return -1;
         }
 
         ret = evutil_make_listen_socket_reuseable(sock);
@@ -220,8 +234,17 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
             log_printf(LOG_ERROR, "Failed in evutil_make_listen_socket_reuseable: %s\n",
                  evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
             EVUTIL_CLOSESOCKET(sock);
-            exit(EXIT_FAILURE);
+            return -1;
         }
+
+        strcpy(bind_addr.sun_path+1, port_buf);
+        ret = bind(sock, (struct sockaddr*)&bind_addr, sizeof(sa_family_t) + 1 + strlen(port_buf));
+        if (ret == -1) {
+            log_printf(LOG_ERROR, "bind: %s\n", strerror(errno));
+            EVUTIL_CLOSESOCKET(sock);
+            return -1;
+        }
+
         return sock;
     }
 
@@ -254,13 +277,6 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
             continue;
         }
 
-        ret = bind(sock, addr_ptr->ai_addr, addr_ptr->ai_addrlen);
-        if (ret == -1) {
-            log_printf(LOG_ERROR, "bind: %s\n", strerror(errno));
-            EVUTIL_CLOSESOCKET(sock);
-            continue;
-        }
-
         ret = evutil_make_listen_socket_reuseable(sock);
         if (ret == -1) {
             log_printf(LOG_ERROR, "Failed in evutil_make_listen_socket_reuseable: %s\n",
@@ -268,12 +284,20 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
             EVUTIL_CLOSESOCKET(sock);
             continue;
         }
+
+        ret = bind(sock, addr_ptr->ai_addr, addr_ptr->ai_addrlen);
+        if (ret == -1) {
+            log_printf(LOG_ERROR, "bind: %s\n", strerror(errno));
+            EVUTIL_CLOSESOCKET(sock);
+            continue;
+        }
+
         break;
     }
     evutil_freeaddrinfo(addr_list);
     if (addr_ptr == NULL) {
         log_printf(LOG_ERROR, "Failed to find a suitable address for binding\n");
-        exit(EXIT_FAILURE);
+        return -1;
     }
 
     return sock;
@@ -430,6 +454,9 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
         goto err;
     }
 
+    /* TODO: is this secure? */
+    evutil_make_listen_socket_reuseable(ifd);
+
     if (bind(ifd, (struct sockaddr*)&int_addr, sizeof(int_addr)) == -1) {
         LOG_E("bind() failed with code %i: %s\n", errno, strerror(errno));
         goto err;
@@ -525,6 +552,7 @@ void signal_cb(evutil_socket_t fd, short event, void* arg) {
             log_printf(LOG_DEBUG, "Caught SIGPIPE and ignored it\n");
             break;
         case SIGINT:
+        case SIGTERM:
             log_printf(LOG_DEBUG, "Caught SIGINT\n");
             event_base_loopbreak(arg);
             break;
@@ -718,6 +746,8 @@ void bind_cb(daemon_ctx* daemon, unsigned long id,
         netlink_notify_kernel(daemon, id, response);
         return;
     }
+
+    evutil_make_listen_socket_reuseable(sock_ctx->sockfd);
 
     if (bind(sock_ctx->sockfd, ext_addr, ext_addrlen) != 0) {
         response = -errno;

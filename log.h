@@ -36,6 +36,7 @@ typedef enum log_level {
     LOG_WARNING,
     LOG_ERROR,
     LOG_FATAL,
+    LOG_NONE,
 } log_level_t;
 
 #ifndef NO_LOG

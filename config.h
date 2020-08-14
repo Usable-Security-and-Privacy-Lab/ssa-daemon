@@ -4,7 +4,7 @@
 #include "daemon_structs.h"
 
 
-#define DEFAULT_CONFIG_PATH "test_files/config.yml"
+#define DEFAULT_CONFIG_PATH "config.yml"
 
 
 /**

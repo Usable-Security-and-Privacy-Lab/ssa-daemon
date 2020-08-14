@@ -1,7 +1,8 @@
 #include <gtest/gtest.h>
 
-#include "helper_functions.h"
-#include "timeouts.h"
+#include "testutil/socket_wrappers.h"
+#include "testutil/init_tests.h"
+#include "testutil/timeouts.h"
 
 /* C and C++ struggle to cooperate unless we direct them to */
 extern "C" {
@@ -13,18 +14,19 @@ extern "C" {
 #include <unistd.h>
 #include "../in_tls.h"
 
-#define HOSTNAME "ebay.com"
 }
 
+INIT_TESTS(SocketAPITests, "configs/default_localhost.yml", "servers/regular")
 
-
-TEST(SocketAPITests, SocketCreation) {
+TEST_F(SocketAPITests, SocketCreation) {
 
     int fd = create_socket(BLOCKING_SOCKET);
+    if (fd < 0)
+        FAIL();
     close(fd);
 }
 
-TEST(SocketAPITests, SocketWrongDomain) {
+TEST_F(SocketAPITests, SocketWrongDomain) {
 
     int fd = socket(AF_NETLINK, 0, IPPROTO_TLS);
     int socket_errno = errno;
@@ -43,7 +45,7 @@ TEST(SocketAPITests, SocketWrongDomain) {
     }
 }
 
-TEST(SocketAPITests, SocketWrongType) {
+TEST_F(SocketAPITests, SocketWrongType) {
     /* TODO: someday we'll implement DTLS. this should be changed then */
 
     int fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_TLS);
@@ -63,7 +65,7 @@ TEST(SocketAPITests, SocketWrongType) {
     }
 }
 
-TEST(SocketAPITests, SocketWithNonblockType) {
+TEST_F(SocketAPITests, SocketWithNonblockType) {
 
     int fd = create_socket(NONBLOCKING_SOCKET); 
     if (fd < 0)
@@ -72,7 +74,7 @@ TEST(SocketAPITests, SocketWithNonblockType) {
     close(fd);
 }
 
-TEST(SocketAPITests, ConnectWithNonblockSocket) {
+TEST_F(SocketAPITests, ConnectWithNonblockSocket) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -80,8 +82,8 @@ TEST(SocketAPITests, ConnectWithNonblockSocket) {
     if (fd < 0)
         FAIL();
 
-    set_hostname(fd, HOSTNAME);
-    connect_to_host_fail(fd, HOSTNAME, HTTPS_PORT, EINPROGRESS);   
+    set_hostname(fd, LOCALHOST);
+    connect_to_localhost_fail(fd, EINPROGRESS);   
     
     close(fd);
 
@@ -89,7 +91,7 @@ TEST(SocketAPITests, ConnectWithNonblockSocket) {
 }
 
 
-TEST(SocketAPITests, DoubleConnectFail) {
+TEST_F(SocketAPITests, DoubleConnectFail) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -97,17 +99,17 @@ TEST(SocketAPITests, DoubleConnectFail) {
     if (fd < 0)
         FAIL();
 
-    set_hostname(fd, HOSTNAME);
+    set_hostname(fd, LOCALHOST);
 
-    connect_to_host(fd, HOSTNAME, HTTPS_PORT);
-    connect_to_host_fail(fd, HOSTNAME, HTTPS_PORT, EISCONN);
+    connect_to_localhost(fd);
+    connect_to_localhost_fail(fd, EISCONN);
 
     close(fd);
 
     TEST_TIMEOUT_FAIL_END(TIMEOUT_LONG)
 }
 
-TEST(SocketAPITests, ConnectThenListenFail) {
+TEST_F(SocketAPITests, ConnectThenListenFail) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -115,9 +117,9 @@ TEST(SocketAPITests, ConnectThenListenFail) {
     if (fd < 0)
         FAIL();
 
-    set_hostname(fd, HOSTNAME);
+    set_hostname(fd, LOCALHOST);
 
-    connect_to_host(fd, HOSTNAME, HTTPS_PORT);
+    connect_to_localhost(fd);
 
     int ret = listen(fd, SOMAXCONN);
     if (ret == 0) {
@@ -139,7 +141,7 @@ TEST(SocketAPITests, ConnectThenListenFail) {
 
 
 
-TEST(SocketAPITests, ConnectThenBindFail) {
+TEST_F(SocketAPITests, ConnectThenBindFail) {
 
     TEST_TIMEOUT_BEGIN
 
@@ -147,9 +149,9 @@ TEST(SocketAPITests, ConnectThenBindFail) {
     if (fd < 0)
         FAIL();
 
-    set_hostname(fd, HOSTNAME);
+    set_hostname(fd, LOCALHOST);
 
-    connect_to_host(fd, HOSTNAME, HTTPS_PORT);
+    connect_to_localhost(fd);
     
     struct sockaddr_in int_addr = {0};
     
@@ -174,18 +176,17 @@ TEST(SocketAPITests, ConnectThenBindFail) {
     close(fd);
 
     TEST_TIMEOUT_FAIL_END(TIMEOUT_LONG)
-
 }
+/*
 
-
-TEST(SocketAPITests, ConnectThenAcceptFail) {
+TEST_F(SocketAPITests, ConnectThenAcceptFail) {
 
     TEST_TIMEOUT_BEGIN
 
     int fd = create_socket(BLOCKING_SOCKET);
 
-    set_hostname(fd, HOSTNAME);
-    connect_to_host(fd, HOSTNAME, HTTPS_PORT);
+    set_hostname(fd, LOCALHOST);
+    connect_to_localhost(fd);
 
     struct sockaddr temp_addr;
     socklen_t temp_addrlen;
@@ -207,3 +208,4 @@ TEST(SocketAPITests, ConnectThenAcceptFail) {
 
     TEST_TIMEOUT_FAIL_END(TIMEOUT_LONG)
 }
+*/

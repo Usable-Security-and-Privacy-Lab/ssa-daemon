@@ -142,35 +142,6 @@ listed below:
 
 
 
-> #### TLS_COMPRESSION
-> Sets the connection to support or disable compression of TLS records. TLS 
-> compression is entirely different from HTTP compression, and it is not 
-> commonly used as there are known vulnerabilities linked to it. This option 
-> will only enable compression under the following conditions:
-> 1. OpenSSL must be built without the macro `OPENSSL_NO_COMP`
-> 2. The `ZLIB_SHARED` macro must be enabled (i.e. the zlib library must be 
-> compiled in such a way that it can be shared with OpenSSL)
->
-> `optval` should point to an integer value of either `1` or `0`, and 
-> `optlen` should be equal to `sizeof(int)`.
-> 
-> **RESTRICTIONS** 
-> 
-> The option may not be used if the given socket is already 
-> listening, connected or connecting, or if the socket has previously 
-> encountered an unrecoverable error. In addition, this option may not be used 
-> to enable compression if the SSA daemon's configuration has it disabled. 
->
-> **ERRORS**
-> 
-> - `EBADFD` - An unrecoverable error has previously occurred on the socket. 
-> - `EOPNOTSUPP` - The given socket is already in use (see **RESTRICTIONS**). 
-> - `EINVAL` - Bad input (`optval` not 1 or 0, or `optlen` not the right size). 
-> - `EPROTO` - The system call attempted to enable TLS compression when the 
-> SSA daemon configuration had it disabled. 
-
-
-
 > #### TLS_REVOCATION_CHECKS
 > Sets the given connection to require a revocation response from some 
 > authoritative responder. The SSA daemon requires every certificate in a 
