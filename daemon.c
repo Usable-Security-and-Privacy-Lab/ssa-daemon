@@ -175,9 +175,7 @@ int run_daemon(int port, char* config_path) {
 
     return EXIT_SUCCESS;
 err:
-
-    LOG_F("Fatal error occurred during daemon setup. Closing...\n");
-
+    LOG_F("Daemon setup failed\n");
 
     if (listener != NULL)
         evconnlistener_free(listener); /* This also closes the socket */

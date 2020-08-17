@@ -546,8 +546,8 @@ global_config* parse_config(char* file_path) {
 
     input = fopen(file_path, "r");
     if (input == NULL) {
-        log_printf(LOG_ERROR, 
-                "Couldn't find configuration file in specified path...\n");
+        LOG_F("Couldn't find configuration file in specified path...\n");
+        errno = 0;
         return NULL;
     }
 
@@ -579,6 +579,7 @@ err:
     
     if (input != NULL)
         fclose(input);
+
 
     return NULL;
 }

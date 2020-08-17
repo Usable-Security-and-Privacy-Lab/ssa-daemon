@@ -44,6 +44,10 @@ daemon_ctx* daemon_context_new(char* config_path, int port) {
     if (daemon == NULL)
         goto err;
 
+    daemon->settings = parse_config(config_path);
+    if (daemon->settings == NULL)
+        goto err;
+
     daemon->port = port;
     
     daemon->ev_base = event_base_new();
@@ -83,7 +87,7 @@ daemon_ctx* daemon_context_new(char* config_path, int port) {
 //log_printf(LOG_DEBUG, "about to init sem\n");
     daemon->cache_sem = calloc(1, sizeof(sem_t));
     if (sem_init(daemon->cache_sem, 0, 1))
-	log_printf(LOG_DEBUG, "%s\n", strerror(errno));
+        log_printf(LOG_DEBUG, "%s\n", strerror(errno));
 //log_printf(LOG_DEBUG, "succeeded in initializing sem\n");
 
     /*
@@ -91,10 +95,6 @@ daemon_ctx* daemon_context_new(char* config_path, int port) {
     if (daemon->revocation_cache == NULL)
         goto err;
      */
-
-    daemon->settings = parse_config(config_path);
-    if (daemon->settings == NULL)
-        goto err;
 
     /* Setup netlink socket */
     /* Set up non-blocking netlink socket with event base */
