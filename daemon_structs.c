@@ -110,11 +110,12 @@ daemon_ctx* daemon_context_new(char* config_path, int port) {
     return daemon;
 
 err:
+    if (errno)
+        log_printf(LOG_ERROR, "Error creating daemon: %s\n", strerror(errno));
+
     if (daemon != NULL)
         daemon_context_free(daemon);
 
-    if (errno)
-        log_printf(LOG_ERROR, "Error creating daemon: %s\n", strerror(errno));
     return NULL;
 }
 
@@ -156,7 +157,7 @@ void daemon_context_free(daemon_ctx* daemon) {
                     (void (*)(void*))socket_context_free);
 
     if (daemon->crl_cache != NULL)
-	crl_hashmap_free(daemon->crl_cache);
+        crl_hashmap_free(daemon->crl_cache);
 
     if (daemon->inotify != NULL)
         inotify_cleanup(daemon->inotify);
