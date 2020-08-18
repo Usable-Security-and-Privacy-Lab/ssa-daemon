@@ -13,7 +13,7 @@ extern "C" {
 
 }
 
-INIT_TESTS(ServerChainTests, "configs/default_localhost.yml", NULL)
+INIT_TESTS(ServerChainTests, "configs/server_chain.yml", NULL)
 
 TEST(ServerChainTests, SetCertFileCorrect) {
 
