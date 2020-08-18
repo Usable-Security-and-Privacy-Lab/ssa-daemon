@@ -472,9 +472,9 @@ int set_revocation_checks(socket_ctx* sock_ctx, int* enabled, socklen_t len) {
         return -EPROTO; /* fail if disabling when config has checks enforced */
     
     if (*enabled == 1)
-        turn_on_revocation_checks(sock_ctx->rev_ctx->checks);
+        turn_on_revocation_checks(sock_ctx->rev_checks);
     else if (*enabled == 0)
-        turn_off_revocation_checks(sock_ctx->rev_ctx->checks);
+        turn_off_revocation_checks(sock_ctx->rev_checks);
     else
         return -EINVAL;
 
@@ -492,9 +492,9 @@ int set_ocsp_stapled_checks(socket_ctx* sock_ctx, int* enabled, socklen_t len) {
         return -EPROTO; /* fail if enabling when config disables it */
     
     if (*enabled == 1)
-        turn_on_stapled_checks(sock_ctx->rev_ctx->checks);
+        turn_on_stapled_checks(sock_ctx->rev_checks);
     else if (*enabled == 0)
-        turn_off_stapled_checks(sock_ctx->rev_ctx->checks);
+        turn_off_stapled_checks(sock_ctx->rev_checks);
     else
         return -EINVAL;
 
@@ -512,9 +512,9 @@ int set_ocsp_checks(socket_ctx* sock_ctx, int* enabled, socklen_t len) {
         return -EPROTO; /* fail if enabling when config disables it */
     
     if (*enabled == 1)
-        turn_on_ocsp_checks(sock_ctx->rev_ctx->checks);
+        turn_on_ocsp_checks(sock_ctx->rev_checks);
     else if (*enabled == 0)
-        turn_off_ocsp_checks(sock_ctx->rev_ctx->checks);
+        turn_off_ocsp_checks(sock_ctx->rev_checks);
     else
         return -EINVAL;
 
@@ -532,9 +532,9 @@ int set_crl_checks(socket_ctx* sock_ctx, int* enabled, socklen_t len) {
         return -EPROTO; /* fail if enabling when config disables it */
     
     if (*enabled == 1)
-        turn_on_crl_checks(sock_ctx->rev_ctx->checks);
+        turn_on_crl_checks(sock_ctx->rev_checks);
     else if (*enabled == 0)
-        turn_off_crl_checks(sock_ctx->rev_ctx->checks);
+        turn_off_crl_checks(sock_ctx->rev_checks);
     else
         return -EINVAL;
 
@@ -552,9 +552,9 @@ int set_rev_cache_checks(socket_ctx* sock_ctx, int* enabled, socklen_t len) {
         return -EPROTO; /* fail if enabling when config disables it */
     
     if (*enabled == 1)
-        turn_on_cached_checks(sock_ctx->rev_ctx->checks);
+        turn_on_cached_checks(sock_ctx->rev_checks);
     else if (*enabled == 0)
-        turn_off_cached_checks(sock_ctx->rev_ctx->checks);
+        turn_off_cached_checks(sock_ctx->rev_checks);
     else
         return -EINVAL;
 

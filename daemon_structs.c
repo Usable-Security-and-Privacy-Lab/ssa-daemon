@@ -202,12 +202,14 @@ int socket_context_new(socket_ctx** new_sock_ctx, int fd,
     sock_ctx->sockfd = fd;
     sock_ctx->state = SOCKET_NEW;
 
+    /*
     sock_ctx->rev_ctx = revocation_context_setup(sock_ctx);
 	if (sock_ctx->rev_ctx == NULL)
 		log_printf(LOG_DEBUG, "It was null\n");
+     */
 
     /* transfer over revocation check flags */
-    //sock_ctx->rev_ctx.checks = daemon->settings->revocation_checks;
+    sock_ctx->rev_checks = daemon->settings->revocation_checks;
 
     int ret = hashmap_add(daemon->sock_map, id, sock_ctx);
     if (ret != 0)
@@ -256,8 +258,13 @@ socket_ctx* accepting_socket_ctx_new(socket_ctx* listener_ctx, int fd) {
 
     return sock_ctx;
 err:
-    if (sock_ctx != NULL)
+
+    if (sock_ctx != NULL) {
+        if (sock_ctx->ssl_ctx != NULL)
+            SSL_CTX_free(sock_ctx->ssl_ctx);
+
         free(sock_ctx);
+    }
 
     close(fd);
 
@@ -277,9 +284,11 @@ void socket_shutdown(socket_ctx* sock_ctx) {
         LOG_F("Tried to shutdown NULL socket context reference\n");
         return;
     }
-    if (sock_ctx->rev_ctx != NULL)
-        revocation_context_cleanup(sock_ctx->rev_ctx);
 
+    if (sock_ctx->rev_ctx != NULL) {
+        revocation_context_cleanup(sock_ctx->rev_ctx);
+        sock_ctx->rev_ctx = NULL;
+    }
 
     if (sock_ctx->ssl != NULL) {
         switch (sock_ctx->state) {
@@ -307,7 +316,6 @@ void socket_shutdown(socket_ctx* sock_ctx) {
         
         sock_ctx->ssl = NULL;
         sock_ctx->sockfd = NO_FD;
-
     }
     
     if (sock_ctx->plain.bev != NULL) {
@@ -343,8 +351,8 @@ void socket_context_free(socket_ctx* sock_ctx) {
 
 
     if (sock_ctx->rev_ctx != NULL) {
-	revocation_context_cleanup(sock_ctx->rev_ctx);
-	sock_ctx->rev_ctx = NULL;
+        revocation_context_cleanup(sock_ctx->rev_ctx);
+        sock_ctx->rev_ctx = NULL;
     }
 
     
@@ -407,7 +415,7 @@ void socket_context_erase(socket_ctx* sock_ctx, int port) {
 
     daemon_ctx* daemon = sock_ctx->daemon;
 
-    log_printf(LOG_DEBUG, "Erasing connection completely\n");
+    LOG_D("Erasing connection completely\n");
     
     hashmap_del(daemon->sock_map_port, port);
 
@@ -430,21 +438,18 @@ revocation_ctx* revocation_context_setup(socket_ctx* sock_ctx) {
 	
 	revocation_ctx* rev_ctx;
 
-	if (sock_ctx->rev_ctx == NULL) {
 
-		rev_ctx = (revocation_ctx*)calloc(1, sizeof(revocation_ctx));
-		if (rev_ctx == NULL) {
-			log_printf(LOG_DEBUG, "error in calloc\n");
-			return NULL;
-		}
-		rev_ctx->sock_ctx = sock_ctx;
-		rev_ctx->daemon = sock_ctx->daemon;
-		rev_ctx->id = sock_ctx->id;
-		rev_ctx->checks = sock_ctx->daemon->settings->revocation_checks;
-		return rev_ctx;
-	}
+    rev_ctx = (revocation_ctx*)calloc(1, sizeof(revocation_ctx));
+    if (rev_ctx == NULL) {
+        log_printf(LOG_DEBUG, "error in calloc\n");
+        return NULL;
+    }
 
-	rev_ctx = sock_ctx->rev_ctx;
+    sock_ctx->rev_ctx = rev_ctx;
+    rev_ctx->sock_ctx = sock_ctx;
+    rev_ctx->daemon = sock_ctx->daemon;
+    rev_ctx->id = sock_ctx->id;
+    rev_ctx->checks = sock_ctx->rev_checks;
 
 	STACK_OF(X509)* certs;
 
@@ -472,7 +477,6 @@ revocation_ctx* revocation_context_setup(socket_ctx* sock_ctx) {
 	if (rev_ctx->crl_responders_at == NULL)
 		goto err;
 
-    
 	return rev_ctx;
 
 
@@ -488,17 +492,17 @@ err:
  * NULL. Note that this function does not free the revocation context itself.
  * @param rev_ctx The revocation context to free resources from. */
 void revocation_context_cleanup(revocation_ctx* rev_ctx) {
-log_printf(LOG_DEBUG, "revocation_context_cleanup\n");
+    
+    LOG_D("Revocation context cleanup called\n");
+    
     if (rev_ctx == NULL)
-	log_printf(LOG_DEBUG, "rev_ctx is null\n");
+        LOG_F("rev_ctx is null\n");
 
     if (rev_ctx->responders_at != NULL)
         free(rev_ctx->responders_at);
-    rev_ctx->responders_at = NULL;
 
     if (rev_ctx->crl_responders_at != NULL)
         free(rev_ctx->crl_responders_at);
-    rev_ctx->crl_responders_at = NULL;
 
     ocsp_responder* curr = rev_ctx->ocsp_responders;
     while (curr != NULL) {
@@ -506,13 +510,9 @@ log_printf(LOG_DEBUG, "revocation_context_cleanup\n");
         ocsp_responder_free(curr);
         curr = next;
     }
-    rev_ctx->ocsp_responders = NULL;
 
     if (rev_ctx->certs != NULL)
         sk_X509_free(rev_ctx->certs);
-    rev_ctx->certs = NULL;
-
-    /* free CRL responders here too */
 
     crl_responder* curr_crl = rev_ctx->crl_responders;
     while (curr_crl != NULL) {
@@ -520,13 +520,10 @@ log_printf(LOG_DEBUG, "revocation_context_cleanup\n");
         crl_responder_free(curr_crl);
         curr_crl = next;
     }
-    rev_ctx->crl_responders = NULL;
-
 
     rev_ctx->sock_ctx->rev_ctx = NULL;
     free(rev_ctx);
     return;
-
 }
 
 /**
