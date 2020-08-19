@@ -48,7 +48,7 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
 
     int response = 0;
 
-    if (sock_ctx->has_shared_context && option != TLS_HOSTNAME)
+    if (has_shared_context(sock_ctx->flags) && option != TLS_HOSTNAME)
         return -EOPNOTSUPP; /* TODO: determine appropriate errno */
 
     switch (option) {

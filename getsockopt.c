@@ -378,7 +378,7 @@ int get_tls_context(socket_ctx* sock_ctx,
             goto err;
     }
 
-    sock_ctx->has_shared_context = 1;
+    set_shared_context(sock_ctx->flags);
     *data = context_id;
     *len = sizeof(unsigned long);
     return 0;

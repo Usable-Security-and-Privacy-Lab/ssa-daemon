@@ -41,56 +41,59 @@
 #define NO_CRL_RESPONDER_CHECKS  (1 << 3)
 /** Flag to disable cached responses from being used */
 #define NO_CACHED_CHECKS         (1 << 4)
+/** Flag to determine if the SSL_CTX of the given socket is shared */
+#define HAS_SHARED_CONTEXT       (1 << 5)
+
 
 
 /**
  * Disables any revocation checks from being performed, and passes all TLS
  * handshakes (even if a revoked certificate is in use)
  */
-#define turn_off_revocation_checks(checks) (checks |= NO_REVOCATION_CHECKS)
+#define turn_off_revocation_checks(flags) (flags |= NO_REVOCATION_CHECKS)
 
 /**
  * Sets the connection so that the certificate chain must be fully checked for
  * any revoked certificates. If some certificates are unable to be checked,
  * this will mean that the connection will fail
  */
-#define turn_on_revocation_checks(checks) (checks &= ~NO_REVOCATION_CHECKS)
+#define turn_on_revocation_checks(flags) (flags &= ~NO_REVOCATION_CHECKS)
 
 /** Checks to determine whether revocation checks are required & enabled. */
-#define has_revocation_checks(checks) !(checks & NO_REVOCATION_CHECKS)
+#define has_revocation_checks(flags) !(flags & NO_REVOCATION_CHECKS)
 
 
 
 /** Disables OCSP stapled responses from being used when checking revocation. */
-#define turn_off_stapled_checks(checks) (checks |= NO_OCSP_STAPLED_CHECKS)
+#define turn_off_stapled_checks(flags) (flags |= NO_OCSP_STAPLED_CHECKS)
 
 /** Allows OCSP stapled responses to be used as part of revocation checks. */
-#define turn_on_stapled_checks(checks) (checks &= ~NO_OCSP_STAPLED_CHECKS)
+#define turn_on_stapled_checks(flags) (flags &= ~NO_OCSP_STAPLED_CHECKS)
 
 /** Determines whether OCSP stapled response checks are enabled or not. */
-#define has_stapled_checks(checks) !(checks & NO_OCSP_STAPLED_CHECKS)
+#define has_stapled_checks(checks) !(flags & NO_OCSP_STAPLED_CHECKS)
 
 
 
 /** Disables OCSP responders from being queried when checking revocation. */
-#define turn_off_ocsp_checks(checks) (checks |= NO_OCSP_RESPONDER_CHECKS)
+#define turn_off_ocsp_checks(flags) (flags |= NO_OCSP_RESPONDER_CHECKS)
 
 /** Allows OCSP responders to be queried when checking revocation. */
-#define turn_on_ocsp_checks(checks) (checks &= ~NO_OCSP_RESPONDER_CHECKS)
+#define turn_on_ocsp_checks(flags) (flags &= ~NO_OCSP_RESPONDER_CHECKS)
 
 /** Determines whether OCSP responders are enabled or not. */
-#define has_ocsp_checks(checks) !(checks & NO_OCSP_RESPONDER_CHECKS)
+#define has_ocsp_checks(flags) !(flags & NO_OCSP_RESPONDER_CHECKS)
 
 
 
 /** Disables CRL responders from being queried when checking revocation. */
-#define turn_off_crl_checks(checks) (checks |= NO_CRL_RESPONDER_CHECKS)
+#define turn_off_crl_checks(flags) (flags |= NO_CRL_RESPONDER_CHECKS)
 
 /** Allows CRL responders to be queried when checking revocation. */
-#define turn_on_crl_checks(checks) (checks &= ~NO_CRL_RESPONDER_CHECKS)
+#define turn_on_crl_checks(flags) (flags &= ~NO_CRL_RESPONDER_CHECKS)
 
 /** Determines whether CRL responders are enabled or not. */
-#define has_crl_checks(checks) !(checks & NO_CRL_RESPONDER_CHECKS)
+#define has_crl_checks(flagss) !(flags & NO_CRL_RESPONDER_CHECKS)
 
 
 
@@ -98,13 +101,18 @@
  * Disables cached responses from being used when checking revocation.
  * Note that this does not disable the daemon from actively caching responses.
  */
-#define turn_off_cached_checks(checks) (checks |= NO_CACHED_CHECKS)
+#define turn_off_cached_checks(flags) (flags |= NO_CACHED_CHECKS)
 
 /** Allows cached responses to be used when checkin revocation. */
-#define turn_on_cached_checks(checks) (checks &= ~NO_CACHED_CHECKS)
+#define turn_on_cached_checks(flags) (flags &= ~NO_CACHED_CHECKS)
 
 /** Determines whether cached responses are checked or not. */
-#define has_cached_checks(checks) !(checks & NO_CACHED_CHECKS)
+#define has_cached_checks(flags) !(flags & NO_CACHED_CHECKS)
+
+
+#define has_shared_context(flags) (flags & HAS_SHARED_CONTEXT)
+
+#define set_shared_context(flags) (flags |= HAS_SHARED_CONTEXT)
 
 
 
@@ -310,8 +318,6 @@ struct socket_ctx_st {
 
     SSL_CTX* ssl_ctx;   /** The context of the SSL object (useful for server) */
     SSL* ssl;           /** The SSL instance associated with \p sockfd */
-
-    int has_shared_context; /** Set if TLS_CONTEXT get/setsockopt used */
 
     channel plain;      /** The non-encrypted channel to the calling program */
     channel secure;     /** The encrypted channel to the external peer */
