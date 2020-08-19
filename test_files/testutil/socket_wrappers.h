@@ -4,9 +4,7 @@
 #include <string>
 
 extern "C" {
-
-#include <sys/socket.h>
-
+#include <unistd.h>
 }
 
 #define SHOULD_SUCCEED true

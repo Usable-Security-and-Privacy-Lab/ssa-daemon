@@ -95,6 +95,7 @@ static struct nla_policy ssa_nl_policy[SSA_NL_A_MAX + 1] = {
 int handle_netlink_msg(struct nl_msg* msg, void* arg);
 
 struct nl_sock* netlink_connect(daemon_ctx* ctx) {
+
     int group;
     int family;
     struct nl_sock* netlink_sock = nl_socket_alloc();
@@ -109,28 +110,37 @@ struct nl_sock* netlink_connect(daemon_ctx* ctx) {
     nl_socket_modify_cb(netlink_sock, NL_CB_VALID, NL_CB_CUSTOM, handle_netlink_msg, (void*)ctx);
 
     if (genl_connect(netlink_sock) != 0) {
-        log_printf(LOG_ERROR, "Failed to connect to Generic Netlink control\n");
-        return NULL;
+        LOG_F("Netlink socket failed to connect--"
+                    "another daemon is likely using its port\n");
+        errno = 0;
+        goto err;
     }
 
     if ((family = genl_ctrl_resolve(netlink_sock, "SSA")) < 0) {
         log_printf(LOG_ERROR, "Failed to resolve SSA family identifier--"
                 "make sure that the SSA kernel module is properly loaded\n");
-        return NULL;
+        errno = 0;
+        goto err;
     }
     ctx->netlink_family = family;
 
     if ((group = genl_ctrl_resolve_grp(netlink_sock, "SSA", "notify")) < 0) {
         log_printf(LOG_ERROR, "Failed to resolve group identifier\n");
-        return NULL;
+        goto err;
     }
 
     if (nl_socket_add_membership(netlink_sock, group) < 0) {
         log_printf(LOG_ERROR, "Failed to add membership to group\n");
-        return NULL;
+        goto err;
     }
+
     nl_socket_set_peer_port(netlink_sock, 0);
+
     return netlink_sock;
+err:
+
+    nl_socket_free(netlink_sock);
+    return NULL;
 }
 
 /**

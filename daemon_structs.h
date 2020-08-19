@@ -316,7 +316,7 @@ struct socket_ctx_st {
     channel secure;     /** The encrypted channel to the external peer */
     struct evconnlistener* listener; /** Libevent struct for listening socket */
 
-
+    unsigned int rev_checks; /** bitmap of rev checks; options #define'd above */
     revocation_ctx* rev_ctx; /** Settings/data structs to do with revocation */
 
     struct sockaddr int_addr; /** Internal address--the program using SSA */

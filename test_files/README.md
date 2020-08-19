@@ -27,7 +27,7 @@ in place of `gcc`.
   2. Go to the googletest source that has now been installed 
   (`cd /usr/src/gtest`). 
   3. Make the source files into a library using cmake 
-  (`sudo cmake CmakeLists.txt` followed by `sudo make`).
+  (`sudo cmake CMakeLists.txt` followed by `sudo make`).
   4. Go to the 'lib' directory (`cd lib`)
   5. Copy the library files to the appropriate library folder 
   (`sudo cp *.a /usr/lib`). 
