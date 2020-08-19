@@ -71,7 +71,7 @@ listed below:
 > - `EINVAL` - The hostname was too long and could not be associated with the 
 > socket.
 
-
+#
 
 > #### TLS_DISABLE_CIPHER
 > Disables a given cipher from the list of ciphers that will be selected from 
@@ -95,7 +95,7 @@ listed below:
 > - `EOPNOTSUPP` - The given socket is already in use (see **Restrictions**). 
 > - `EINVAL` - The specified cipher was not in the cipherlist. 
 
-
+#
 
 > #### TLS_TRUSTED_PEER_CERTIFICATES
 > Loads in the list of trusted Certificate Authority (CA) certificates that 
@@ -117,7 +117,7 @@ listed below:
 > location. 
 > - `ECANCELED` - Processing the certificates at the location failed. 
 
-
+#
 
 > #### TLS_CERTIFICATE_CHAIN
 > Sets the certificate chain to be used for a TLS handshake. This option must 
@@ -140,7 +140,7 @@ listed below:
 > opened. 
 > - `ECANCELED` - Processing the certificates within the SSA daemon failed. 
 
-
+#
 
 > #### TLS_REVOCATION_CHECKS
 > Sets the given connection to require a revocation response from some 
@@ -194,7 +194,7 @@ listed below:
 > - `EPROTO` - The system call attempted to disable revocation checks when the 
 > SSA daemon configuration had it enabled. 
 
-
+#
 
 > #### TLS_CRL_CHECKS
 > Sets the given socket to query and accept responses from CRL responders 
@@ -224,7 +224,7 @@ listed below:
 > - `EPROTO` - The system call attempted to enable CRL-based revocation checks 
 > when the SSA daemon configuration had it disabled. 
 
-
+#
 
 > #### TLS_OCSP_CHECKS
 > Sets the given socket to query and accept responses from OCSP responders 
@@ -253,7 +253,7 @@ listed below:
 > - `EPROTO` - The system call attempted to enable CRL-based revocation checks 
 > when the SSA daemon configuration had it disabled. 
 
-
+#
 
 > #### TLS_OCSP_STAPLED_CHECKS
 > Sets the given socket to request a stapled OCSP response from the server 
@@ -281,7 +281,7 @@ listed below:
 > - `EPROTO` - The system call attempted to enable stapled OCSP revocation 
 > checks when the SSA daemon configuration had it disabled. 
 
-
+#
 
 > #### TLS_CACHED_REV_CHECKS
 > Sets the given socket to accept requests that were previously received 
@@ -312,7 +312,7 @@ listed below:
 > - `EPROTO` - The system call attempted to enable revocation cache checks 
 > when the SSA daemon configuration had it disabled. 
 
-
+#
 
 > #### TLS_CONTEXT
 > Sets the given socket's settings and session caches to mirror those of 
@@ -333,8 +333,8 @@ listed below:
 > **RESTRICTIONS**
 > 
 > IMPORTANT: In cases where TLS contexts are used, NO settings (other than 
-> TLS_HOSTNAME) should be modified for a TLS context once it has been shared 
-> with other sockets, as undefined behavior will occur.
+> TLS_HOSTNAME) should be modified for any sockets using the TLS context once 
+> it has been shared with other sockets, as undefined behavior will occur.
 > 
 > The option may not be used if the given socket is already 
 > listening, connected or connecting, or if the socket has previously 
@@ -348,7 +348,7 @@ listed below:
 > associated with the context ID `optval` has been closed, or `optlen` is not 
 > equal to `sizeof(unsigned long)`). 
 
-
+#
 
 > #### TLS_SESSION_REUSE
 > Sets the given socket to cache and reuse sessions (whether as client or 
@@ -377,7 +377,7 @@ listed below:
 > - `EPROTO` - The system call attempted to enable revocation cache checks 
 > when the SSA daemon configuration had it disabled. 
 
-
+#
 
 ## RETURN VALUE
 
