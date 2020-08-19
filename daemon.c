@@ -264,7 +264,8 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
      */
     ret = evutil_getaddrinfo(type == SOCK_DGRAM ? "::" : NULL, port_buf, &hints, &addr_list);
     if (ret != 0) {
-        log_printf(LOG_ERROR, "Failed in evutil_getaddrinfo: %s\n", evutil_gai_strerror(ret));
+        LOG_E("Failed in evutil_getaddrinfo: %s\n. Make sure your internet connection is working.", 
+                    evutil_gai_strerror(ret));
         exit(EXIT_FAILURE);
     }
 
