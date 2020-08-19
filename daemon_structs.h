@@ -306,6 +306,7 @@ struct socket_ctx_st {
     evutil_socket_t sockfd; /** The file descriptor of the socket */
 
     enum socket_state state; /** The socket's current state @see socket_state */
+    unsigned long flags; /** Revocation check flags, along with other options */
 
     SSL_CTX* ssl_ctx;   /** The context of the SSL object (useful for server) */
     SSL* ssl;           /** The SSL instance associated with \p sockfd */
@@ -316,7 +317,6 @@ struct socket_ctx_st {
     channel secure;     /** The encrypted channel to the external peer */
     struct evconnlistener* listener; /** Libevent struct for listening socket */
 
-    unsigned int rev_checks; /** bitmap of rev checks; options #define'd above */
     revocation_ctx* rev_ctx; /** Settings/data structs to do with revocation */
 
     struct sockaddr int_addr; /** Internal address--the program using SSA */

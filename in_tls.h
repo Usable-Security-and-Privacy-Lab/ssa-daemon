@@ -117,14 +117,16 @@ __attribute__((unused)) static char* tls_version_str(int version) {
 typedef void* SSA_context;
 */
 
+#define HOST_ADDR_MAX 120
+
 struct host_addr {
-        unsigned char name[255]; /* max hostname size in linux */
+        unsigned char name[HOST_ADDR_MAX]; /* max hostname size in linux */
 };
 
 struct sockaddr_host {
-        sa_family_t sin_family;
-        unsigned short sin_port;
-        struct host_addr sin_addr;
+        sa_family_t sh_family;
+        unsigned short sh_port;
+        struct host_addr sh_addr;
 };
 
 

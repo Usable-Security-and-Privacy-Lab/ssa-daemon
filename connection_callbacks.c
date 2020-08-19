@@ -326,7 +326,7 @@ void handle_client_connected(socket_ctx* sock_ctx, channel* startpoint) {
     LOG_D("Client session is %s reused\n", SSL_session_reused(ssl) ? "" : "not");
 
     if (SSL_session_reused(sock_ctx->ssl) == 0 &&
-                has_revocation_checks(sock_ctx->rev_checks))
+                has_revocation_checks(sock_ctx->flags))
         do_cert_chain_revocation_checks(sock_ctx);
     else
         netlink_handshake_notify_kernel(daemon, id, NOTIFY_SUCCESS);

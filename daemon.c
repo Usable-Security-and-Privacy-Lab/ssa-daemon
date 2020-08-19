@@ -1053,6 +1053,7 @@ int begin_handling_listener_connections(socket_ctx* sock_ctx) {
         return -ECANCELED;
     }
 
+
     evconnlistener_set_error_cb(sock_ctx->listener, listener_accept_error_cb);
 
     sock_ctx->state = SOCKET_LISTENING;

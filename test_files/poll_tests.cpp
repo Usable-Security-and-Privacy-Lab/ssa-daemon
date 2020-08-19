@@ -18,7 +18,7 @@ extern "C" {
 
 }
 
-#define HOSTNAME "www.instagram.com"
+#define HOSTNAME "google.com"
 #define MAX_FDS 10
 
 
@@ -39,15 +39,15 @@ TEST_F(AsyncTests, Connect1) {
     
     struct pollfd fd_struct = {0};
     fd_struct.fd = fd;
-    fd_struct.events = POLLOUT;
+    fd_struct.events = 0;
     fd_struct.revents = 0;
 
     errno = 0;
-    int poll_return = poll(&fd_struct, 1, 6000);
+    int poll_return = poll(&fd_struct, 1, -1);
     int poll_errno = errno;
 
     EXPECT_EQ(poll_errno, 0);
-    ASSERT_EQ(poll_return, 1);
+    ASSERT_GT(poll_return, 0);
 
     EXPECT_FALSE(fd_struct.revents & POLLERR);
     EXPECT_FALSE(fd_struct.revents & POLLHUP);

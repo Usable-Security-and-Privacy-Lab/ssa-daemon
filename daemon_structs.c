@@ -209,7 +209,7 @@ int socket_context_new(socket_ctx** new_sock_ctx, int fd,
      */
 
     /* transfer over revocation check flags */
-    sock_ctx->rev_checks = daemon->settings->revocation_checks;
+    sock_ctx->flags = daemon->settings->revocation_checks;
 
     int ret = hashmap_add(daemon->sock_map, id, sock_ctx);
     if (ret != 0)
@@ -449,7 +449,7 @@ revocation_ctx* revocation_context_setup(socket_ctx* sock_ctx) {
     rev_ctx->sock_ctx = sock_ctx;
     rev_ctx->daemon = sock_ctx->daemon;
     rev_ctx->id = sock_ctx->id;
-    rev_ctx->checks = sock_ctx->rev_checks;
+    rev_ctx->checks = sock_ctx->flags;
 
 	STACK_OF(X509)* certs;
 
