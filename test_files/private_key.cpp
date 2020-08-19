@@ -13,7 +13,7 @@ extern "C" {
 
 }
 
-INIT_TESTS(PrivateKeyTests, "configs/default_localhost.yml", NULL)
+INIT_TESTS(PrivateKeyTests, "configs/server_chain.yml", NULL)
 
 void print_socket_error(int fd) {
 
@@ -31,9 +31,9 @@ void print_socket_error(int fd) {
 }
 
 
-/*****************************************************
- *                  Private Key Testing              *
- * **************************************************/
+/********************************************************
+ *                  Private Key Testing                 *
+ * *****************************************************/
 
 
 
