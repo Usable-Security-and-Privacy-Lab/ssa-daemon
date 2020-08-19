@@ -29,6 +29,7 @@
 #include <string.h>
 
 #include "hashmap.h"
+#include "log.h"
 
 typedef struct hnode {
     unsigned long key;  /** The 'key' of the key:value pair for the map */
@@ -90,6 +91,7 @@ void hashmap_deep_free(hmap_t* map, void (*free_func)(void*)) {
     for (i = 0; i < map->num_buckets; i++) {
         cur = map->buckets[i];
         while (cur != NULL) {
+            LOG_D("Found entry to free from map\n");
             tmp = cur->next;
             if (free_func != NULL) {
                 free_func(cur->value);

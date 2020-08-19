@@ -443,7 +443,7 @@ int get_revocation_checks(socket_ctx* sock_ctx, int** data, unsigned int* len) {
     if (checks_enabled == NULL)
         return -ECANCELED;
 
-    *checks_enabled = has_revocation_checks(sock_ctx->rev_ctx->checks) ? 1 : 0;
+    *checks_enabled = has_revocation_checks(sock_ctx->rev_checks) ? 1 : 0;
 
     *data = checks_enabled;
     *len = sizeof(int);
@@ -458,7 +458,7 @@ int get_stapled_checks(socket_ctx* sock_ctx, int** data, unsigned int* len) {
     if (checks_enabled == NULL)
         return -ECANCELED;
 
-    *checks_enabled = has_stapled_checks(sock_ctx->rev_ctx->checks) ? 1 : 0;
+    *checks_enabled = has_stapled_checks(sock_ctx->rev_checks) ? 1 : 0;
 
     *data = checks_enabled;
     *len = sizeof(int);
@@ -472,7 +472,7 @@ int get_ocsp_checks(socket_ctx* sock_ctx, int** data, unsigned int* len) {
     if (checks_enabled == NULL)
         return -ECANCELED;
 
-    *checks_enabled = has_ocsp_checks(sock_ctx->rev_ctx->checks) ? 1 : 0;
+    *checks_enabled = has_ocsp_checks(sock_ctx->rev_checks) ? 1 : 0;
 
     *data = checks_enabled;
     *len = sizeof(int);
@@ -487,7 +487,7 @@ int get_crl_checks(socket_ctx* sock_ctx, int** data, unsigned int* len) {
     if (checks_enabled == NULL)
         return -ECANCELED;
 
-    *checks_enabled = has_crl_checks(sock_ctx->rev_ctx->checks) ? 1 : 0;
+    *checks_enabled = has_crl_checks(sock_ctx->rev_checks) ? 1 : 0;
 
     *data = checks_enabled;
     *len = sizeof(int);
@@ -502,7 +502,7 @@ int get_cached_checks(socket_ctx* sock_ctx, int** data, unsigned int* len) {
     if (checks_enabled == NULL)
         return -ECANCELED;
 
-    *checks_enabled = has_cached_checks(sock_ctx->rev_ctx->checks) ? 1 : 0;
+    *checks_enabled = has_cached_checks(sock_ctx->rev_checks) ? 1 : 0;
 
     *data = checks_enabled;
     *len = sizeof(int);

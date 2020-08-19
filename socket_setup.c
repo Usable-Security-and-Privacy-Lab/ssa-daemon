@@ -261,7 +261,7 @@ int prepare_SSL_client(socket_ctx* sock_ctx) {
 
     int ret;
 
-    if (has_revocation_checks(sock_ctx->rev_ctx->checks))
+    if (has_revocation_checks(sock_ctx->rev_checks))
 
         ret = SSL_CTX_set_tlsext_status_type(sock_ctx->ssl_ctx, 
                     TLSEXT_STATUSTYPE_ocsp);

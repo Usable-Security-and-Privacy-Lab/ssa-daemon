@@ -175,9 +175,7 @@ int run_daemon(int port, char* config_path) {
 
     return EXIT_SUCCESS;
 err:
-
-    LOG_F("Fatal error occurred during daemon setup. Closing...\n");
-
+    LOG_F("Daemon setup failed\n");
 
     if (listener != NULL)
         evconnlistener_free(listener); /* This also closes the socket */
@@ -455,9 +453,12 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
     }
 
     /* TODO: is this secure? */
-    evutil_make_listen_socket_reuseable(ifd);
+    ret = evutil_make_listen_socket_reuseable(ifd);
+    if (ret != 0)
+        goto err;
 
-    if (bind(ifd, (struct sockaddr*)&int_addr, sizeof(int_addr)) == -1) {
+    ret = bind(ifd, (struct sockaddr*)&int_addr, sizeof(int_addr));
+    if (ret != 0) {
         LOG_E("bind() failed with code %i: %s\n", errno, strerror(errno));
         goto err;
     }
@@ -958,6 +959,8 @@ void associate_cb(daemon_ctx* daemon, unsigned long id,
     socket_ctx* sock_ctx;
     int port = get_port(int_addr);
 
+    LOG_D("associate_cb called for server\n");
+
     clear_global_errors();
 
     sock_ctx = hashmap_get(daemon->sock_map_port, port);
@@ -1002,6 +1005,8 @@ err:
 void close_cb(daemon_ctx* daemon, unsigned long id) {
 
     socket_ctx* sock_ctx;
+
+    LOG_D("close() called on socket %lu\n", id);
 
     sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);
     if (sock_ctx == NULL) {

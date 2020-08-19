@@ -32,12 +32,11 @@ void do_cert_chain_revocation_checks(socket_ctx* sock_ctx) {
         goto err;
 
 
+    LOG_D("beginning checks\n");
     for (int i = 0; i < rev_ctx->total_to_check; i++) {
         ret = begin_revocation_checks(rev_ctx, sock_ctx->ssl, i);
-log_printf(LOG_ERROR, "beginning checks\n");
-        if (ret != 0) {
+        if (ret != 0)
             goto err;
-	}
     }
 
     if (rev_ctx->left_to_check == 0)
@@ -45,6 +44,7 @@ log_printf(LOG_ERROR, "beginning checks\n");
 
     return;
 err:
+
     if (ret == -2)
         set_err_string(sock_ctx, "TLS handshake error: "
                 "certificate was revoked");
@@ -232,10 +232,14 @@ log_printf(LOG_DEBUG, "about to pass?\n");
  * @param rev_ctx The revocation context of the socket.
  */
 void pass_revocation_checks(revocation_ctx *rev_ctx) {
-log_printf(LOG_DEBUG, "pass_revocation_checks\n");
-    netlink_handshake_notify_kernel(rev_ctx->daemon, rev_ctx->id, NOTIFY_SUCCESS);
-    revocation_context_cleanup(rev_ctx);
 
+    socket_ctx* sock_ctx = rev_ctx->sock_ctx;
+
+    LOG_D("Revocation checks passed\n");
+    netlink_handshake_notify_kernel(rev_ctx->daemon, rev_ctx->id, NOTIFY_SUCCESS);
+
+    revocation_context_cleanup(rev_ctx);
+    sock_ctx->rev_ctx = NULL;
 }
 
 
@@ -254,13 +258,16 @@ void fail_revocation_checks(revocation_ctx* rev_ctx) {
     unsigned long id = rev_ctx->id;
     socket_ctx *sock_ctx = rev_ctx->sock_ctx;
 
+    LOG_D("Revocation checks failed\n");
+
     socket_shutdown(sock_ctx);
     sock_ctx->state = SOCKET_ERROR;
 
     netlink_handshake_notify_kernel(daemon, id, -EPROTO);
 
     if(sock_ctx->rev_ctx != NULL)
-	revocation_context_cleanup(rev_ctx);
+        revocation_context_cleanup(rev_ctx);
+    sock_ctx->rev_ctx = NULL;
 
 }
 

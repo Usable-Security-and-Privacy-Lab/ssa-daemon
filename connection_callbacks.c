@@ -13,13 +13,13 @@
 #include "revocation.h"
 
 
-void handle_client_event_connected(socket_ctx* sock_ctx, 
-        daemon_ctx* daemon,    unsigned long id, channel* startpoint);
-void handle_server_event_connected(socket_ctx* sock_ctx, channel* startpoint);
-void handle_event_error(socket_ctx* sock_ctx, 
-        unsigned long error, channel* startpoint, channel* endpoint);
-void handle_event_eof(socket_ctx* sock_ctx, channel* startpoint, channel* endpoint);
-void handle_event_timeout(socket_ctx* sock_ctx);
+void handle_client_connected(socket_ctx* sock_ctx, channel* startpoint);
+void handle_client_error(socket_ctx* sock_ctx, channel* startpoint);
+void handle_client_eof(socket_ctx* sock_ctx, channel* startpoint);
+
+void handle_server_connected(socket_ctx* sock_ctx, channel* startpoint);
+void handle_server_error(socket_ctx* sock_ctx, channel* startpoint);
+void handle_server_eof(socket_ctx* sock_ctx, channel* startpoint);
 
 
 /*
@@ -132,54 +132,15 @@ void common_bev_read_cb(struct bufferevent* bev, void* arg) {
 void client_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 
     socket_ctx* sock_ctx = (socket_ctx*) arg;
-    daemon_ctx* daemon = sock_ctx->daemon;
-    unsigned long id = sock_ctx->id;
-    unsigned long ssl_err = bufferevent_get_openssl_error(bev);
-
-    channel* endpoint = (bev == sock_ctx->secure.bev)
-            ? &sock_ctx->plain : &sock_ctx->secure;
     channel* startpoint = (bev == sock_ctx->secure.bev)
             ? &sock_ctx->secure : &sock_ctx->plain;
 
-    if (events & BEV_EVENT_EOF) {
-        handle_event_eof(sock_ctx, startpoint, endpoint);
-    }
-    else if (events & BEV_EVENT_ERROR) {
-        handle_event_error(sock_ctx, ssl_err, startpoint, endpoint);
-    }
-    else if (events & BEV_EVENT_CONNECTED) {
-        handle_client_event_connected(sock_ctx, daemon, id, startpoint);
-    }
-
-    /* Connection closed--usually due to error, EOF or timeout */
-    if (endpoint->closed == 1 && startpoint->closed == 1) {
-        if (ssl_err != 0)
-            set_socket_error(sock_ctx, ssl_err);
-        socket_shutdown(sock_ctx);
-
-        switch (sock_ctx->state) {
-        case SOCKET_CONNECTING:
-            sock_ctx->state = SOCKET_ERROR;
-            netlink_handshake_notify_kernel(daemon, id, -EPROTO);
-            return;
-
-        case SOCKET_FINISHING_CONN:
-        case SOCKET_CONNECTED:
-            if (events & BEV_EVENT_ERROR)
-                sock_ctx->state = SOCKET_ERROR;
-            else
-                sock_ctx->state = SOCKET_DISCONNECTED;
-            return;
-
-        /* TODO: remove? */
-        case SOCKET_DISCONNECTED:
-            return;
-
-        default:
-            sock_ctx->state = SOCKET_ERROR;
-            return;
-        }
-    }
+    if (events & BEV_EVENT_ERROR)
+        handle_client_error(sock_ctx, startpoint);
+    else if (events & BEV_EVENT_EOF)
+        handle_client_eof(sock_ctx, startpoint);
+    else if (events & BEV_EVENT_CONNECTED)
+        handle_client_connected(sock_ctx, startpoint);
 }
 
 
@@ -198,50 +159,143 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
 
     socket_ctx* sock_ctx = (socket_ctx*) arg;
     int is_secure_channel = (bev == sock_ctx->secure.bev) ? 1 : 0;
-    int bev_error = ERR_get_error();
     
-    channel* endpoint = (is_secure_channel) ? &sock_ctx->plain : &sock_ctx->secure;
     channel* startpoint = (is_secure_channel) ? &sock_ctx->secure : &sock_ctx->plain;
 
-    if (events & BEV_EVENT_EOF)
-        handle_event_eof(sock_ctx, startpoint, endpoint);
-    else if (events & BEV_EVENT_ERROR)
-        handle_event_error(sock_ctx, bev_error, startpoint, endpoint);
+    if (events & BEV_EVENT_ERROR)
+        handle_server_error(sock_ctx, startpoint);
+    else if (events & BEV_EVENT_EOF)
+        handle_server_eof(sock_ctx, startpoint);
     else if (events & BEV_EVENT_CONNECTED)
-        handle_server_event_connected(sock_ctx, startpoint);
-    
-
-    if (endpoint->closed == 1 && startpoint->closed == 1) {
-        long ssl_err = SSL_get_verify_result(sock_ctx->ssl);
-
-        socket_shutdown(sock_ctx);
-
-        switch(sock_ctx->state) {
-        case SOCKET_CONNECTED:
-            if (events & BEV_EVENT_ERROR)
-                sock_ctx->state = SOCKET_ERROR;
-            else 
-                sock_ctx->state = SOCKET_DISCONNECTED;
-            break;
-        
-        default:
-            if (ssl_err != X509_V_OK)
-                LOG_E("TLS handshake error %li on incoming connection: %s",
-                            ssl_err, X509_verify_cert_error_string(ssl_err));
-
-            hashmap_del(sock_ctx->daemon->sock_map_port, sock_ctx->local_port);
-            socket_context_free(sock_ctx);
-            break;
-        }
-    }
-    return;
+        handle_server_connected(sock_ctx, startpoint);
 }
 
-/*
- *******************************************************************************
- *                   BUFFEREVENT CALLBACK HELPER FUNCTIONS
- *******************************************************************************
+/*******************************************************************************
+ *                CLIENT BUFFEREVENT CALLBACK HELPER FUNCTIONS
+ ******************************************************************************/
+
+
+/**
+ * Handles an error event for a client bufferevent and determines whether the 
+ * daemon should keep the connection alive or close it (designated by 
+ * startpoint->closed and endpoint->closed). 
+ * @param sock_ctx The context of the socket that received the error.
+ * @param error The OpenSSL error that the particular bufferevent encountered.
+ * Note that this could be '0', designating no error--either `errno` errors
+ * or OpenSSL errors may be present when an error event is received.
+ * @param startpoint The channel of the socket that received the error event.
+ * @param endpoint The other channel of the socket.
  */
+void handle_client_error(socket_ctx* sock_ctx, channel* startpoint) {
+
+    unsigned long error = bufferevent_get_openssl_error(startpoint->bev);
+    channel* endpoint = (startpoint == &sock_ctx->secure)
+                ? &sock_ctx->plain : &sock_ctx->secure;
+    daemon_ctx* daemon = sock_ctx->daemon;
+    unsigned long id = sock_ctx->id;
+
+    LOG_I("Client %s endpoint encountered error\n",
+        (startpoint->bev == sock_ctx->secure.bev) 
+                ? "encrypted" : "plaintext");
+
+    /* TODO: errno is unreliable. getsockopt(SO_ERROR) might be better */
+    if (errno == ECONNRESET || errno == EPIPE)
+        LOG_I("Connection closed by local user\n");
+    else if (errno != 0)
+        LOG_W("Unhandled error %i has occurred: %s\n", errno, strerror(errno));
+    else
+        LOG_E("SSL error occurred on endpoint: %s\n", 
+                    ERR_reason_error_string(error));
+
+
+    startpoint->closed = 1;
+
+    if ((evbuffer_get_length(bufferevent_get_output(endpoint->bev)) == 0)
+                && endpoint->closed == 0)
+        endpoint->closed = 1;
+
+
+    if (endpoint->closed == 1) {
+        if (sock_ctx->state == SOCKET_CONNECTING)
+            netlink_handshake_notify_kernel(daemon, id, -EPROTO);
+
+        if ((sock_ctx->state == SOCKET_FINISHING_CONN)
+                    && (sock_ctx->rev_ctx != NULL))
+            netlink_handshake_notify_kernel(daemon, id, ECONNRESET);           
+
+        socket_shutdown(sock_ctx);
+        sock_ctx->state = SOCKET_ERROR;
+    }
+}
+
+
+/**
+ * Handles an EOF event by closing both channels in a socket context.
+ * @param sock_ctx The context of the socket that received an EOF on
+ * one of its bufferevents.
+ * @param startpoint The channel of the socket that received the EOF.
+ * @param endpoint The other channel of the socket. 
+ */
+void handle_client_eof(socket_ctx* sock_ctx, channel* startpoint) {
+
+    channel* endpoint = (startpoint == &sock_ctx->secure)
+                ? &sock_ctx->plain : &sock_ctx->secure;
+    daemon_ctx* daemon = sock_ctx->daemon;
+    unsigned long id = sock_ctx->id;
+    int is_unclean_shutdown = 0;
+
+    LOG_D("client %s channel got EOF\n", 
+                (startpoint->bev == sock_ctx->secure.bev) 
+                ? "encrypted" : "plaintext");
+
+
+    if (startpoint == &sock_ctx->secure)
+        startpoint->closed = 1;
+
+    /* shutdown is unclean if (encrypted) peer closed w/out sending SSL shutdown */
+    if (sock_ctx->secure.closed && !sock_ctx->plain.closed
+                && !(SSL_get_shutdown(sock_ctx->ssl) & SSL_RECEIVED_SHUTDOWN)) {
+        
+        LOG_W("TLS shutdown wasn't clean\n");
+        is_unclean_shutdown = 1;
+    }
+
+    if (startpoint == &sock_ctx->plain)
+        startpoint->closed = 1;
+
+
+
+    if (bufferevent_getfd(endpoint->bev) == -1)
+        endpoint->closed = 1;
+
+    if (endpoint->closed == 0) {
+        if (evbuffer_get_length(bufferevent_get_input(startpoint->bev)) > 0) {
+            LOG_D("Channel still had data to be read from it--flushing...\n");
+            common_bev_read_cb(endpoint->bev, sock_ctx);
+        }
+
+        if (evbuffer_get_length(bufferevent_get_output(endpoint->bev)) == 0)
+            endpoint->closed = 1;
+    }
+
+
+    if (endpoint->closed == 1) {
+        if (sock_ctx->state == SOCKET_CONNECTING)
+            netlink_handshake_notify_kernel(daemon, id, -ECONNREFUSED);
+        
+        if ((sock_ctx->state == SOCKET_FINISHING_CONN)
+                    && (sock_ctx->rev_ctx != NULL))
+            netlink_handshake_notify_kernel(daemon, id, -ECONNRESET);
+
+        /* only clean shutdowns should get SSL_shutdown() */
+        if (is_unclean_shutdown)
+            sock_ctx->state = SOCKET_DISCONNECTED; 
+
+        socket_shutdown(sock_ctx);
+        sock_ctx->state = SOCKET_DISCONNECTED;
+    }
+}
+
 
 /**
  * Handles the case where the client channel's secure bufferevent connected 
@@ -254,38 +308,155 @@ void server_bev_event_cb(struct bufferevent *bev, short events, void *arg) {
  * @param id The id of the socket context associated with this bufferevent.
  * @param startpoint The channel that triggered the bufferevent.
  */
-void handle_client_event_connected(socket_ctx* sock_ctx, 
-            daemon_ctx* daemon, unsigned long id, channel* startpoint) {
+void handle_client_connected(socket_ctx* sock_ctx, channel* startpoint) {
 
-    LOG_D("%s endpoint connected\n", startpoint->bev == sock_ctx->secure.bev 
-                ? "Encrypted client" : "Plaintext client");
+    daemon_ctx* daemon = sock_ctx->daemon;
+    unsigned long id = sock_ctx->id;
+    SSL* ssl = sock_ctx->ssl;
 
-    if (startpoint->bev != sock_ctx->secure.bev) {
-        log_printf(LOG_WARNING, "Unexpected connect event happened.\n");
+    if (startpoint->bev == sock_ctx->secure.bev) {
+        LOG_D("Encrypted client endpoint connected with %s\n", SSL_get_version(ssl));
+    } else {
+        LOG_W("Unexpected connect event happened for client\n");
         return;
     }
 
-    /*
-    log_printf(LOG_INFO, "Encrypted endpoint connection negotiated with %s\n", 
-            SSL_get_version(sock_ctx->ssl));
-     */
-
     sock_ctx->state = SOCKET_FINISHING_CONN;
 
-    if (SSL_session_reused(sock_ctx->ssl))
-        log_printf(LOG_DEBUG, "Session reused!\n");
-    else
-        log_printf(LOG_DEBUG, "Session not reused...\n");
+    LOG_D("Client session is %s reused\n", SSL_session_reused(ssl) ? "" : "not");
 
-    if (has_revocation_checks(sock_ctx->rev_ctx->checks) && 
-                !SSL_session_reused(sock_ctx->ssl))
-
+    if (SSL_session_reused(sock_ctx->ssl) == 0 &&
+                has_revocation_checks(sock_ctx->rev_checks))
         do_cert_chain_revocation_checks(sock_ctx);
     else
         netlink_handshake_notify_kernel(daemon, id, NOTIFY_SUCCESS);
 
     return;
 }
+
+
+/*******************************************************************************
+ *                SERVER BUFFEREVENT CALLBACK HELPER FUNCTIONS
+ ******************************************************************************/
+
+
+/**
+ * Handles an error event for a server bufferevent and determines whether the
+ * daemon should keep the connection alive or close it (designated by 
+ * startpoint->closed and endpoint->closed). 
+ * @param sock_ctx The context of the socket that received the error.
+ * @param error The OpenSSL error that the particular bufferevent encountered.
+ * Note that this could be '0', designating no error--either `errno` errors
+ * or OpenSSL errors may be present when an error event is received.
+ * @param startpoint The channel of the socket that received the error event.
+ * @param endpoint The other channel of the socket.
+ */
+void handle_server_error(socket_ctx* sock_ctx, channel* startpoint) {
+    
+    unsigned long error = bufferevent_get_openssl_error(startpoint->bev);
+    channel* endpoint = (startpoint == &sock_ctx->secure)
+                ? &sock_ctx->plain : &sock_ctx->secure;
+    daemon_ctx* daemon = sock_ctx->daemon;
+
+    LOG_I("Server %s endpoint encountered error\n",
+        (startpoint->bev == sock_ctx->secure.bev) 
+                ? "encrypted" : "plaintext");
+
+    /* TODO: errno is unreliable. getsockopt(SO_ERROR) might be better */
+    if (errno == ECONNRESET || errno == EPIPE)
+        LOG_I("Connection closed by local user\n");
+    else if (errno != 0)
+        LOG_W("Unhandled error %i has occurred: %s\n", errno, strerror(errno));
+    else
+        LOG_E("SSL error occurred on endpoint: %s\n", 
+                    ERR_reason_error_string(error));
+
+
+    startpoint->closed = 1;
+
+    if ((evbuffer_get_length(bufferevent_get_output(endpoint->bev)) == 0)
+                && endpoint->closed == 0)
+        endpoint->closed = 1;
+
+    if (endpoint->closed == 1) {
+        socket_shutdown(sock_ctx);
+
+        if (sock_ctx->state == SOCKET_CONNECTED) {
+            LOG_D("Server error socket was SOCKET_CONNECTED\n");
+            sock_ctx->state = SOCKET_ERROR;
+
+        } else {
+            if (error != 0)
+                LOG_E("TLS handshake error %li on incoming connection: %s",
+                            error, ERR_error_string(error, NULL));
+
+            LOG_D("Permanently deleting connection\n");
+            hashmap_del(daemon->sock_map_port, sock_ctx->local_port);
+            socket_context_free(sock_ctx);
+        }
+    }
+}
+
+
+/**
+ * Handles an EOF event by closing both channels in a socket context.
+ * @param sock_ctx The context of the socket that received an EOF on
+ * one of its bufferevents.
+ * @param startpoint The channel of the socket that received the EOF.
+ * @param endpoint The other channel of the socket. 
+ */
+void handle_server_eof(socket_ctx* sock_ctx, channel* startpoint) {
+
+    channel* endpoint = (startpoint == &sock_ctx->secure)
+                ? &sock_ctx->plain : &sock_ctx->secure;
+    daemon_ctx* daemon = sock_ctx->daemon;
+    int is_unclean_shutdown = 0;
+
+    LOG_D("%s server channel got EOF\n", startpoint->bev == sock_ctx->secure.bev 
+                ? "encrypted" : "plaintext");
+
+
+    if (startpoint == &sock_ctx->secure)
+        startpoint->closed = 1;
+
+    /* shutdown is unclean if (encrypted) peer closed w/out sending SSL shutdown */
+    if (sock_ctx->secure.closed && !sock_ctx->plain.closed
+                && !(SSL_get_shutdown(sock_ctx->ssl) & SSL_RECEIVED_SHUTDOWN)) {
+        
+        LOG_W("TLS shutdown wasn't clean\n");
+        is_unclean_shutdown = 1;
+    }
+
+    startpoint->closed = 1;
+
+    if (endpoint->closed == 0) {
+        if (evbuffer_get_length(bufferevent_get_input(startpoint->bev)) > 0) {
+            LOG_D("Channel still had data to be read from it--flushing...\n");
+            common_bev_read_cb(endpoint->bev, sock_ctx);
+        }
+
+        if (evbuffer_get_length(bufferevent_get_output(endpoint->bev)) == 0)
+            endpoint->closed = 1;
+    }
+
+
+    if (endpoint->closed == 1) {
+        int free_socket = (sock_ctx->state != SOCKET_CONNECTED) ? 1 : 0;
+
+        if (is_unclean_shutdown)
+            sock_ctx->state = SOCKET_DISCONNECTED;
+
+        socket_shutdown(sock_ctx);
+
+        sock_ctx->state = SOCKET_DISCONNECTED;
+
+        if (free_socket) {
+            hashmap_del(daemon->sock_map_port, sock_ctx->local_port);
+            socket_context_free(sock_ctx);
+        }
+    }
+}
+
 
 /**
  * Handles the case where one of the server channel's bufferevent connected 
@@ -294,10 +465,10 @@ void handle_client_event_connected(socket_ctx* sock_ctx,
  * @param startpoint The channel that triggered the bufferevent.
  * @returns 0 on success, or -errno if an error occurred.
  */
-void handle_server_event_connected(socket_ctx* sock_ctx, channel* startpoint) {
+void handle_server_connected(socket_ctx* sock_ctx, channel* startpoint) {
 
-    LOG_D("%s endpoint connected\n", startpoint->bev == sock_ctx->secure.bev 
-                ? "Encrypted server" : "Plaintext server");
+    LOG_D("%s server endpoint connected\n", startpoint->bev == sock_ctx->secure.bev 
+                ? "Encrypted" : "Plaintext");
 
     if (startpoint->bev == sock_ctx->secure.bev) {
         sock_ctx->state = SOCKET_FINISHING_CONN;
@@ -314,86 +485,6 @@ void handle_server_event_connected(socket_ctx* sock_ctx, channel* startpoint) {
 
     return;
 err:
-    log_printf(LOG_DEBUG, "Erasing connection completely\n");
-    
-    hashmap_del(sock_ctx->daemon->sock_map_port, sock_ctx->local_port);
-    socket_shutdown(sock_ctx);
-    socket_context_free(sock_ctx);
-}
 
-/**
- * Handles an error event for a given bufferevent and determines whether the
- * daemon should keep the connection alive or close it (designated by 
- * startpoint->closed and endpoint->closed). 
- * @param sock_ctx The context of the socket that received the error.
- * @param error The OpenSSL error that the particular bufferevent encountered.
- * Note that this could be '0', designating no error--either `errno` errors
- * or OpenSSL errors may be present when an error event is received.
- * @param startpoint The channel of the socket that received the error event.
- * @param endpoint The other channel of the socket.
- */
-void handle_event_error(socket_ctx* sock_ctx, 
-            unsigned long error, channel* startpoint, channel* endpoint) {
-
-    if (errno == ECONNRESET || errno == EPIPE)
-        LOG_I("Connection closed by local user\n");
-    else if (errno != 0)
-        LOG_W("Unhandled error %i has occurred: %s\n", errno, strerror(errno));
-    else
-        LOG_E("SSL error occurred on endpoint: %s\n", 
-                    ERR_reason_error_string(error));
-
-
-    startpoint->closed = 1;
-
-    if (endpoint->closed == 0) {
-        struct evbuffer* out_buf;
-        out_buf = bufferevent_get_output(endpoint->bev);
-
-        /* close other buffer if we're closing and it has no data left */
-        if (evbuffer_get_length(out_buf) == 0)
-            endpoint->closed = 1;
-    }
-    return;
-}
-
-
-/**
- * Handles an EOF event by closing both channels in a socket context.
- * @param sock_ctx The context of the socket that received an EOF on
- * one of its bufferevents.
- * @param startpoint The channel of the socket that received the EOF.
- * @param endpoint The other channel of the socket. 
- */
-void handle_event_eof(socket_ctx* sock_ctx, 
-            channel* startpoint, channel* endpoint) {
-
-    LOG_D("%s channel got EOF\n", startpoint->bev == sock_ctx->secure.bev 
-                ? "encrypted":"plaintext");
-
-    /* only clean shutdowns should get SSL_shutdown() */
-    if (startpoint->bev == sock_ctx->secure.bev
-                && !(SSL_get_shutdown(sock_ctx->ssl) & SSL_RECEIVED_SHUTDOWN)) {
-        LOG_W("TLS shutdown wasn't clean\n");
-        sock_ctx->state = SOCKET_DISCONNECTED; /* TODO: not technically yet... */
-    }
-
-    // BUG: when the remote server closes first, this prematurely terminates connections
-    // try msn.com and see
-    if (bufferevent_getfd(endpoint->bev) == -1)
-        endpoint->closed = 1;
-
-    else if (endpoint->closed == 0) {
-        if (evbuffer_get_length(bufferevent_get_input(startpoint->bev)) > 0) {
-            LOG_D("Channel still had data to be read from it--flushing...\n");
-            common_bev_read_cb(endpoint->bev, sock_ctx);
-        }
-
-        if (evbuffer_get_length(bufferevent_get_output(endpoint->bev)) == 0)
-            endpoint->closed = 1;
-    }
-
-    startpoint->closed = 1;
-
-    return;
+    socket_context_erase(sock_ctx, sock_ctx->local_port);
 }
