@@ -42,7 +42,7 @@
 /** Flag to disable cached responses from being used */
 #define NO_CACHED_CHECKS         (1 << 4)
 /** Flag to determine if the SSL_CTX of the given socket is shared */
-#define HAS_SHARED_CONTEXT       (1 << 5)
+#define SHARED_CONTEXT           (1 << 5)
 
 
 
@@ -71,7 +71,7 @@
 #define turn_on_stapled_checks(flags) (flags &= ~NO_OCSP_STAPLED_CHECKS)
 
 /** Determines whether OCSP stapled response checks are enabled or not. */
-#define has_stapled_checks(checks) !(flags & NO_OCSP_STAPLED_CHECKS)
+#define has_stapled_checks(flags) !(flags & NO_OCSP_STAPLED_CHECKS)
 
 
 
@@ -93,7 +93,7 @@
 #define turn_on_crl_checks(flags) (flags &= ~NO_CRL_RESPONDER_CHECKS)
 
 /** Determines whether CRL responders are enabled or not. */
-#define has_crl_checks(flagss) !(flags & NO_CRL_RESPONDER_CHECKS)
+#define has_crl_checks(flags) !(flags & NO_CRL_RESPONDER_CHECKS)
 
 
 
@@ -110,9 +110,9 @@
 #define has_cached_checks(flags) !(flags & NO_CACHED_CHECKS)
 
 
-#define has_shared_context(flags) (flags & HAS_SHARED_CONTEXT)
+#define has_shared_context(flags) (flags & SHARED_CONTEXT)
 
-#define set_shared_context(flags) (flags |= HAS_SHARED_CONTEXT)
+#define set_shared_context(flags) (flags |= SHARED_CONTEXT)
 
 
 
