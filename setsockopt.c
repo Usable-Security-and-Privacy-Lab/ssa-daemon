@@ -260,18 +260,6 @@ err:
     return -EBADF;
 }
 
-/**
- * Requires clients to provide certificates to servers. 
- * 
- */
-// int set_trusted_peer_certificates(socket_ctx *sock_ctx, char* arg) {
-
-// 	int flags = SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
-// 	SSL_CTX_set_verify(sock_ctx->ssl_ctx, flags, NULL); // what to do if this fails?
-
-// 	return 0;
-// }
-
 int set_min_version(socket_ctx *sock_ctx, int* version, socklen_t len) {
 
     int response = 0;

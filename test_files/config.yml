@@ -12,8 +12,8 @@ max-tls-version: 1.3 # Default: 1.3
 
 # The following is commented out since the SSA Daemon does a decent job at finding
 # the correct CA path based on what Linux distro is being run (particularly for Fedora & Ubuntu).
-# CA-path can be a file or directory of CA files. All files must be in PEM format. Use "c_rehash ."
-# in directory before use. 
+# CA-path can be a file or directory of CA files. All files must be in PEM format. Use the 
+# "c_rehash ." command in directory before use. 
 #  CA-path: /etc/ssl/certs
 # CA-path: certs/rootCA.pem # use this for testing our server
 
