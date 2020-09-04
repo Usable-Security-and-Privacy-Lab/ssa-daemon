@@ -324,6 +324,7 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
  */
 void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
         struct sockaddr *address, int addrlen, void *arg) {
+
     daemon_ctx* daemon = (daemon_ctx*)arg;
     socket_ctx* sock_ctx;
     int port, ret;
@@ -1053,7 +1054,6 @@ int begin_handling_listener_connections(socket_ctx* sock_ctx) {
                 "failed to allocate buffers within the SSA daemon");
         return -ECANCELED;
     }
-
 
     evconnlistener_set_error_cb(sock_ctx->listener, listener_accept_error_cb);
 
