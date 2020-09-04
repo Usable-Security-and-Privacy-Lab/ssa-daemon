@@ -78,6 +78,10 @@
 #define TLS_VERSION_MAX                  112
 #define TLS_VERSION_CONN                 113
 
+
+#define TLS_SERVER_OCSP_STAPLING         122
+
+
 static const int TLS_1_2 = 0x0303;
 static const int TLS_1_3 = 0x0304;
 

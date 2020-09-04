@@ -22,6 +22,7 @@ int set_max_version(socket_ctx* sock_ctx, int* version, socklen_t len);
 int set_tls_context(socket_ctx* sock_ctx, unsigned long* data, socklen_t len);
 int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, socklen_t len);
 int set_session_resumption(socket_ctx* sock_ctx, int* reuse, socklen_t len);
+int set_server_stapling(socket_ctx* sock_ctx, int* enabled, socklen_t len);
 
 int set_revocation_checks(socket_ctx* sock_ctx, int* enabled, socklen_t len);
 int set_ocsp_stapled_checks(socket_ctx* sock_ctx, int* enabled, socklen_t len);
@@ -142,12 +143,32 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
         response = set_session_resumption(sock_ctx, (int*) value, len);
         break;
 
+    case TLS_SERVER_OCSP_STAPLING:
+        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+            break;
+        response = set_server_stapling(sock_ctx, (int*) value, len);
+        break;
+
     default:
         response = -ENOPROTOOPT;
         break;
     }
 
     return response;
+}
+
+
+int set_server_stapling(socket_ctx* sock_ctx, int* enabled, socklen_t len) {
+
+    if (len != sizeof(int) || *enabled > 1 || *enabled < 0)
+        return -EINVAL;
+
+    if (*enabled == 0)
+        disable_server_stapling(sock_ctx->flags);
+    else
+        enable_server_stapling(sock_ctx->flags);
+    
+    return 0;
 }
 
 
@@ -401,6 +422,9 @@ int set_tls_context(socket_ctx* sock_ctx, unsigned long* data, socklen_t len) {
 
     old_sock_ctx = hashmap_get(sock_ctx->daemon->sock_map, id);
     if (old_sock_ctx == NULL)
+        return -EINVAL;
+
+    if (!has_shared_context(old_sock_ctx->flags))
         return -EINVAL;
 
     if (has_session_cache(old_sock_ctx->ssl_ctx)) {

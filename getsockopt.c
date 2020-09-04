@@ -22,6 +22,7 @@ int get_version_max(socket_ctx* sock_ctx, int** data, unsigned int* len);
 int get_version_conn(socket_ctx* sock_ctx, int** data, unsigned int* len);
 int get_session_resumed(socket_ctx* sock_ctx, int** data, unsigned int *len);
 int get_session_reuse(socket_ctx* sock_ctx, int** data, unsigned int* len);
+int get_server_stapling(socket_ctx* sock_ctx, int** data, unsigned int* len);
 int get_tls_context(socket_ctx* sock_ctx, 
             unsigned long** data, unsigned int* len);
 
@@ -140,6 +141,10 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
         response = get_session_reuse(sock_ctx, (int**) data, len);
         break;
 
+    case TLS_SERVER_OCSP_STAPLING:
+        response = get_server_stapling(sock_ctx, (int**) data, len);
+        break;
+
     case TLS_TRUSTED_PEER_CERTIFICATES:
     case TLS_PRIVATE_KEY:
     case TLS_DISABLE_CIPHER:
@@ -163,6 +168,22 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
     return response;
 }
 
+
+int get_server_stapling(socket_ctx* sock_ctx, int** data, unsigned int* len) {
+
+    if (len == NULL || data == NULL || *len < sizeof(int))
+        return -EINVAL;
+
+    int* is_stapling = malloc(sizeof(int));
+    if (is_stapling == NULL)
+        return -ECANCELED;
+
+    *is_stapling = server_stapling_enabled(sock_ctx->flags) ? 1 : 0;
+    *data = is_stapling;
+    *len = sizeof(int);
+    
+    return 0;
+}
 
 
 /**

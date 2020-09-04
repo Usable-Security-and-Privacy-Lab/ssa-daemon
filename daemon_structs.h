@@ -32,68 +32,69 @@
 #endif
 
 /** Flag to disable any revocation checks from being performed */
-#define NO_REVOCATION_CHECKS     (1 << 0)
+#define SF_NO_REV_CHECKS           (1 << 0)
 /** Flag to disable the OCSP stapled response from being used */
-#define NO_OCSP_STAPLED_CHECKS   (1 << 1)
+#define SF_NO_STAPLED_CHECKS       (1 << 1)
 /** Flag to disable OCSP checks from being launched (not including stapled) */
-#define NO_OCSP_RESPONDER_CHECKS (1 << 2)
+#define SF_NO_OCSP_CHECKS          (1 << 2)
 /** Flag to disagle CRL checks from being launched */
-#define NO_CRL_RESPONDER_CHECKS  (1 << 3)
+#define SF_NO_CRL_CHECKS           (1 << 3)
 /** Flag to disable cached responses from being used */
-#define NO_CACHED_CHECKS         (1 << 4)
+#define SF_NO_CACHE_CHECKS         (1 << 4)
 /** Flag to determine if the SSL_CTX of the given socket is shared */
-#define SHARED_CONTEXT           (1 << 5)
+#define SF_SHARED_CONTEXT          (1 << 5)
 
+#define SF_SERVER_STAPLING         (1 << 6)
 
 
 /**
  * Disables any revocation checks from being performed, and passes all TLS
  * handshakes (even if a revoked certificate is in use)
  */
-#define turn_off_revocation_checks(flags) (flags |= NO_REVOCATION_CHECKS)
+#define turn_off_revocation_checks(flags) (flags |= SF_NO_REV_CHECKS)
 
 /**
  * Sets the connection so that the certificate chain must be fully checked for
  * any revoked certificates. If some certificates are unable to be checked,
  * this will mean that the connection will fail
  */
-#define turn_on_revocation_checks(flags) (flags &= ~NO_REVOCATION_CHECKS)
+#define turn_on_revocation_checks(flags) (flags &= ~SF_NO_REV_CHECKS)
 
 /** Checks to determine whether revocation checks are required & enabled. */
-#define has_revocation_checks(flags) !(flags & NO_REVOCATION_CHECKS)
+#define has_revocation_checks(flags) !(flags & SF_NO_REV_CHECKS)
 
 
 
 /** Disables OCSP stapled responses from being used when checking revocation. */
-#define turn_off_stapled_checks(flags) (flags |= NO_OCSP_STAPLED_CHECKS)
+#define turn_off_stapled_checks(flags) (flags |= SF_NO_STAPLED_CHECKS)
 
 /** Allows OCSP stapled responses to be used as part of revocation checks. */
-#define turn_on_stapled_checks(flags) (flags &= ~NO_OCSP_STAPLED_CHECKS)
+#define turn_on_stapled_checks(flags) (flags &= ~SF_NO_STAPLED_CHECKS)
 
 /** Determines whether OCSP stapled response checks are enabled or not. */
-#define has_stapled_checks(flags) !(flags & NO_OCSP_STAPLED_CHECKS)
+#define has_stapled_checks(flags) !(flags & SF_NO_STAPLED_CHECKS)
 
 
 
 /** Disables OCSP responders from being queried when checking revocation. */
-#define turn_off_ocsp_checks(flags) (flags |= NO_OCSP_RESPONDER_CHECKS)
+#define turn_off_ocsp_checks(flags) (flags |= SF_NO_OCSP_CHECKS)
 
 /** Allows OCSP responders to be queried when checking revocation. */
-#define turn_on_ocsp_checks(flags) (flags &= ~NO_OCSP_RESPONDER_CHECKS)
+#define turn_on_ocsp_checks(flags) (flags &= ~SF_NO_OCSP_CHECKS)
 
 /** Determines whether OCSP responders are enabled or not. */
-#define has_ocsp_checks(flags) !(flags & NO_OCSP_RESPONDER_CHECKS)
+#define has_ocsp_checks(flags) !(flags & SF_NO_OCSP_CHECKS)
 
 
 
 /** Disables CRL responders from being queried when checking revocation. */
-#define turn_off_crl_checks(flags) (flags |= NO_CRL_RESPONDER_CHECKS)
+#define turn_off_crl_checks(flags) (flags |= SF_NO_CRL_CHECKS)
 
 /** Allows CRL responders to be queried when checking revocation. */
-#define turn_on_crl_checks(flags) (flags &= ~NO_CRL_RESPONDER_CHECKS)
+#define turn_on_crl_checks(flags) (flags &= ~SF_NO_CRL_CHECKS)
 
 /** Determines whether CRL responders are enabled or not. */
-#define has_crl_checks(flags) !(flags & NO_CRL_RESPONDER_CHECKS)
+#define has_crl_checks(flags) !(flags & SF_NO_CRL_CHECKS)
 
 
 
@@ -101,19 +102,26 @@
  * Disables cached responses from being used when checking revocation.
  * Note that this does not disable the daemon from actively caching responses.
  */
-#define turn_off_cached_checks(flags) (flags |= NO_CACHED_CHECKS)
+#define turn_off_cached_checks(flags) (flags |= SF_NO_CACHE_CHECKS)
 
 /** Allows cached responses to be used when checkin revocation. */
-#define turn_on_cached_checks(flags) (flags &= ~NO_CACHED_CHECKS)
+#define turn_on_cached_checks(flags) (flags &= ~SF_NO_CACHE_CHECKS)
 
 /** Determines whether cached responses are checked or not. */
-#define has_cached_checks(flags) !(flags & NO_CACHED_CHECKS)
+#define has_cached_checks(flags) !(flags & SF_NO_CACHE_CHECKS)
 
 
-#define has_shared_context(flags) (flags & SHARED_CONTEXT)
+#define has_shared_context(flags) (flags & SF_SHARED_CONTEXT)
 
-#define set_shared_context(flags) (flags |= SHARED_CONTEXT)
+#define set_shared_context(flags) (flags |= SF_SHARED_CONTEXT)
 
+
+
+#define server_stapling_enabled(flags) (flags & SF_SERVER_STAPLING)
+
+#define enable_server_stapling(flags) (flags |= SF_SERVER_STAPLING)
+
+#define disable_server_stapling(flags) (flags &= ~SF_SERVER_STAPLING)
 
 
 struct daemon_ctx_st;
