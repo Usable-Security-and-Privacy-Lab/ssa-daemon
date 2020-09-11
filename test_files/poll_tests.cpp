@@ -65,7 +65,7 @@ TEST_F(AsyncTests, Connect1) {
 
     close(fd);
 
-    TEST_TIMEOUT_FAIL_END(TIMEOUT_LONG)
+    TEST_TIMEOUT_FAIL_END(20000)
 }
 
 
@@ -76,7 +76,7 @@ TEST_F(AsyncTests, ConnectTimeout1) {
         FAIL();
 
     set_hostname(fd, HOSTNAME);
-    connect_to_host(fd, HOSTNAME, HTTPS_PORT);
+    connect_to_host_fail(fd, HOSTNAME, HTTPS_PORT, EINPROGRESS);
 
     struct pollfd fd_struct = {0};
     fd_struct.fd = fd;
@@ -99,7 +99,7 @@ TEST_F(AsyncTests, ConnectWriteRead1) {
         FAIL();
 
     set_hostname(fd, HOSTNAME);
-    connect_to_host(fd, HOSTNAME, HTTPS_PORT);
+    connect_to_host_fail(fd, HOSTNAME, HTTPS_PORT, EINPROGRESS);
 
     struct pollfd fd_struct = {0};
     fd_struct.fd = fd;
