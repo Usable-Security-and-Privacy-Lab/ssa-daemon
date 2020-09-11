@@ -86,7 +86,7 @@ int connect_to_host(char* host, char* service) {
 
         printf("Setting hostname setsockopt...\n");
         if (setsockopt(sock, IPPROTO_TLS, TLS_HOSTNAME, host, strlen(host)+1) == -1) {
-			perror("setsockopt: TLS_REMOTE_HOSTNAME");
+			perror("setsockopt: TLS_HOSTNAME");
 			close(sock);
 			continue;
 		}
