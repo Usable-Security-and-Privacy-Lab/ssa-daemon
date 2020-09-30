@@ -478,7 +478,7 @@ void handle_server_connected(socket_ctx* sock_ctx, channel* startpoint) {
             goto err;
 
         ret = bufferevent_socket_connect(sock_ctx->plain.bev, 
-                &sock_ctx->int_addr, sock_ctx->int_addrlen);
+                (struct sockaddr*) &sock_ctx->int_addr, sock_ctx->int_addrlen);
         if (ret != 0)
             goto err;
     }

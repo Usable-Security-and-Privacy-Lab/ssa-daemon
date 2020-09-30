@@ -90,7 +90,7 @@ int connect_to_host(char* host, char* service) {
 			close(sock);
 			continue;
 		}
-        
+
         printf("Connecting to %s...\n", host);
 		if (connect(sock, addr_ptr->ai_addr, addr_ptr->ai_addrlen) == -1) {
 			perror("connect");

@@ -59,10 +59,10 @@ int run_daemon(int port, char* config_path);
  * @param id A uniquely generated ID for the given socket; corresponds with
  * (though is not equal to) the internal program's file descriptor of that
  * socket.
- * @param comm The address path of the calling program.
+ * @param family The address family of the socket (may be AF_INET or AF_INET6).
  * @returns (via netlink) a notification of 0 on success, or -errno on failure.
  */
-void socket_cb(daemon_ctx* ctx, unsigned long id, char* comm);
+void socket_cb(daemon_ctx* ctx, unsigned long id, unsigned short family);
 
 
 /**

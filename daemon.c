@@ -81,10 +81,12 @@ int begin_handling_listener_connections(socket_ctx* sock_ctx);
  */
 int run_daemon(int port, char* config_path) {
 
-    struct evconnlistener* listener = NULL;
+    struct evconnlistener* ipv4_listener = NULL;
+    struct evconnlistener* ipv6_listener = NULL;
     daemon_ctx* daemon = NULL;
 
-    evutil_socket_t server_sock;
+    evutil_socket_t ipv4_server = -1;
+    evutil_socket_t ipv6_server = -1;
 
     struct event* sev_pipe = NULL;
     struct event* sev_int = NULL;
@@ -121,19 +123,31 @@ int run_daemon(int port, char* config_path) {
 
 
     /* Set up server socket with event base */
-    server_sock = create_server_socket(port, PF_INET, SOCK_STREAM);
-    if (server_sock < 0) {
-        LOG_F("Daemon server socket creation failed\n");
+    ipv4_server = create_server_socket(port, PF_INET, SOCK_STREAM);
+    if (ipv4_server < 0) {
+        LOG_F("Daemon IPv4 server socket creation failed\n");
+        goto err;
     }
 
-    listener = evconnlistener_new(daemon->ev_base, accept_cb, (void*) daemon,
-            LEV_OPT_CLOSE_ON_FREE | LEV_OPT_THREADSAFE, SOMAXCONN, server_sock);
-    if (listener == NULL)
+    ipv6_server = create_server_socket(port, PF_INET6, SOCK_STREAM);
+    if (ipv6_server < 0) {
+        LOG_F("Daemon IPv6 server socket creation failed\n");
+        goto err;
+    }
+
+    ipv4_listener = evconnlistener_new(daemon->ev_base, accept_cb, (void*) daemon,
+            LEV_OPT_CLOSE_ON_FREE | LEV_OPT_THREADSAFE, SOMAXCONN, ipv4_server);
+    if (ipv4_listener == NULL)
+        goto err;
+
+    ipv6_listener = evconnlistener_new(daemon->ev_base, accept_cb, (void*) daemon, 
+            LEV_OPT_CLOSE_ON_FREE | LEV_OPT_THREADSAFE, SOMAXCONN, ipv6_server);
+    if (ipv6_listener == NULL)
         goto err;
 
     LOG_I("Created listening server socket\n");
 
-    evconnlistener_set_error_cb(listener, accept_error_cb);
+    evconnlistener_set_error_cb(ipv4_listener, accept_error_cb);
 
     nl_ev = event_new(daemon->ev_base, nl_socket_get_fd(daemon->netlink_sock),
             EV_READ | EV_PERSIST, netlink_recv, daemon->netlink_sock);
@@ -164,7 +178,7 @@ int run_daemon(int port, char* config_path) {
 #if LIBEVENT_VERSION_NUMBER >= 0x02010000
     libevent_global_shutdown();
 #endif
-    evconnlistener_free(listener); /* This also closes the socket */
+    evconnlistener_free(ipv4_listener); /* This also closes the socket */
     event_free(nl_ev);
     event_free(sev_pipe);
     event_free(sev_int);
@@ -177,8 +191,8 @@ int run_daemon(int port, char* config_path) {
 err:
     LOG_F("Daemon setup failed\n");
 
-    if (listener != NULL)
-        evconnlistener_free(listener); /* This also closes the socket */
+    if (ipv4_listener != NULL)
+        evconnlistener_free(ipv4_listener); /* This also closes the socket */
     if (nl_ev != NULL)
         event_free(nl_ev);
     if (sev_pipe != NULL)
@@ -202,6 +216,7 @@ err:
  * @param type The socket's type; can be SOCK_STREAM or SOCK_DGRAM.
  */
 evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
+
     evutil_socket_t sock;
     char port_buf[6];
     int ret;
@@ -209,9 +224,6 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
     struct evutil_addrinfo hints;
     struct evutil_addrinfo* addr_ptr;
     struct evutil_addrinfo* addr_list;
-    struct sockaddr_un bind_addr = {
-        .sun_family = AF_UNIX,
-    };
 
     /* Convert port to string for getaddrinfo */
     evutil_snprintf(port_buf, sizeof(port_buf), "%d", (int)port);
@@ -219,32 +231,6 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = family;
     hints.ai_socktype = type;
-
-    if (family == PF_UNIX) {
-        sock = socket(AF_UNIX, type | SOCK_NONBLOCK, 0);
-        if (sock == -1) {
-            log_printf(LOG_ERROR, "socket: %s\n", strerror(errno));
-            return -1;
-        }
-
-        ret = evutil_make_listen_socket_reuseable(sock);
-        if (ret == -1) {
-            log_printf(LOG_ERROR, "Failed in evutil_make_listen_socket_reuseable: %s\n",
-                 evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
-            EVUTIL_CLOSESOCKET(sock);
-            return -1;
-        }
-
-        strcpy(bind_addr.sun_path+1, port_buf);
-        ret = bind(sock, (struct sockaddr*)&bind_addr, sizeof(sa_family_t) + 1 + strlen(port_buf));
-        if (ret == -1) {
-            log_printf(LOG_ERROR, "bind: %s\n", strerror(errno));
-            EVUTIL_CLOSESOCKET(sock);
-            return -1;
-        }
-
-        return sock;
-    }
 
     /* AI_PASSIVE for filtering out addresses on which we
      * can't use for servers
@@ -274,6 +260,16 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
         if (sock == -1) {
             log_printf(LOG_ERROR, "socket: %s\n", strerror(errno));
             continue;
+        }
+
+        if (family == PF_INET6) {
+            int on = 1;
+            ret = setsockopt(sock, SOL_IPV6, IPV6_V6ONLY, &on, sizeof(on));
+            if (ret != 0) {
+                LOG_E("failed to set IPv6 socket to V6ONLY\n");
+                EVUTIL_CLOSESOCKET(sock);
+                continue;
+            }
         }
 
         ret = evutil_make_listen_socket_reuseable(sock);
@@ -578,7 +574,7 @@ void signal_cb(evutil_socket_t fd, short event, void* arg) {
  * @param comm The address path of the calling program.
  * @returns (via netlink) a notification of 0 on success, or -errno on failure.
  */
-void socket_cb(daemon_ctx* daemon, unsigned long id, char* comm) {
+void socket_cb(daemon_ctx* daemon, unsigned long id, unsigned short family) {
 
     socket_ctx* sock_ctx;
     evutil_socket_t fd = -1;
@@ -596,7 +592,7 @@ void socket_cb(daemon_ctx* daemon, unsigned long id, char* comm) {
     }
 
     /* BUG: what if AF_INET6 is what the user intents to connect to? */
-    fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
+    fd = socket(family, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
     if (fd == -1) {
         response = -errno;
         log_global_error(LOG_ERROR, "daemon socket creation failed");
@@ -607,7 +603,6 @@ void socket_cb(daemon_ctx* daemon, unsigned long id, char* comm) {
     if (response != 0)
         goto err;
 
-    log_printf(LOG_INFO, "Socket created for application %s\n", comm);
     netlink_notify_kernel(daemon, id, NOTIFY_SUCCESS);
     return;
 
@@ -736,6 +731,14 @@ void bind_cb(daemon_ctx* daemon, unsigned long id,
     socket_ctx* sock_ctx = NULL;
     int response = 0;
 
+    if (int_addrlen > sizeof(struct sockaddr_storage)
+            || ext_addrlen > sizeof(struct sockaddr_storage)) {
+
+        LOG_E("Received bind callback with invalid size params\n");
+        /* TODO: put these sorts of sanity checks in netlink.c? */
+        return;
+    }
+
     sock_ctx = (socket_ctx*) hashmap_get(daemon->sock_map, id);
     if (sock_ctx == NULL) {
         response = -EBADF;
@@ -758,9 +761,9 @@ void bind_cb(daemon_ctx* daemon, unsigned long id,
         goto err;
     }
 
-    sock_ctx->int_addr = *int_addr;
+    memcpy(&sock_ctx->int_addr, int_addr, int_addrlen);
     sock_ctx->int_addrlen = int_addrlen;
-    sock_ctx->ext_addr = *ext_addr;
+    memcpy(&sock_ctx->ext_addr, ext_addr, ext_addrlen);
     sock_ctx->ext_addrlen = ext_addrlen;
 
     netlink_notify_kernel(daemon, id, NOTIFY_SUCCESS);
@@ -833,9 +836,9 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
         return;
     }
 
-    sock_ctx->int_addr = *int_addr;
+    memcpy(&sock_ctx->int_addr, int_addr, int_addrlen);
     sock_ctx->int_addrlen = int_addrlen;
-    sock_ctx->rem_addr = *rem_addr;
+    memcpy(&sock_ctx->rem_addr, rem_addr, rem_addrlen);
     sock_ctx->rem_addrlen = rem_addrlen;
     sock_ctx->local_port = get_port(int_addr);
 

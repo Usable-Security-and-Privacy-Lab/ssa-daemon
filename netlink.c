@@ -40,7 +40,7 @@ enum {
     SSA_NL_A_UNSPEC,
     SSA_NL_A_ID,
     SSA_NL_A_BLOCKING,
-    SSA_NL_A_COMM,
+    SSA_NL_A_FAMILY,
     SSA_NL_A_SOCKADDR_INTERNAL,
     SSA_NL_A_SOCKADDR_EXTERNAL,
     SSA_NL_A_SOCKADDR_REMOTE,
@@ -82,7 +82,7 @@ enum ssa_nl_groups {
 static struct nla_policy ssa_nl_policy[SSA_NL_A_MAX + 1] = {
     [SSA_NL_A_ID] = { .type = NLA_U64 },
     [SSA_NL_A_BLOCKING] = { .type = NLA_U32 },
-    [SSA_NL_A_COMM] = { .type = NLA_NUL_STRING },
+    [SSA_NL_A_FAMILY] = { .type = NLA_U16 },
     [SSA_NL_A_SOCKADDR_INTERNAL] = { .type = NLA_BINARY },
     [SSA_NL_A_SOCKADDR_EXTERNAL] = { .type = NLA_BINARY },
     [SSA_NL_A_SOCKADDR_REMOTE] = { .type = NLA_BINARY },
@@ -174,7 +174,7 @@ int handle_netlink_msg(struct nl_msg* msg, void* arg) {
     struct nlattr* attrs[SSA_NL_A_MAX + 1];
 
     unsigned long id;
-    char comm[PATH_MAX];
+    unsigned short family;
     int addr_internal_len;
     int addr_external_len;
     int addr_remote_len;
@@ -186,103 +186,108 @@ int handle_netlink_msg(struct nl_msg* msg, void* arg) {
     int blocking;
     int optname;
     char* optval;
-    int commlen;
     socklen_t optlen;
 
-        /* Get Message */
-        nlh = nlmsg_hdr(msg);
-        gnlh = (struct genlmsghdr*)nlmsg_data(nlh);
-        int ret = genlmsg_parse(nlh, 0, attrs, SSA_NL_A_MAX, ssa_nl_policy);
-        if (ret != 0) {
-            log_printf(LOG_ERROR, "Couldn't parse message. Error: %i\n", ret);
-            return 0;
-        }
-
-        switch (gnlh->cmd) {
-        case SSA_NL_C_SOCKET_NOTIFY:
-            id = nla_get_u64(attrs[SSA_NL_A_ID]);
-            /*
-            log_printf(LOG_INFO, "Received socket notification for socket ID %lu\n", id);
-             */
-            commlen = nla_len(attrs[SSA_NL_A_COMM]);
-            memcpy(comm, nla_data(attrs[SSA_NL_A_COMM]), commlen);
-            socket_cb(ctx, id, comm);
-            break;
-        case SSA_NL_C_SETSOCKOPT_NOTIFY:
-            id = nla_get_u64(attrs[SSA_NL_A_ID]);
-            log_printf(LOG_INFO, "Received setsockopt notification for socket ID %lu\n", id);
-            level = nla_get_u32(attrs[SSA_NL_A_OPTLEVEL]);
-            optname = nla_get_u32(attrs[SSA_NL_A_OPTNAME]);
-            optlen = nla_len(attrs[SSA_NL_A_OPTVAL]);
-            optval = malloc(optlen);
-            if (optval == NULL) {
-                log_printf(LOG_ERROR, "Failed to allocate optval\n");
-                return 1;
-            }
-            memcpy(optval, nla_data(attrs[SSA_NL_A_OPTVAL]), optlen);
-            setsockopt_cb(ctx, id, level, optname, optval, optlen);
-            free(optval);
-            break;
-        case SSA_NL_C_GETSOCKOPT_NOTIFY:
-            id = nla_get_u64(attrs[SSA_NL_A_ID]);
-            log_printf(LOG_INFO, "Received getsockopt notification for socket ID %lu\n", id);
-            level = nla_get_u32(attrs[SSA_NL_A_OPTLEVEL]);
-            optname = nla_get_u32(attrs[SSA_NL_A_OPTNAME]);
-            getsockopt_cb(ctx, id, level, optname);
-            break;
-        case SSA_NL_C_BIND_NOTIFY:
-            id = nla_get_u64(attrs[SSA_NL_A_ID]);
-            addr_internal_len = nla_len(attrs[SSA_NL_A_SOCKADDR_INTERNAL]);
-            addr_external_len = nla_len(attrs[SSA_NL_A_SOCKADDR_EXTERNAL]);
-            addr_internal = *(struct sockaddr_in*)nla_data(attrs[SSA_NL_A_SOCKADDR_INTERNAL]);
-            addr_external = *(struct sockaddr_in*)nla_data(attrs[SSA_NL_A_SOCKADDR_EXTERNAL]);
-            log_printf(LOG_INFO, "Received bind notification for socket ID %lu\n", id);
-            //log_printf_addr((struct sockaddr*)&addr_internal);
-            //log_printf_addr((struct sockaddr*)&addr_external);
-            bind_cb(ctx, id, (struct sockaddr*)&addr_internal, addr_internal_len,
-                     (struct sockaddr*)&addr_external, addr_external_len);
-            break;
-        case SSA_NL_C_CONNECT_NOTIFY:
-            id = nla_get_u64(attrs[SSA_NL_A_ID]);
-            addr_internal_len = nla_len(attrs[SSA_NL_A_SOCKADDR_INTERNAL]);
-            addr_remote_len = nla_len(attrs[SSA_NL_A_SOCKADDR_REMOTE]);
-            addr_internal = *(struct sockaddr_in*)nla_data(attrs[SSA_NL_A_SOCKADDR_INTERNAL]);
-            addr_remote = *(struct sockaddr_in*)nla_data(attrs[SSA_NL_A_SOCKADDR_REMOTE]);
-            blocking = nla_get_u32(attrs[SSA_NL_A_BLOCKING]);
-            log_printf(LOG_INFO, "Received connect notification for socket ID %lu\n", id);
-            //log_printf_addr((struct sockaddr*)&addr_internal);
-            //log_printf_addr((struct sockaddr*)&addr_remote);
-            connect_cb(ctx, id, (struct sockaddr*)&addr_internal, addr_internal_len,
-                        (struct sockaddr*)&addr_remote, addr_remote_len, blocking);
-            break;
-        case SSA_NL_C_LISTEN_NOTIFY:
-            id = nla_get_u64(attrs[SSA_NL_A_ID]);
-            addr_internal_len = nla_len(attrs[SSA_NL_A_SOCKADDR_INTERNAL]);
-            addr_external_len = nla_len(attrs[SSA_NL_A_SOCKADDR_EXTERNAL]);
-            addr_internal = *(struct sockaddr_in*)nla_data(attrs[SSA_NL_A_SOCKADDR_INTERNAL]);
-            addr_external = *(struct sockaddr_in*)nla_data(attrs[SSA_NL_A_SOCKADDR_EXTERNAL]);
-            log_printf(LOG_INFO, "Received listen notification for socket ID %lu\n", id);
-            //log_printf_addr((struct sockaddr*)&addr_internal);
-            //log_printf_addr((struct sockaddr*)&addr_external);
-            listen_cb(ctx, id, (struct sockaddr*)&addr_internal, addr_internal_len,
-                     (struct sockaddr*)&addr_external, addr_external_len);
-            break;
-        case SSA_NL_C_ACCEPT_NOTIFY:
-            id = nla_get_u64(attrs[SSA_NL_A_ID]);
-            addr_internal_len = nla_len(attrs[SSA_NL_A_SOCKADDR_INTERNAL]);
-            addr_internal = *(struct sockaddr_in*)nla_data(attrs[SSA_NL_A_SOCKADDR_INTERNAL]);
-            log_printf(LOG_INFO, "Received accept notification for socket ID %lu\n", id);
-            associate_cb(ctx, id, (struct sockaddr*)&addr_internal, addr_internal_len);
-            break;
-        case SSA_NL_C_CLOSE_NOTIFY:
-            id = nla_get_u64(attrs[SSA_NL_A_ID]);
-            log_printf(LOG_INFO, "Received close notification for socket ID %lu\n", id);
-            close_cb(ctx, id);
-            break;
-        default:
-            log_printf(LOG_ERROR, "unrecognized command\n");
-            break;
+    /* Get Message */
+    nlh = nlmsg_hdr(msg);
+    gnlh = (struct genlmsghdr*)nlmsg_data(nlh);
+    int ret = genlmsg_parse(nlh, 0, attrs, SSA_NL_A_MAX, ssa_nl_policy);
+    if (ret != 0) {
+        log_printf(LOG_ERROR, "Couldn't parse message. Error: %i\n", ret);
+        return 0;
     }
+
+    switch (gnlh->cmd) {
+    case SSA_NL_C_SOCKET_NOTIFY:
+        id = nla_get_u64(attrs[SSA_NL_A_ID]);
+        family = nla_get_u16(attrs[SSA_NL_A_FAMILY]);
+
+        socket_cb(ctx, id, family);
+        break;
+
+    case SSA_NL_C_SETSOCKOPT_NOTIFY:
+        id = nla_get_u64(attrs[SSA_NL_A_ID]);
+        log_printf(LOG_INFO, "Received setsockopt notification for socket ID %lu\n", id);
+        level = nla_get_u32(attrs[SSA_NL_A_OPTLEVEL]);
+        optname = nla_get_u32(attrs[SSA_NL_A_OPTNAME]);
+        optlen = nla_len(attrs[SSA_NL_A_OPTVAL]);
+        optval = malloc(optlen);
+        if (optval == NULL) {
+            log_printf(LOG_ERROR, "Failed to allocate optval\n");
+            return 1;
+        }
+        memcpy(optval, nla_data(attrs[SSA_NL_A_OPTVAL]), optlen);
+        setsockopt_cb(ctx, id, level, optname, optval, optlen);
+        free(optval);
+        break;
+
+    case SSA_NL_C_GETSOCKOPT_NOTIFY:
+        id = nla_get_u64(attrs[SSA_NL_A_ID]);
+        log_printf(LOG_INFO, "Received getsockopt notification for socket ID %lu\n", id);
+        level = nla_get_u32(attrs[SSA_NL_A_OPTLEVEL]);
+        optname = nla_get_u32(attrs[SSA_NL_A_OPTNAME]);
+        getsockopt_cb(ctx, id, level, optname);
+        break;
+
+    case SSA_NL_C_BIND_NOTIFY:
+        id = nla_get_u64(attrs[SSA_NL_A_ID]);
+        addr_internal_len = nla_len(attrs[SSA_NL_A_SOCKADDR_INTERNAL]);
+        addr_external_len = nla_len(attrs[SSA_NL_A_SOCKADDR_EXTERNAL]);
+        addr_internal = *(struct sockaddr_in*)nla_data(attrs[SSA_NL_A_SOCKADDR_INTERNAL]);
+        addr_external = *(struct sockaddr_in*)nla_data(attrs[SSA_NL_A_SOCKADDR_EXTERNAL]);
+        log_printf(LOG_INFO, "Received bind notification for socket ID %lu\n", id);
+        //log_printf_addr((struct sockaddr*)&addr_internal);
+        //log_printf_addr((struct sockaddr*)&addr_external);
+        bind_cb(ctx, id, (struct sockaddr*)&addr_internal, addr_internal_len,
+                    (struct sockaddr*)&addr_external, addr_external_len);
+        break;
+
+    case SSA_NL_C_CONNECT_NOTIFY:
+        id = nla_get_u64(attrs[SSA_NL_A_ID]);
+        addr_internal_len = nla_len(attrs[SSA_NL_A_SOCKADDR_INTERNAL]);
+        addr_remote_len = nla_len(attrs[SSA_NL_A_SOCKADDR_REMOTE]);
+        addr_internal = *(struct sockaddr_in*)nla_data(attrs[SSA_NL_A_SOCKADDR_INTERNAL]);
+        addr_remote = *(struct sockaddr_in*)nla_data(attrs[SSA_NL_A_SOCKADDR_REMOTE]);
+        blocking = nla_get_u32(attrs[SSA_NL_A_BLOCKING]);
+        log_printf(LOG_INFO, "Received connect notification for socket ID %lu\n", id);
+        //log_printf_addr((struct sockaddr*)&addr_internal);
+        //log_printf_addr((struct sockaddr*)&addr_remote);
+        connect_cb(ctx, id, (struct sockaddr*)&addr_internal, addr_internal_len,
+                    (struct sockaddr*)&addr_remote, addr_remote_len, blocking);
+        break;
+
+    case SSA_NL_C_LISTEN_NOTIFY:
+        id = nla_get_u64(attrs[SSA_NL_A_ID]);
+        addr_internal_len = nla_len(attrs[SSA_NL_A_SOCKADDR_INTERNAL]);
+        addr_external_len = nla_len(attrs[SSA_NL_A_SOCKADDR_EXTERNAL]);
+        addr_internal = *(struct sockaddr_in*)nla_data(attrs[SSA_NL_A_SOCKADDR_INTERNAL]);
+        addr_external = *(struct sockaddr_in*)nla_data(attrs[SSA_NL_A_SOCKADDR_EXTERNAL]);
+        log_printf(LOG_INFO, "Received listen notification for socket ID %lu\n", id);
+        //log_printf_addr((struct sockaddr*)&addr_internal);
+        //log_printf_addr((struct sockaddr*)&addr_external);
+        listen_cb(ctx, id, (struct sockaddr*)&addr_internal, addr_internal_len,
+                    (struct sockaddr*)&addr_external, addr_external_len);
+        break;
+
+    case SSA_NL_C_ACCEPT_NOTIFY:
+        id = nla_get_u64(attrs[SSA_NL_A_ID]);
+        addr_internal_len = nla_len(attrs[SSA_NL_A_SOCKADDR_INTERNAL]);
+        addr_internal = *(struct sockaddr_in*)nla_data(attrs[SSA_NL_A_SOCKADDR_INTERNAL]);
+        log_printf(LOG_INFO, "Received accept notification for socket ID %lu\n", id);
+        associate_cb(ctx, id, (struct sockaddr*)&addr_internal, addr_internal_len);
+        break;
+
+    case SSA_NL_C_CLOSE_NOTIFY:
+        id = nla_get_u64(attrs[SSA_NL_A_ID]);
+        log_printf(LOG_INFO, "Received close notification for socket ID %lu\n", id);
+        close_cb(ctx, id);
+        break;
+
+    default:
+        log_printf(LOG_ERROR, "unrecognized command\n");
+        break;
+    }
+
     return 0;
 }
 

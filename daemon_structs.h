@@ -333,11 +333,11 @@ struct socket_ctx_st {
 
     revocation_ctx* rev_ctx; /** Settings/data structs to do with revocation */
 
-    struct sockaddr int_addr; /** Internal address--the program using SSA */
+    struct sockaddr_storage int_addr; /** Internal address--the program using SSA */
     int int_addrlen;          /** The size of \p int_addr */
     union {
-        struct sockaddr ext_addr; /** External address--the remote peer */
-        struct sockaddr rem_addr; /** Remote address--the remote host */
+        struct sockaddr_storage ext_addr; /** External address--the remote peer */
+        struct sockaddr_storage rem_addr; /** Remote address--the remote host */
     };
     union {
         int ext_addrlen; /** The size of \p ext_addr */

@@ -76,12 +76,12 @@ daemon_ctx* daemon_context_new(char* config_path, int port) {
 
     daemon->crl_cache = crl_hashmap_create(HASHMAP_NUM_BUCKETS * 100);
     if (daemon->crl_cache == NULL)
-	goto err;
+        goto err;
 
 
     FILE *crl_cache = fopen("crl_cache.txt", "r");
     if (crl_cache != NULL)
-	read_crl_cache(daemon->crl_cache, crl_cache);
+        read_crl_cache(daemon->crl_cache, crl_cache);
 
 
 //log_printf(LOG_DEBUG, "about to init sem\n");
@@ -644,7 +644,7 @@ int check_socket_state(socket_ctx* sock_ctx, int num, ...) {
 char* get_hostname_port_str(socket_ctx* sock_ctx) {
 
     char* hostname = sock_ctx->rem_hostname;
-    int port = get_port(&sock_ctx->rem_addr);
+    int port = get_port((struct sockaddr*) &sock_ctx->rem_addr);
     int out_len = strlen(hostname) + 10; /* short max is < 10 digits */
     int ret;
 
