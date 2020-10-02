@@ -179,6 +179,7 @@ int run_daemon(int port, char* config_path) {
     libevent_global_shutdown();
 #endif
     evconnlistener_free(ipv4_listener); /* This also closes the socket */
+    evconnlistener_free(ipv6_listener);
     event_free(nl_ev);
     event_free(sev_pipe);
     event_free(sev_int);
@@ -193,6 +194,8 @@ err:
 
     if (ipv4_listener != NULL)
         evconnlistener_free(ipv4_listener); /* This also closes the socket */
+    if (ipv6_listener != NULL)
+        evconnlistener_free(ipv6_listener);
     if (nl_ev != NULL)
         event_free(nl_ev);
     if (sev_pipe != NULL)
@@ -422,17 +425,12 @@ void accept_error_cb(struct evconnlistener *listener, void *ctx) {
  */
 void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
             struct sockaddr* address, int addrlen, void *arg) {
-
-    struct sockaddr_in int_addr = {
-        .sin_family = AF_INET,
-        .sin_port = 0, /* allow kernel to give us a random port */
-        .sin_addr.s_addr = htonl(INADDR_LOOPBACK)
-    };
-
+                
+    struct sockaddr_storage int_addr = get_loopback_address(address->sa_family);
+    socklen_t intaddr_len = sizeof(int_addr);
     socket_ctx* listening_ctx = (socket_ctx*)arg;
     daemon_ctx* daemon = listening_ctx->daemon;
     socket_ctx* new_ctx = NULL;
-    socklen_t intaddr_len = sizeof(int_addr);
     evutil_socket_t ifd = NO_FD;
     int ret = 0;
 
@@ -443,7 +441,7 @@ void listener_accept_cb(struct evconnlistener *listener, evutil_socket_t efd,
     new_ctx->int_addr = listening_ctx->int_addr;
     new_ctx->int_addrlen = listening_ctx->int_addrlen;
 
-    ifd = socket(PF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
+    ifd = socket(address->sa_family, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
     if (ifd == NO_FD) {
         LOG_E("socket() failed in listener_accept_cb (listener ID: %lu)\n", 
                     listening_ctx->id);
@@ -588,6 +586,16 @@ void socket_cb(daemon_ctx* daemon, unsigned long id, unsigned short family) {
                 "Socket already created with ID %lu\n", id);
         response = -ECANCELED;
         sock_ctx = NULL; /* err would try to free sock_ctx otherwise */
+        goto err;
+    }
+
+    if (family == AF_INET) {
+        LOG_D("AF_INET socket created\n");
+    } else if (family == AF_INET6) {
+        LOG_D("AF_INET6 socket created\n");
+    } else {
+        LOG_E("socket_cb called with bad family type\n");
+        response = -ECANCELED;
         goto err;
     }
 
@@ -806,11 +814,12 @@ err:
 void connect_cb(daemon_ctx* daemon, unsigned long id,
         struct sockaddr* int_addr, int int_addrlen,
         struct sockaddr* rem_addr, int rem_addrlen, int blocking) {
+    
     socket_ctx* sock_ctx;
     int response;
     int ret;
 
-    sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);
+    sock_ctx = (socket_ctx*) hashmap_get(daemon->sock_map, id);
     if (sock_ctx == NULL) {
         netlink_notify_kernel(daemon, id, -EBADF);
         return;
@@ -849,6 +858,33 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
     response = prepare_bufferevents(sock_ctx, NO_FD);
     if (response != 0)
         goto err;
+
+
+    /* DEBUGGING */
+
+    LOG_D("rem_addrlen: %i\n", rem_addrlen);
+
+    if (rem_addr->sa_family == AF_INET) {
+        struct sockaddr_in *addr = (struct sockaddr_in*) rem_addr;
+
+        LOG_D("rem_addr->sa_family: AF_INET\n");
+        LOG_D("rem_addr->sin_port: %i\n", ntohs(addr->sin_port));
+        LOG_D("rem_addr->sin_addr: %x\n", ntohl(addr->sin_addr.s_addr));
+    } else if (rem_addr->sa_family == AF_INET6) {
+        struct sockaddr_in6 *addr = (struct sockaddr_in6*) rem_addr;
+
+        LOG_D("rem_addr->sa_family: AF_INET6\n");
+        LOG_D("rem_addr->sin6_port: %i\n", ntohs(addr->sin6_port));
+        LOG_D("rem_addr->sin6_addr: ");
+        for (int i = 0; i < 28; i++) {
+            printf("%x ", ((unsigned char*) addr)[i]);
+        }
+        printf("\n");
+    } else {
+        LOG_E("rem_addr sa_family was WRONG\n");
+        response = -ECANCELED;
+        goto err;
+    }
 
     ret = bufferevent_socket_connect(sock_ctx->secure.bev, rem_addr, rem_addrlen);
     if (ret != 0) {

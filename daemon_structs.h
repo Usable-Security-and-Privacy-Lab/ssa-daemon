@@ -7,6 +7,8 @@
 #include <openssl/ssl.h>
 #include <openssl/ocsp.h>
 #include <semaphore.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
 #include "hashmap.h"
 #include "hashmap_str.h"
@@ -389,6 +391,7 @@ char* get_hostname_port_str(socket_ctx* sock_ctx);
  */
 int get_port(struct sockaddr* addr);
 
+struct sockaddr_storage get_loopback_address(sa_family_t family);
 
 
 

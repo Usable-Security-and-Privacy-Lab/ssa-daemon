@@ -479,8 +479,10 @@ void handle_server_connected(socket_ctx* sock_ctx, channel* startpoint) {
 
         ret = bufferevent_socket_connect(sock_ctx->plain.bev, 
                 (struct sockaddr*) &sock_ctx->int_addr, sock_ctx->int_addrlen);
-        if (ret != 0)
+        if (ret != 0) {
+            LOG_E("Failed to connect to plaintext end: %s\n", strerror(errno));
             goto err;
+        }
     }
 
     return;

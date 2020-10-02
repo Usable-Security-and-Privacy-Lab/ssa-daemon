@@ -670,13 +670,38 @@ char* get_hostname_port_str(socket_ctx* sock_ctx) {
 int get_port(struct sockaddr* addr) {
 
     int port = 0;
-    if (addr->sa_family == AF_UNIX) {
-        port = strtol(((struct sockaddr_un*)addr)->sun_path+1, NULL, 16);
-        log_printf(LOG_INFO, "unix port is %05x", port);
-    }
-    else {
-        port = (int)ntohs(((struct sockaddr_in*)addr)->sin_port);
-    }
+
+    if (addr->sa_family == AF_INET)
+        port = (int) ntohs(((struct sockaddr_in*) addr)->sin_port);
+    else
+        port = (int) ntohs(((struct sockaddr_in6*) addr)->sin6_port);
+    
     return port;
 }
 
+
+struct sockaddr_storage get_loopback_address(sa_family_t family)
+{
+    struct sockaddr_storage addr = {0};
+
+    if (family == AF_INET) {
+        struct sockaddr_in in_addr = {
+            .sin_family = AF_INET,
+            .sin_port = 0,
+            .sin_addr.s_addr = htonl(INADDR_LOOPBACK)
+        };
+
+        memcpy(&addr, &in_addr, sizeof(in_addr));
+
+    } else { /* family == AF_INET6 */
+        struct sockaddr_in6 in6_addr = {
+            .sin6_family = AF_INET6,
+            .sin6_port = 0,
+            .sin6_addr = IN6ADDR_LOOPBACK_INIT
+        };
+
+        memcpy(&addr, &in6_addr, sizeof(in6_addr));
+    }
+
+    return addr;
+}
