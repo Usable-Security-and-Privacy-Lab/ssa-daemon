@@ -39,7 +39,7 @@ TEST_F(AsyncTests, Connect1) {
     
     struct pollfd fd_struct = {0};
     fd_struct.fd = fd;
-    fd_struct.events = 0;
+    fd_struct.events = POLLOUT;
     fd_struct.revents = 0;
 
     errno = 0;
@@ -80,8 +80,9 @@ TEST_F(AsyncTests, ConnectTimeout1) {
 
     struct pollfd fd_struct = {0};
     fd_struct.fd = fd;
-    fd_struct.events = POLLIN | POLLOUT | POLLERR | POLLPRI | POLLHUP;
+    fd_struct.events = POLLOUT;
 
+    errno = 0;
     int poll_return = poll(&fd_struct, 1, 20);
     int poll_errno = errno;
 
@@ -103,8 +104,9 @@ TEST_F(AsyncTests, ConnectWriteRead1) {
 
     struct pollfd fd_struct = {0};
     fd_struct.fd = fd;
-    fd_struct.events = POLLIN | POLLOUT;
+    fd_struct.events = POLLOUT;
 
+    errno = 0;
     int poll_return = poll(&fd_struct, 1, 6000);
     int poll_errno = errno;
 
@@ -146,6 +148,7 @@ TEST_F(AsyncTests, ConnectWriteRead1) {
     EXPECT_EQ(errno, EAGAIN);
 
     fd_struct.events = POLLIN;
+    errno = 0;
     poll_return = poll(&fd_struct, 1, 4000);
     ASSERT_EQ(poll_return, 1);
 
@@ -186,12 +189,13 @@ TEST_F(AsyncTests, Connect5) {
 
     for (i = 0; i < FD_COUNT; i++) {
         fd_structs[i].fd = fds[i];
-        fd_structs[i].events = POLLOUT | POLLERR | POLLPRI | POLLHUP;
+        fd_structs[i].events = POLLOUT;
     }
 
     int fds_left_to_connect = FD_COUNT;
     while(fds_left_to_connect > 0) {
-
+        
+        errno = 0;
         int poll_return = poll(fd_structs, FD_COUNT, 6000);
         int poll_errno = errno;
 
@@ -244,19 +248,20 @@ TEST_F(AsyncTests, Connect23) {
             FAIL();
 
         set_hostname(fds[i], HOSTNAME);
-        connect_to_host(fds[i], HOSTNAME, HTTPS_PORT);
+        connect_to_host_fail(fds[i], HOSTNAME, HTTPS_PORT, EINPROGRESS);
     }
 
     struct pollfd fd_structs[FD_COUNT] = {0};
 
     for (i = 0; i < FD_COUNT; i++) {
         fd_structs[i].fd = fds[i];
-        fd_structs[i].events = POLLOUT | POLLERR | POLLPRI | POLLHUP;
+        fd_structs[i].events = POLLOUT;
     }
 
     int fds_left_to_connect = FD_COUNT;
     while(fds_left_to_connect > 0) {
-
+        
+        errno = 0;
         int poll_return = poll(fd_structs, FD_COUNT, 6000);
         int poll_errno = errno;
 
@@ -310,19 +315,20 @@ TEST_F(AsyncTests, ConnectWriteRead5) {
             FAIL();
 
         set_hostname(fds[i], HOSTNAME);
-        connect_to_host(fds[i], HOSTNAME, HTTPS_PORT);
+        connect_to_host_fail(fds[i], HOSTNAME, HTTPS_PORT, EINPROGRESS);
     }
 
     struct pollfd fd_structs[FD_COUNT] = {0};
 
     for (i = 0; i < FD_COUNT; i++) {
         fd_structs[i].fd = fds[i];
-        fd_structs[i].events = POLLOUT | POLLERR | POLLPRI | POLLHUP;
+        fd_structs[i].events = POLLOUT;
     }
 
     int fds_left = FD_COUNT;
     while(fds_left > 0) {
-
+        
+        errno = 0;
         int poll_return = poll(fd_structs, FD_COUNT, 6000);
         int poll_errno = errno;
 
@@ -339,17 +345,16 @@ TEST_F(AsyncTests, ConnectWriteRead5) {
 
             ASSERT_FALSE(fd_structs[i].revents & POLLERR);
             ASSERT_FALSE(fd_structs[i].revents & POLLHUP);
-            ASSERT_FALSE(fd_structs[i].revents & POLLNVAL);
-            ASSERT_FALSE(fd_structs[i].revents & POLLPRI);
 
             num_fds_ready++;
 
             if (fd_structs[i].revents & POLLOUT) { /* ready for write */
-                connect_to_host_fail(fds[i], HOSTNAME, HTTPS_PORT, EISCONN);
+                /* connect_to_host_fail(fds[i], HOSTNAME, HTTPS_PORT, EISCONN); */
 
 
                 int total_write_len = strlen("GET / HTTP/1.1\r\n\r\n")+1;
 
+                errno = 0;
                 int write_return = write(fds[i],
                     "GET / HTTP/1.1\r\n\r\n", total_write_len);
                 int write_errno = errno;
@@ -362,9 +367,11 @@ TEST_F(AsyncTests, ConnectWriteRead5) {
                 EXPECT_EQ(write_errno, 0);
                 ASSERT_EQ(write_return, total_write_len);
 
-                fd_structs[i].events = POLLIN | POLLHUP | POLLERR;
+                fd_structs[i].events = POLLIN;
 
             } else if (fd_structs[i].revents & POLLIN) { /* ready for read */
+
+                errno = 0;
                 curr_read_len = read(fds[i], buf, 10000);
                 int read_errno = errno;
 
