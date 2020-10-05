@@ -281,18 +281,6 @@ err:
     return -EBADF;
 }
 
-/**
- * Requires clients to provide certificates to servers. 
- * 
- */
-// int set_trusted_peer_certificates(socket_ctx *sock_ctx, char* arg) {
-
-// 	int flags = SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
-// 	SSL_CTX_set_verify(sock_ctx->ssl_ctx, flags, NULL); // what to do if this fails?
-
-// 	return 0;
-// }
-
 int set_min_version(socket_ctx *sock_ctx, int* version, socklen_t len) {
 
     int response = 0;
@@ -638,7 +626,7 @@ int check_key_cert_pair(socket_ctx* sock_ctx) {
         goto err;
     }
 
-    if (SSL_CTX_build_cert_chain(sock_ctx->ssl_ctx, SSL_BUILD_CHAIN_FLAG_CHECK) != 1) {
+    if (SSL_CTX_build_cert_chain(sock_ctx->ssl_ctx, 0) != 1) {
         log_printf(LOG_ERROR, "Certificate chain failed to build.\n");
         set_err_string(sock_ctx, "TLS error: privateKey/cert chain incomplete - %s",
                 ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));

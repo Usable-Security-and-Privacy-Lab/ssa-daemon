@@ -136,7 +136,7 @@ SSL_CTX* SSL_CTX_create(global_config* settings) {
 	}
 
 	for(int i = 0; i < settings->cert_cnt; ++i) {
-		ret = load_certificates(ctx, settings->certificates[i]); 
+		ret = load_certificates(ctx, settings->certificates[i]); // eventually delete this
 		if (ret != 1) 
 			goto err;
 
@@ -157,19 +157,6 @@ err:
 
     return NULL;
 }
-
-
-/**
- * Attempts to create a new SSL struct and attach it to the given connection.
- * If unsuccessful, the connection's state will not be altered--if it
- * contained an SSL struct prior to this call, that struct will remain.
- * @param conn The connection to assign a new client SSL struct to.
- * @returns 0 on success; -errno otherwise.
- */
-// int client_SSL_new(socket_ctx* sock_ctx) {
-
-
-
 
 
 /**
