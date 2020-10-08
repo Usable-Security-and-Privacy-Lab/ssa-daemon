@@ -478,6 +478,40 @@ int concat_ciphers(char** list, int num, char** out) {
     return 1;
 }
 
+
+/**
+ * Verifies that a given path is a file that contains valid certificate 
+ * authority X509 certificates.
+ * @param CA_path A path that should contain certificate authorities.
+ * @returns 0 on success, or -1 if the path failed verification.
+ */
+int test_certificate_authority(char *CA_path) {
+
+    SSL_CTX *ctx;
+    int ret;
+
+    ctx = SSL_CTX_new(TLS_client_method());
+    if (ctx == NULL) {
+        LOG_E("Certificate authority could not be verified: out of memory\n");
+
+        errno = 0;
+        return -1;
+    }
+
+    ret = load_certificate_authority(ctx, CA_path);
+    if (ret != 1) {
+        unsigned long ssl_err = ERR_get_error();
+        if (ssl_err != 0)
+            LOG_E("Certificate authority could not be parsed: %s\n",
+                  ERR_reason_error_string(ssl_err));
+
+        errno = 0;
+        return -1;
+    }
+
+    return 0;
+}
+
 /**
  * Loads the given certificate authority .pem or .der-encoded certificates into
  * ctx from the file or directory specified by path. This function will load in
@@ -494,6 +528,7 @@ int load_certificate_authority(SSL_CTX* ctx, char* CA_path) {
 
     struct stat file_stats;
 
+    /* TODO: Add all potential OS paths here */
     if (CA_path == NULL) { /* No CA file given--search for one based on system */
         if (access(UBUNTU_DEFAULT_CA, F_OK) != -1) {
             CA_path = UBUNTU_DEFAULT_CA;

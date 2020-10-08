@@ -12,6 +12,7 @@
 
 #include "config.h"
 #include "log.h"
+#include "socket_setup.h"
 
 #define MAX_STRLIST_SIZE 100
 
@@ -206,6 +207,8 @@ int parse_next_setting(yaml_parser_t* parser, global_config* config) {
     * ADD ADDITIONAL SETTINGS AS NEEDS BE HERE (as well as to the struct) */
     if (strcmp(label, CA_PATH) == 0) {
         ret = parse_string(parser, &config->ca_path);
+        if (test_certificate_authority(config->ca_path) != 0)
+            ret = -1;
 
     } else if (strcmp(label, CIPHER_LIST) == 0) {
         ret = parse_string_list(parser, 
@@ -610,6 +613,7 @@ int parse_stream(yaml_parser_t* parser, global_config* settings) {
         log_printf(LOG_ERROR, "Config: File didn't end correctly\n");
         return -1;
     }
+
     return 0;
 }
 
@@ -664,6 +668,7 @@ int parse_settings(yaml_parser_t* parser, global_config* settings) {
 
     while (!done)
         done = parse_next_setting(parser, settings);
+
     if (done == -1)
         return -1;
 
@@ -852,6 +857,7 @@ void str_tolower(char* string) {
  * @param parser The parser to log errors from.
  */
 void log_parser_error(yaml_parser_t parser) {
+
     switch (parser.error) {
     case YAML_MEMORY_ERROR:
         log_printf(LOG_ERROR, "Insufficient memory to scan config file\n");

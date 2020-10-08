@@ -35,7 +35,7 @@
  */
 SSL_CTX* SSL_CTX_create(global_config* settings);
 
-
+int test_certificate_authority(char *CA_path);
 
 int prepare_SSL_client(socket_ctx* sock_ctx);
 
