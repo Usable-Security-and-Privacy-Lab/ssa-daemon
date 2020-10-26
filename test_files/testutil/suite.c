@@ -17,9 +17,15 @@ void kill_daemon();
 void validate();
 
 
+void sigkill_handler(int signal)
+{
+    cleanup_children();
+    exit(1);
+}
 
-void sigchild_fail_handler(int signal) {
 
+void sigchild_fail_handler(int signal)
+{
     int original_errno = errno;
     int daemon_ret, server_ret;
 
@@ -50,14 +56,15 @@ void sigchild_fail_handler(int signal) {
     errno = original_errno;
 }
 
-void sigio_dummy(int signal) {
+void sigio_dummy(int signal)
+{
     return;
 }
 
 
 
-void start_daemon(const char* daemon_config, int use_valgrind) {
-
+void start_daemon(const char* daemon_config, int use_valgrind)
+{
     sigset_t set;
     int returned_sig, ret;
 
@@ -65,6 +72,8 @@ void start_daemon(const char* daemon_config, int use_valgrind) {
     sigaddset(&set, SIGIO);
 
     signal(SIGCHLD, sigchild_fail_handler);
+    signal(SIGKILL, sigkill_handler);
+    signal(SIGINT, sigkill_handler);
     signal(SIGIO, sigio_dummy);
 
     char pid_env[128] = {0};
@@ -97,19 +106,17 @@ void start_daemon(const char* daemon_config, int use_valgrind) {
         exit(1);
     }
 
-    
-
     ret = sigwait(&set, &returned_sig);
     if (ret > 0 || returned_sig != SIGIO) {
         perror("sigwait() failed--unable to start daemon\n");
-        cleanup();
+        cleanup_children();
         exit(1);
     }
 }
 
 
-void start_server(const char* server_path) {
-
+void start_server(const char* server_path)
+{
     sigset_t set;
     int returned_sig, ret;
 
@@ -131,12 +138,13 @@ void start_server(const char* server_path) {
     ret = sigwait(&set, &returned_sig);
     if (ret > 0 || returned_sig != SIGIO) {
         perror("sigwait() failed--unable to start server\n");
-        cleanup();
+        cleanup_children();
         exit(1);
     }
 }
 
-void validate() {
+void validate()
+{
     static int is_validated = 0;
 
     if (!is_validated) {
@@ -155,8 +163,8 @@ void validate() {
     }
 }
 
-void cleanup() {
-
+void cleanup_children()
+{
     int ret;
 
     signal(SIGCHLD, NULL);
@@ -174,8 +182,8 @@ void cleanup() {
     //sleep(1); /* give time for valgrind to print out messages */
 }
 
-void kill_daemon() {
-
+void kill_daemon()
+{
     signal(SIGCHLD, NULL);
 
     /* killing a sudoed process requires sudo permissions... :( */
