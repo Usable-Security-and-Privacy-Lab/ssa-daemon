@@ -170,7 +170,7 @@ void crl_responder_event_cb(struct bufferevent* bev, short events, void* arg) {
 
 	}
 	if (events & BEV_EVENT_TIMEOUT || events & BEV_EVENT_ERROR) {
-		log_printf(LOG_ERROR, "Bufferevent timed out/encountered error\n");
+		LOG_E("Bufferevent timed out/encountered error\n");
 		goto err;
 	}
 

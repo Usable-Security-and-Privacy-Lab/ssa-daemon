@@ -159,7 +159,7 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
         len = sizeof(id);
         break; */
     default:
-        log_printf(LOG_ERROR,
+        log_printf(LOG_ERR,
                 "Default case for getsockopt hit: should never happen\n");
         response = -EBADF;
         break;

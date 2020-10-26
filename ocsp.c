@@ -213,7 +213,7 @@ int form_http_request(unsigned char **http_req,
 
     body_len = i2d_OCSP_REQUEST(ocsp_req, &body);
     if (body_len <= 0) {
-        log_printf(LOG_ERROR, "Malformed OCSP Request (internal error)\n");
+        LOG_E("Malformed OCSP Request (internal error)\n");
         return -1;
     }
 
@@ -265,13 +265,13 @@ int send_ocsp_request(struct bufferevent* bev, char* url, OCSP_REQUEST* req) {
     
     req_len = form_http_request(&http_req, req, host, path);
     if (req_len < 0) {
-        log_printf(LOG_ERROR, "form_http_request failed\n");
+        LOG_E("form_http_request failed\n");
         goto err;
     }
 
     ret = bufferevent_write(bev, http_req, req_len);
     if (ret != 0) {
-        log_printf(LOG_ERROR, "Bufferevent_write failed\n");
+        LOG_E("Bufferevent_write failed\n");
         goto err;
     }
 
@@ -331,7 +331,7 @@ void ocsp_responder_event_cb(struct bufferevent* bev, short events, void* arg) {
     }
 
     if (events & BEV_EVENT_TIMEOUT || events & BEV_EVENT_ERROR) {
-        log_printf(LOG_ERROR, "Bufferevent timed out/encountered error\n");
+        LOG_E("Bufferevent timed out/encountered error\n");
         goto err;
     }
 

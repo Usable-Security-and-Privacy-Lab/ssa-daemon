@@ -125,13 +125,13 @@ int run_daemon(int port, char* config_path) {
     /* Set up server socket with event base */
     ipv4_server = create_server_socket(port, PF_INET, SOCK_STREAM);
     if (ipv4_server < 0) {
-        LOG_F("Daemon IPv4 server socket creation failed\n");
+        LOG_C("Daemon IPv4 server socket creation failed\n");
         goto err;
     }
 
     ipv6_server = create_server_socket(port, PF_INET6, SOCK_STREAM);
     if (ipv6_server < 0) {
-        LOG_F("Daemon IPv6 server socket creation failed\n");
+        LOG_C("Daemon IPv6 server socket creation failed\n");
         goto err;
     }
 
@@ -190,7 +190,7 @@ int run_daemon(int port, char* config_path) {
 
     return EXIT_SUCCESS;
 err:
-    LOG_F("Daemon setup failed\n");
+    LOG_C("Daemon setup failed\n");
 
     if (ipv4_listener != NULL)
         evconnlistener_free(ipv4_listener); /* This also closes the socket */
@@ -261,7 +261,7 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
     for (addr_ptr = addr_list; addr_ptr != NULL; addr_ptr = addr_ptr->ai_next) {
         sock = socket(addr_ptr->ai_family, addr_ptr->ai_socktype | SOCK_NONBLOCK, addr_ptr->ai_protocol);
         if (sock == -1) {
-            log_printf(LOG_ERROR, "socket: %s\n", strerror(errno));
+            LOG_E("socket: %s\n", strerror(errno));
             continue;
         }
 
@@ -277,7 +277,7 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
 
         ret = evutil_make_listen_socket_reuseable(sock);
         if (ret == -1) {
-            log_printf(LOG_ERROR, "Failed in evutil_make_listen_socket_reuseable: %s\n",
+            LOG_E("Failed in evutil_make_listen_socket_reuseable: %s\n",
                  evutil_socket_error_to_string(EVUTIL_SOCKET_ERROR()));
             EVUTIL_CLOSESOCKET(sock);
             continue;
@@ -285,7 +285,7 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
 
         ret = bind(sock, addr_ptr->ai_addr, addr_ptr->ai_addrlen);
         if (ret == -1) {
-            log_printf(LOG_ERROR, "bind: %s\n", strerror(errno));
+            LOG_E("bind: %s\n", strerror(errno));
             EVUTIL_CLOSESOCKET(sock);
             continue;
         }
@@ -294,7 +294,7 @@ evutil_socket_t create_server_socket(ev_uint16_t port, int family, int type) {
     }
     evutil_freeaddrinfo(addr_list);
     if (addr_ptr == NULL) {
-        log_printf(LOG_ERROR, "Failed to find a suitable address for binding\n");
+        LOG_E("Failed to find a suitable address for binding\n");
         return -1;
     }
 
@@ -331,14 +331,14 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,
     port = get_port(address);
     sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map_port, port);
     if (sock_ctx == NULL) {
-        log_printf(LOG_ERROR, "Unauthorized connection on port %d\n", port);
+        LOG_E("Unauthorized connection on port %d\n", port);
         return;
     }
 
     /* Don't clear the socket's error string here */
 
     if (sock_ctx->state != SOCKET_FINISHING_CONN) {
-        log_printf(LOG_ERROR, "accept_cb() called on bad connection\n");
+        LOG_E("accept_cb() called on bad connection\n");
         goto err;
     }
 
@@ -398,7 +398,7 @@ void accept_error_cb(struct evconnlistener *listener, void *ctx) {
                 err, evutil_socket_error_to_string(err));
         break;
     default:
-        log_printf(LOG_ERROR, "Fatal error %d (%s) on the main listener\n",
+        LOG_E("Fatal error %d (%s) on the main listener\n",
                 err, evutil_socket_error_to_string(err));
         base = evconnlistener_get_base(listener);
         event_base_loopexit(base, NULL);
@@ -526,7 +526,7 @@ void listener_accept_error_cb(struct evconnlistener *listener, void *arg) {
         /* all these errors can be ignored */
         break;
     default:
-        log_printf(LOG_ERROR, "Fatal error %d (%s) on a server listener\n",
+        LOG_E("Fatal error %d (%s) on a server listener\n",
                 err, evutil_socket_error_to_string(err));
 
         SSL_free(sock_ctx->ssl);
@@ -582,7 +582,7 @@ void socket_cb(daemon_ctx* daemon, unsigned long id, unsigned short family) {
 
     sock_ctx = (socket_ctx*)hashmap_get(daemon->sock_map, id);
     if (sock_ctx != NULL) {
-        log_printf(LOG_ERROR,
+        log_printf(LOG_ERR,
                 "Socket already created with ID %lu\n", id);
         response = -ECANCELED;
         sock_ctx = NULL; /* err would try to free sock_ctx otherwise */
@@ -603,7 +603,7 @@ void socket_cb(daemon_ctx* daemon, unsigned long id, unsigned short family) {
     fd = socket(family, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
     if (fd == -1) {
         response = -errno;
-        log_global_error(LOG_ERROR, "daemon socket creation failed");
+        log_global_error(LOG_ERR, "daemon socket creation failed");
         goto err;
     }
 
@@ -620,7 +620,7 @@ err:
     if (sock_ctx != NULL)
         socket_context_free(sock_ctx);
 
-    log_printf(LOG_ERROR, "Socket failed to be created: %i\n", response);
+    LOG_E("Socket failed to be created: %i\n", response);
 
     netlink_notify_kernel(daemon, id, response);
     return;
@@ -888,14 +888,14 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
 
     ret = bufferevent_socket_connect(sock_ctx->secure.bev, rem_addr, rem_addrlen);
     if (ret != 0) {
-        log_global_error(LOG_ERROR, "Failed to launch connection attempt");
+        log_global_error(LOG_ERR, "Failed to launch connection attempt");
         response = -ECANCELED;
         goto err;
     }
 
     ret = hashmap_add(daemon->sock_map_port, sock_ctx->local_port, sock_ctx);
     if (ret != 0) {
-        log_global_error(LOG_ERROR, "Failed to add socket to daemon's hashmap");
+        log_global_error(LOG_ERR, "Failed to add socket to daemon's hashmap");
         response = -ECANCELED;
         goto err;
     }
@@ -969,7 +969,7 @@ void listen_cb(daemon_ctx* daemon, unsigned long id,
     return;
 
 err:
-    log_global_error(LOG_ERROR, "Failed to start listening for connections");
+    log_global_error(LOG_ERR, "Failed to start listening for connections");
 
     netlink_notify_kernel(daemon, id, response);
 

@@ -268,7 +268,7 @@ int parse_next_setting(yaml_parser_t* parser, global_config* config) {
 
     } else if (strcmp(label, CERT_PATH) == 0) {
         if (config->cert_cnt >= MAX_CERTS) {
-            log_printf(LOG_ERROR, "Config: Maximum keys (%i) exceeded\n", 
+            LOG_E("Config: Maximum keys (%i) exceeded\n", 
                     MAX_CERTS);
             ret = -1;
         } else {
@@ -278,7 +278,7 @@ int parse_next_setting(yaml_parser_t* parser, global_config* config) {
 
     } else if (strcmp(label, KEY_PATH) == 0) {
         if (config->key_cnt >= MAX_CERTS) {
-            log_printf(LOG_ERROR, "Config: Maximum keys (%i) exceeded\n", 
+            LOG_E("Config: Maximum keys (%i) exceeded\n", 
                     MAX_CERTS);
             ret = -1;
         } else {
@@ -287,7 +287,7 @@ int parse_next_setting(yaml_parser_t* parser, global_config* config) {
         }
     
     } else {
-        log_printf(LOG_ERROR, "Config: Undefined label %s\n", label);
+        LOG_E("Config: Undefined label %s\n", label);
         ret = -1;
     }
     
@@ -314,7 +314,7 @@ int parse_next_setting(yaml_parser_t* parser, global_config* config) {
 int parse_string(yaml_parser_t* parser, char** string) {
     
     if (*string != NULL) {
-        log_printf(LOG_ERROR, "Config: Label assigned twice\n");
+        LOG_E("Config: Label assigned twice\n");
         return -1;
     }
 
@@ -338,19 +338,19 @@ int parse_string(yaml_parser_t* parser, char** string) {
 int parse_string_list(yaml_parser_t* parser, char** strings[], int* num) {
 
     if (*strings != NULL) {
-        log_printf(LOG_ERROR, "Config: Label assigned twice\n");
+        LOG_E("Config: Label assigned twice\n");
         return -1;
     }
 
     /* the following +1 is to ensure the string list is NULL-terminated */
     *strings = calloc(1, (MAX_STRLIST_SIZE + 1) * sizeof(char*));
     if (*strings == NULL) {
-        log_printf(LOG_ERROR, "Config: failed to malloc - %s\n", 
+        LOG_E("Config: failed to malloc - %s\n", 
                 strerror(errno));
     }
 
     if (parse_next_event(parser) != YAML_SEQUENCE_START_EVENT) {
-        log_printf(LOG_ERROR, "Config parsing error: expected list\n");
+        LOG_E("Config parsing error: expected list\n");
         return -1;
     }
 
@@ -381,7 +381,7 @@ int parse_string_list_member(yaml_parser_t* parser, char** strings, int* num) {
     char* label;
 
     if (*num > MAX_STRLIST_SIZE) {
-        log_printf(LOG_ERROR, "Config: max list size exceeded (%i)\n",
+        LOG_E("Config: max list size exceeded (%i)\n",
                 MAX_STRLIST_SIZE);
         return -1;
     }
@@ -407,7 +407,7 @@ int parse_string_list_member(yaml_parser_t* parser, char** strings, int* num) {
 
     if (strings[*num] != NULL) {
         /* This really shouldn't happen... if it does it's our code's fault */
-        log_printf(LOG_ERROR, "Parser overwriting string list\n");
+        LOG_E("Parser overwriting string list\n");
         return -1;
     }
 
@@ -499,7 +499,7 @@ int parse_tls_version(yaml_parser_t* parser, enum tls_version* version) {
             || strcmp(tls_version, TLS1_3_ALT_STRING) == 0) {
         *version = TLS1_3_ENUM;
     } else {
-        log_printf(LOG_ERROR, "Config: Unknown TLS version '%s'\n",
+        LOG_E("Config: Unknown TLS version '%s'\n",
                 tls_version);
         free(tls_version);
         return -1;
@@ -540,20 +540,20 @@ global_config* parse_config(char* file_path) {
         file_path = DEFAULT_CONFIG_PATH;
 
     if (yaml_parser_initialize(&parser) != 1) {
-        log_printf(LOG_ERROR, "Failed to initialize config parser\n");
+        LOG_E("Failed to initialize config parser\n");
         return NULL;
     }
 
     input = fopen(file_path, "r");
     if (input == NULL) {
-        LOG_F("Couldn't find configuration file in specified path...\n");
+        LOG_C("Couldn't find configuration file in specified path...\n");
         errno = 0;
         return NULL;
     }
 
     settings = calloc(1, sizeof(global_config));
     if (settings == NULL) {
-        log_printf(LOG_ERROR, "Failed to allocate settings struct: %s\n",
+        LOG_E("Failed to allocate settings struct: %s\n",
                 strerror(errno));
         goto err;
     }
@@ -598,7 +598,7 @@ int parse_stream(yaml_parser_t* parser, global_config* settings) {
     if (type == YAML_STREAM_END_EVENT) {
         return 0; /* empty files are valid */
     } else if (type != YAML_DOCUMENT_START_EVENT) {
-        log_printf(LOG_ERROR, "Config: Document start not found\n");
+        LOG_E("Config: Document start not found\n");
         return -1;
     } 
     /* type == YAML_DOCUMENT_START_EVENT */
@@ -607,7 +607,7 @@ int parse_stream(yaml_parser_t* parser, global_config* settings) {
         return -1;
 
     if (parse_next_event(parser) != YAML_STREAM_END_EVENT) {
-        log_printf(LOG_ERROR, "Config: File didn't end correctly\n");
+        LOG_E("Config: File didn't end correctly\n");
         return -1;
     }
     return 0;
@@ -631,7 +631,7 @@ int parse_document(yaml_parser_t* parser, global_config* settings) {
         return 0; /* empty documents are also acceptable */
         
     } else if (type != YAML_MAPPING_START_EVENT) {
-        log_printf(LOG_ERROR, "Config: expected either "
+        LOG_E("Config: expected either "
                 "\'client:\' or \'server:\' at start of document\n");
         return -1;
     }
@@ -643,7 +643,7 @@ int parse_document(yaml_parser_t* parser, global_config* settings) {
     type = parse_next_event(parser);
 
     if (type != YAML_DOCUMENT_END_EVENT) {
-        log_printf(LOG_ERROR, "Config: expected \'server:\' label\n");
+        LOG_E("Config: expected \'server:\' label\n");
         printf("Label: %i\n", type);
         return -1;
     }
@@ -710,7 +710,7 @@ int check_label_to_parse(yaml_parser_t* parser, char* label) {
             return -1;
         
         if (strcmp(ev_label, label) != 0) {
-            log_printf(LOG_ERROR, "Config: Invalid or duplicate label '%s'\n",
+            LOG_E("Config: Invalid or duplicate label '%s'\n",
                     ev_label);
             free(ev_label);
             return -1;
@@ -798,7 +798,7 @@ int is_enabled(char* label) {
         return 0;
     }
 
-    log_printf(LOG_ERROR, "Label '%s' is not a valid indicator. "
+    LOG_E("Label '%s' is not a valid indicator. "
             "Try 'enabled' or 'disabled' instead\n");
     return -1;
 }
@@ -854,51 +854,46 @@ void str_tolower(char* string) {
 void log_parser_error(yaml_parser_t parser) {
     switch (parser.error) {
     case YAML_MEMORY_ERROR:
-        log_printf(LOG_ERROR, "Insufficient memory to scan config file\n");
+        LOG_E("Insufficient memory to scan config file\n");
         break;
 
     case YAML_READER_ERROR:
         if (parser.problem_value != -1) {
-            log_printf(LOG_ERROR, 
-                    "Config reader error: %s: #%X at %ld\n", parser.problem,
-                    parser.problem_value, (long)parser.problem_offset);
+            LOG_E("Config reader error: %s: #%X at %ld\n", parser.problem,
+                  parser.problem_value, (long)parser.problem_offset);
         } else {
-            log_printf(LOG_ERROR, "Config reader error: %s at %ld\n", 
+            LOG_E("Config reader error: %s at %ld\n", 
                     parser.problem, (long)parser.problem_offset);
         }
         break;
 
     case YAML_SCANNER_ERROR:
         if (parser.context) {
-            log_printf(LOG_ERROR, 
-                    "Config scanner error: %s at line %d, column %d\n"
-                    "%s at line %d, column %d\n", parser.context,
-                    (int)parser.context_mark.line+1, 
-                    (int)parser.context_mark.column+1,
-                    parser.problem, (int)parser.problem_mark.line+1,
-                    (int)parser.problem_mark.column+1);
+            LOG_E("Config scanner error: %s at line %d, column %d\n"
+                  "%s at line %d, column %d\n", parser.context,
+                  (int)parser.context_mark.line+1, 
+                  (int)parser.context_mark.column+1,
+                  parser.problem, (int)parser.problem_mark.line+1,
+                  (int)parser.problem_mark.column+1);
         } else {
-            log_printf(LOG_ERROR, 
-                    "Config scanner error: %s at line %d, column %d\n",
-                    parser.problem, (int)parser.problem_mark.line+1,
-                    (int)parser.problem_mark.column+1);
+            LOG_E("Config scanner error: %s at line %d, column %d\n",
+                  parser.problem, (int)parser.problem_mark.line+1,
+                  (int)parser.problem_mark.column+1);
         }
         break;
 
     case YAML_PARSER_ERROR:
         if (parser.context) {
-            log_printf(LOG_ERROR, 
-                    "Config parser error: %s at line %d, column %d\n"
-                    "%s at line %d, column %d\n", parser.context,
-                    (int)parser.context_mark.line+1, 
-                    (int)parser.context_mark.column+1,
-                    parser.problem, (int)parser.problem_mark.line+1,
-                    (int)parser.problem_mark.column+1);
+            LOG_E("Config parser error: %s at line %d, column %d\n"
+                  "%s at line %d, column %d\n", parser.context,
+                  (int)parser.context_mark.line+1, 
+                  (int)parser.context_mark.column+1,
+                  parser.problem, (int)parser.problem_mark.line+1,
+                  (int)parser.problem_mark.column+1);
         } else {
-            log_printf(LOG_ERROR, 
-                    "Config parser error: %s at line %d, column %d\n",
-                    parser.problem, (int)parser.problem_mark.line+1,
-                    (int)parser.problem_mark.column+1);
+            LOG_E("Config parser error: %s at line %d, column %d\n",
+                  parser.problem, (int)parser.problem_mark.line+1,
+                  (int)parser.problem_mark.column+1);
         }
         break;
 

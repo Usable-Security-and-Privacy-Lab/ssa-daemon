@@ -384,7 +384,7 @@ int verify_ocsp_basicresp(OCSP_BASICRESP* resp,
     ret = OCSP_check_validity(thisupd, nextupd, LEEWAY_90_SECS, MAX_OCSP_AGE);
     if (ret != 1) {
         /* response too old */
-        log_printf(LOG_ERROR, "cert is too old or has invalid timestamps\n");
+        LOG_E("cert is too old or has invalid timestamps\n");
         status = V_OCSP_CERTSTATUS_UNKNOWN;
     }
 

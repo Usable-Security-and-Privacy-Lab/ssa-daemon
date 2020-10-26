@@ -97,7 +97,7 @@ int get_directory_certs(X509** cert_list, DIR* directory, char* dir_name) {
 		FILE* current_file = fopen(file_name, "r"); 
 
 		if(current_file == NULL) {
-			log_printf(LOG_ERROR, "Error: Could not open file %s (Errno %d).\n", file_name, errno);
+			LOG_E("Could not open file %s (Errno %d).\n", file_name, errno);
 			free_certificates(cert_list, num_certs, directory);
 			return -1;
 		}
@@ -110,7 +110,7 @@ int get_directory_certs(X509** cert_list, DIR* directory, char* dir_name) {
 		}
 
 		if(cert_list[num_certs] == NULL) {
-			log_printf(LOG_ERROR, "Error converting \"%s\" file to certificate.\n", cert_name);
+			LOG_E("Error converting \"%s\" file to certificate.\n", cert_name);
 			free_certificates(cert_list, num_certs, directory);
 			return -1;
 		}
@@ -120,7 +120,7 @@ int get_directory_certs(X509** cert_list, DIR* directory, char* dir_name) {
 		errno = 0;
 	}
 	if(errno != 0) {
-		log_printf(LOG_ERROR, "Error reading directory %s.\n", dir_name);
+		LOG_E("Error reading directory %s.\n", dir_name);
 		return -1;
 	}
 	return 0;
@@ -136,18 +136,18 @@ int get_directory_certs(X509** cert_list, DIR* directory, char* dir_name) {
 int add_directory_certs(SSL_CTX* ctx, X509** cert_list, int num_certs) { 
 	int end_index = get_end_entity(cert_list, num_certs);
 	if(end_index < 0) {
-		log_printf(LOG_ERROR, "Could not locate end entity certificate.\n");
+		LOG_E("Could not locate end entity certificate.\n");
 		return 0;
 	}
 
 	if(SSL_CTX_use_certificate(ctx, cert_list[end_index]) != 1) {
-		log_printf(LOG_ERROR, "Error loading end certificate.\n");
+		LOG_E("Error loading end certificate.\n");
 		return 0;
 	}
 
 	const ASN1_STRING* issuer = X509_get0_authority_key_id(cert_list[end_index]);
 	if(issuer == NULL) {
-		log_printf(LOG_ERROR, "X509 authority key extension not found.\n");
+		LOG_E("X509 authority key extension not found.\n");
 		return 0;
 	}
 	
@@ -156,13 +156,13 @@ int add_directory_certs(SSL_CTX* ctx, X509** cert_list, int num_certs) {
 
 			const ASN1_STRING* subject = X509_get0_subject_key_id(cert_list[k]);
 			if(subject == NULL) {
-				log_printf(LOG_ERROR, "X509 subject key extension not found.\n");
+				LOG_E("X509 subject key extension not found.\n");
 				return 0;
 			}
 
 			if(ASN1_STRING_cmp(issuer, subject) == 0) {
 				if(SSL_CTX_add0_chain_cert(ctx, cert_list[k]) != 1) { 
-					log_printf(LOG_ERROR, "Error adding CA to chain.\n");
+					LOG_E("Error adding CA to chain.\n");
 					return 0;
 				}
 				issuer = X509_get0_authority_key_id(cert_list[k]);
@@ -191,19 +191,19 @@ int load_private_key(SSL_CTX* ctx, char* key_path) {
 
 	int ret = SSL_CTX_use_PrivateKey_file(ctx, key_path, file_type);
 	if (ret != 1) { 
-		log_printf(LOG_ERROR, "Couldn't use private key file\n");
+		LOG_E("Couldn't use private key file\n");
 		return 0;
 	}
 
 	ret = SSL_CTX_check_private_key(ctx);
 	if (ret != 1) {
-		log_printf(LOG_ERROR, "Loaded Private Key didn't match cert chain\n");
+		LOG_E("Loaded Private Key didn't match cert chain\n");
 		return 0;
 	}
 	
 	ret = SSL_CTX_build_cert_chain(ctx, 0); 
 	if (ret != 1) {
-		log_printf(LOG_ERROR, "Incomplete server certificate chain\n");
+		LOG_E("Incomplete server certificate chain\n");
 		return 0;
 	}
 
@@ -224,7 +224,7 @@ int load_certificates(SSL_CTX* ctx, char* path) { // delete this when setsockopt
 
 	if(is_pem_file(path)) {
 		if(SSL_CTX_use_certificate_chain_file(ctx, path) != 1) {
-			log_printf(LOG_ERROR, "Failed to load certificate chain file.\n");
+			LOG_E("Failed to load certificate chain file.\n");
 			return 0;
 		}
 	}
@@ -236,21 +236,21 @@ int load_certificates(SSL_CTX* ctx, char* path) { // delete this when setsockopt
 
 		int ret = get_directory_certs(cert_list, directory, path);
 		if(ret < 0) {
-			log_printf(LOG_ERROR, "Failed to get certificates from directory.\n");
+			LOG_E("Failed to get certificates from directory.\n");
 			return 0;
 		}
 		
 		ret = add_directory_certs(ctx, cert_list, num_certs);
 		if(ret < 1) {
 			free_certificates(cert_list, num_certs, directory);
-			log_printf(LOG_ERROR, "Failed to add certificates from directory.\n");
+			LOG_E("Failed to add certificates from directory.\n");
 			return 0;
 		}
 
 		free_certificates(cert_list, num_certs, directory);
 	}
 	else {
-		log_printf(LOG_ERROR, "[cert-path] must be a pem file or directory.\n");
+		LOG_E("[cert-path] must be a pem file or directory.\n");
 		return 0;
 	}
 
@@ -261,7 +261,7 @@ int load_directory_certs(SSL_CTX* ctx, char* path) {
 	DIR* directory = opendir(path);
 
 	if(directory == NULL) {
-		log_printf(LOG_ERROR, "Could not read directory.\n");
+		LOG_E("Could not read directory.\n");
 		return 0;
 	}
 	
@@ -272,14 +272,14 @@ int load_directory_certs(SSL_CTX* ctx, char* path) {
 
 	int ret = get_directory_certs(cert_list, directory, path);
 	if(ret < 0) {
-		log_printf(LOG_ERROR, "Failed to get certificates from directory.\n");
+		LOG_E("Failed to get certificates from directory.\n");
 		return 0;
 	}
 	
 	ret = add_directory_certs(ctx, cert_list, num_certs);
 	if(ret < 1) {
 		free_certificates(cert_list, num_certs, directory);
-		log_printf(LOG_ERROR, "Failed to add certificates from directory.\n");
+		LOG_E("Failed to add certificates from directory.\n");
 		return 0;
 	}
 

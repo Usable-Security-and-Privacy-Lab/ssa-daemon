@@ -219,7 +219,7 @@ int set_certificate_chain(socket_ctx* sock_ctx, char* path, socklen_t len) {
 err:
     ssl_err = ERR_get_error();
 
-    log_printf(LOG_ERROR, "Failed to load certificate chain: %s\n", 
+    LOG_E("Failed to load certificate chain: %s\n", 
             ssl_err ? ERR_error_string(ssl_err, NULL) : "not a file or folder");
 
     set_err_string(sock_ctx, "TLS error: couldn't set certificate chain - %s",
@@ -274,7 +274,7 @@ int set_private_key(socket_ctx* sock_ctx, char* path, socklen_t len) {
 
     return 0;
 err:
-    log_printf(LOG_ERROR, "Failed to set private key: %s\n", 
+    LOG_E("Failed to set private key: %s\n", 
             ERR_reason_error_string(ERR_GET_REASON(ERR_peek_error())));
     set_err_string(sock_ctx, "TLS error: failed to set private key - %s",
             ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
@@ -620,14 +620,14 @@ int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist) {
  */
 int check_key_cert_pair(socket_ctx* sock_ctx) {
     if (SSL_CTX_check_private_key(sock_ctx->ssl_ctx) != 1) {
-        log_printf(LOG_ERROR, "Key and certificate don't match.\n");
+        LOG_E("Key and certificate don't match.\n");
         set_err_string(sock_ctx, "TLS error: certificate/privateKey mismatch - %s",
                 ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
         goto err;
     }
 
     if (SSL_CTX_build_cert_chain(sock_ctx->ssl_ctx, 0) != 1) {
-        log_printf(LOG_ERROR, "Certificate chain failed to build.\n");
+        LOG_E("Certificate chain failed to build.\n");
         set_err_string(sock_ctx, "TLS error: privateKey/cert chain incomplete - %s",
                 ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
         goto err;

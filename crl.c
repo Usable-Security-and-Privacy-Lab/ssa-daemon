@@ -167,13 +167,13 @@ int send_crl_request(struct bufferevent* bev, char* url, char* http_req) {
 
 	req_len = form_crl_http_request(host, path, &http_req);
 	if (req_len < 0) {
-		log_printf(LOG_ERROR, "form_http_request failed\n");
+		LOG_E("form_http_request failed\n");
 		goto err;
 	}
 
 	ret = bufferevent_write(bev, http_req, req_len);
 	if (ret != 0) {
-		log_printf(LOG_ERROR, "Bufferevent_write failed\n");
+		LOG_E("Bufferevent_write failed\n");
 		goto err;
 	}
 
@@ -332,7 +332,7 @@ int check_crl_response(X509_CRL* crl, X509* subject, X509* issuer, int* response
 	ret = X509_CRL_verify(crl, CA_public_key);
 	if (ret != 1) {
 		/* signature check failed */
-		log_printf(LOG_ERROR, "CRL signature doesn't match CA\n");
+		LOG_E("CRL signature doesn't match CA\n");
 		*response = X509_V_ERR_CRL_SIGNATURE_FAILURE;
 		return -1;
 	}
@@ -347,7 +347,7 @@ int check_crl_response(X509_CRL* crl, X509* subject, X509* issuer, int* response
 
 	ret = crl_check_times(thisupd, nextupd, LEEWAY_90_SECS, MAX_CRL_AGE);
 	if (ret != 1) {
-		log_printf(LOG_ERROR, "CRL dates expired or else malformed\n");
+		LOG_E("CRL dates expired or else malformed\n");
 		*response = X509_V_ERR_CRL_HAS_EXPIRED;
 		/* or X509_V_ERR_CRL_NOT_YET_VALID... */
 		return -1;
