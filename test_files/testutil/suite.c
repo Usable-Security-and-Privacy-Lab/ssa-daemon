@@ -17,6 +17,7 @@ void kill_daemon();
 void validate();
 
 
+
 void sigchild_fail_handler(int signal) {
 
     int original_errno = errno;
@@ -78,16 +79,16 @@ void start_daemon(const char* daemon_config, int use_valgrind) {
 
         if (use_valgrind) {
             char* env[1] = {NULL};
-            char* flags[9] = {"/usr/bin/sudo", pid_env, "valgrind",
+            char* flags[8] = {"/usr/bin/sudo", pid_env, "valgrind",
                         "--leak-check=full", "--track-fds=yes", 
-                        ".././ssa_daemon", "-s", strdup(daemon_config), NULL};
+                        ".././ssa_daemon", strdup(daemon_config), NULL};
 
             execve("/usr/bin/sudo", flags, env);
 
         } else {
             char* env[1] = {NULL};
-            char* flags[6] = {"/usr/bin/sudo", pid_env, 
-                        ".././ssa_daemon", "-s", strdup(daemon_config), NULL};
+            char* flags[5] = {"/usr/bin/sudo", pid_env, 
+                        ".././ssa_daemon", strdup(daemon_config), NULL};
 
             execve("/usr/bin/sudo", flags, env);
         }
