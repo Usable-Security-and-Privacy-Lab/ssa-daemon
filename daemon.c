@@ -189,6 +189,7 @@ int run_daemon(int port, char* config_path) {
     OPENSSL_cleanup();
 
     return EXIT_SUCCESS;
+
 err:
     LOG_F("Daemon setup failed\n");
 

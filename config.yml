@@ -3,11 +3,11 @@
 # If a configuration is not set in this YAML file, the default will be use
 # (as listed to the right/bottom of each setting)
   
-  
+      
 # TLS Protocols include TLS-1.0, TLS-1.1, TLS-1.2 and TLS-1.3. Note that 
 # SSLv2 and SSLv3 cannot be enabled (due to considerable security flaws).
 # protocols lower than TLS-1.2 are considered deprecated and insecure by most browsers.
-min-tls-version: 1.2 # Default: 1.2
+min-tls-version  : 1.2 # Default: 1.2
 max-tls-version: 1.3 # Default: 1.3
 
 # The following is commented out since the SSA Daemon does a decent job at finding
@@ -15,7 +15,7 @@ max-tls-version: 1.3 # Default: 1.3
 # CA-path can be a file or directory of CA files. All files must be in PEM format. Use "c_rehash ."
 # in directory before use. 
 #  CA-path: /etc/ssl/certs
-#  CA-path: test_files/certs/rootCA.pem # use this for testing our server
+ #  CA-path: test_files/certs/rootCA.pem # use this for testing our server
 
 # Session Tickets posess a vulnerability in them for TLS 1.2 and lower.
 # For more info, see here: https://blog.filippo.io/we-need-to-talk-about-session-tickets/
