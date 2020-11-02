@@ -159,15 +159,6 @@ enum socket_state {
 };
 
 
-enum tls_version {
-    TLS_DEFAULT_ENUM = 0, /** Default TLS version selected (TLS 1.3) */
-    TLS1_0_ENUM,          /** TLS 1.0 version selected */
-    TLS1_1_ENUM,          /** TLS 1.1 version selected */
-    TLS1_2_ENUM,          /** TLS 1.2 version selected */
-    TLS1_3_ENUM           /** TLS 1.3 version selected */
-};
-
-
 struct daemon_ctx_st {
     struct event_base* ev_base;   /** Multiplexer that handles all events */
     struct evdns_base* dns_base;  /** Handles all DNS lookups */
@@ -207,8 +198,8 @@ struct global_config_st {
     int max_chain_depth; /** Number of certificates acceptable in cert chain */
     int ct_checks;       /** 1 if Certificate Transparency enabled, 0 if not */
 
-    enum tls_version min_tls_version; /** minimum accepted TLS version */
-    enum tls_version max_tls_version; /** maximum accepted TLS version */
+    short min_tls_version; /** minimum accepted TLS version */
+    short max_tls_version; /** maximum accepted TLS version */
 
     char* certificates[MAX_CERTS]; /** list of files/folders of certs to use */
     int cert_cnt;                  /** Size of \p certificates list */

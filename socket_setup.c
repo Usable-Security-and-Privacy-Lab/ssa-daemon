@@ -9,11 +9,12 @@
 #include <event2/event.h>
 #include <openssl/err.h>
 
+#include "certificate.h"
 #include "config.h"
 #include "connection_callbacks.h"
 #include "error.h"
+#include "in_tls.h"
 #include "log.h"
-#include "certificate.h"
 #include "sessions.h"
 #include "socket_setup.h"
 
@@ -90,11 +91,11 @@ SSL_CTX* SSL_CTX_create(global_config* settings) {
         SSL_CTX_clear_options(ctx, SSL_OP_NO_TICKET);
     
 
-    tls_version = get_tls_version(settings->min_tls_version);
+    tls_version = tls_version_to_openssl(settings->min_tls_version);
 	if (SSL_CTX_set_min_proto_version(ctx, tls_version) != 1) 
 		goto err;
 
-	tls_version = get_tls_version(settings->max_tls_version);
+	tls_version = tls_version_to_openssl(settings->max_tls_version);
 	if (SSL_CTX_set_max_proto_version(ctx, tls_version) != 1)
 		goto err;
 
@@ -327,42 +328,46 @@ int prepare_SSL_server(socket_ctx* sock_ctx) {
 
 /**
  *******************************************************************************
- *                   HELPER FUNCTIONS FOR CONFIG LOADING
+ *               HELPER FUNCTIONS FOR CONFIG LOADING/SOCKOPTS
  *******************************************************************************
  */
 
 /**
- * Converts the given tls_version enum into the OpenSSL-specific version.
- * @param version The version given to us by the config file.
- * @returns The OpenSSL representation of the TLS Version, or TLS1_2_VERSION
+ * Converts the given tls_version into the OpenSSL-specific version.
+ * @param version The version given to us (by config file or setsockopt call).
+ * @returns The OpenSSL representation of the TLS Version, or TLS1_MAX_VERSION
  * if no version was set (a safe default).
  */
-long get_tls_version(enum tls_version version) {
+int tls_version_to_openssl(short version) {
 
-    long tls_version = 0;
-
-    switch(version) {
-    case TLS_DEFAULT_ENUM:
-        tls_version = TLS_MAX_VERSION;
-        break;
-    case TLS1_0_ENUM:
-        tls_version = TLS1_VERSION;
-        break;
-    case TLS1_1_ENUM:
-        tls_version = TLS1_1_VERSION;
-        break;
-    case TLS1_2_ENUM:
-        tls_version = TLS1_2_VERSION;
-        break;
-    case TLS1_3_ENUM:
-        tls_version = TLS1_3_VERSION;
-        break;
-    default:
-        /* shouldn't happen */
-        LOG_E("Unknown TLS version specified\n");
+    switch (version) {
+        case TLS_1_0:
+            return TLS1_VERSION;
+        case TLS_1_1:
+            return TLS1_1_VERSION;
+        case TLS_1_2:
+            return TLS1_2_VERSION;
+        case TLS_1_3:
+            return TLS1_3_VERSION;
+        default:
+            return TLS_MAX_VERSION;
     }
+}
 
-    return tls_version;
+short tls_version_from_openssl(int version) {
+
+    switch (version) {
+        case TLS1_VERSION:
+            return TLS_1_0;
+        case TLS1_1_VERSION:
+            return TLS_1_1;
+        case TLS1_2_VERSION:
+            return TLS_1_2;
+        case TLS1_3_VERSION:
+            return TLS_1_3;
+        default:
+            return -1;
+    }
 }
 
 /**

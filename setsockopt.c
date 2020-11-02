@@ -17,7 +17,7 @@
 int set_CA_certificates(socket_ctx *sock_ctx, char* path, socklen_t len);
 int set_certificate_chain(socket_ctx* sock_ctx, char* path, socklen_t len);
 int set_private_key(socket_ctx* sock_ctx, char* path, socklen_t len);
-int set_min_version(socket_ctx* sock_ctx, int* version, socklen_t len);
+int set_min_version(socket_ctx* sock_ctx, short* version, socklen_t len);
 int set_max_version(socket_ctx* sock_ctx, int* version, socklen_t len);
 int set_tls_context(socket_ctx* sock_ctx, unsigned long* data, socklen_t len);
 int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, socklen_t len);
@@ -90,15 +90,13 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
         break;
 
     case TLS_VERSION_MIN:
-	if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-//2, SOCKET_NEW, SOCKET_LISTENING) != 0) TODO: can listening sockets change version settings?
+	    if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
             break;
-        response = set_min_version(sock_ctx, (int*) value, len);
+        response = set_min_version(sock_ctx, (short*) value, len);
         break;
 
     case TLS_VERSION_MAX:
-	if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-//2, SOCKET_NEW, SOCKET_LISTENING) != 0) TODO: can listening sockets change version settings?
+	    if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
             break;
         response = set_max_version(sock_ctx, (int*) value, len);
         break;
@@ -281,49 +279,40 @@ err:
     return -EBADF;
 }
 
-int set_min_version(socket_ctx *sock_ctx, int* version, socklen_t len) {
 
-    int response = 0;
-    if (*version != TLS_1_2 && *version != TLS_1_3) {
-        response = -EINVAL;
-        log_printf(LOG_DEBUG, "Set TLS_VERSION_MIN not TLS 1.2 or 1.3\n");
+int set_min_version(socket_ctx *sock_ctx, short* version, socklen_t len) {
+
+    if (len != sizeof(short) || *version > TLS_1_3 || *version < TLS_1_0)
+        return -EINVAL;
+
+    int openssl_version = tls_version_to_openssl(*version);
+
+    int ret = SSL_CTX_set_min_proto_version(sock_ctx->ssl_ctx, openssl_version);
+    if (ret != 1) {
+        determine_and_set_error(sock_ctx);
+        LOG_E("Setting min TLS protocol failed (%s)\n", sock_ctx->err_string);
+        return -EINVAL;
     }
-    if (*version < get_tls_version(sock_ctx->daemon->settings->min_tls_version)) {
-        response = -EINVAL;
-        log_printf(LOG_DEBUG, "Set TLS_VERSION_MIN less than min in config file\n");
-    }
-    if (*version > SSL_CTX_get_max_proto_version(sock_ctx->ssl_ctx)) {
-        response = -EINVAL;
-        log_printf(LOG_DEBUG, "Set TLS_VERSION_MIN greater than current max\n");
-    }
-    if (!response)
-        response = (SSL_CTX_set_min_proto_version(sock_ctx->ssl_ctx, *version) - 1);
-        //we return 0 on success and -1 on failure
-    return response;
+
+    return 0;
 }
 
 
 int set_max_version(socket_ctx *sock_ctx, int* version, socklen_t len) {
 
-    int response = 0;
-    if (*version != TLS_1_2 && *version != TLS_1_3) {
-        response = -EINVAL;
-        log_printf(LOG_DEBUG, "Set TLS_VERSION_MAX not TLS 1.2 or 1.3\n");
+    if (len != sizeof(short) || *version > TLS_1_3 || *version < TLS_1_0)
+        return -EINVAL;
+
+    int openssl_version = tls_version_to_openssl(*version);
+
+    int ret = SSL_CTX_set_max_proto_version(sock_ctx->ssl_ctx, openssl_version);
+    if (ret != 1) {
+        determine_and_set_error(sock_ctx);
+        LOG_E("Setting max TLS protocol failed (%s)\n", sock_ctx->err_string);
+        return -EINVAL;
     }
-/*
-    if (*version < get_tls_version(sock_ctx->daemon->settings->max_tls_version)) {
-        response = -EINVAL;
-        log_printf(LOG_DEBUG, "Set TLS_VERSION_MAX less than max in config file\n");
-    }
-*/ //TODO: what kind of settings should be discouraged for max version?
-    if (*version < SSL_CTX_get_min_proto_version(sock_ctx->ssl_ctx)) {
-        response = -EINVAL;
-        log_printf(LOG_DEBUG, "Set TLS_VERSION_MAX less than current min\n");
-    }
-    if (!response)
-        response = (SSL_CTX_set_max_proto_version(sock_ctx->ssl_ctx, *version) - 1);
-        //we return 0 on success and -1 on failure
-    return response;
+
+    return 0;
 }
 
 

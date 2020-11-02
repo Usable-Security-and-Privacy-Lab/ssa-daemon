@@ -67,7 +67,30 @@ int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd);
  */
 int associate_fd(socket_ctx* sock_ctx, evutil_socket_t ifd);
 
-long get_tls_version(enum tls_version version);
+
+/**
+ * Converts the given daemon-specific TLS version number into its associated 
+ * OpenSSL-specific version number. If the input version number is not 
+ * recognized as a valid version, TLS_MAX_VERSION will be returned.
+ * @param version The daemon-specific TLS version number to be converted. 
+ * @returns An OpenSSL TLS version number (either TLS1_VERSION, 
+ * TLS1_1_VERSION, TLS1_2_VERSION, or TLS1_3_VERSION).
+ * @see `in_tls.h`
+ */
+int tls_version_to_openssl(short version);
+
+
+/**
+ * Converts the given OpenSSL-specific TLS version number into its associated 
+ * daemon-specific version number. 
+ * @param version An OpenSSL-specific version number identifier.
+ * @returns The associated daemon-specific TLS version number, or -1 if the 
+ * input version number is not recognized as a valid version.
+ * @see `in_tls.h`
+ */
+short tls_version_from_openssl(int version);
+
+
 
 
 #endif

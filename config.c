@@ -11,7 +11,9 @@
 #include <yaml.h>
 
 #include "config.h"
+#include "in_tls.h"
 #include "log.h"
+
 
 #define MAX_STRLIST_SIZE 100
 
@@ -70,7 +72,7 @@ int parse_string_list(yaml_parser_t* parser, char** strings[], int* num);
 int parse_string_list_member(yaml_parser_t* parser, char** strings, int* num);
 int parse_boolean(yaml_parser_t* parser, int* enabled);
 int parse_integer(yaml_parser_t* parser, int* num);
-int parse_tls_version(yaml_parser_t* parser, enum tls_version* version);
+int parse_tls_version(yaml_parser_t* parser, short* version);
 
 int parse_stream(yaml_parser_t* parser, global_config* settings);
 int parse_document(yaml_parser_t* parser, global_config* settings);
@@ -478,7 +480,7 @@ int parse_integer(yaml_parser_t* parser, int* num) {
  * valid TLS version. See enum tls_version in config.h for possible versions.
  * @returns 0 on success, or -1 if an error occurred.
  */
-int parse_tls_version(yaml_parser_t* parser, enum tls_version* version) {
+int parse_tls_version(yaml_parser_t* parser, short* version) {
     
     char* tls_version = parse_next_scalar(parser);
     if (tls_version == NULL)
@@ -488,16 +490,16 @@ int parse_tls_version(yaml_parser_t* parser, enum tls_version* version) {
 
     if (strcmp(tls_version, TLS1_0_STRING) == 0
             || strcmp(tls_version, TLS1_0_ALT_STRING) == 0) {
-        *version = TLS1_0_ENUM;
+        *version = TLS_1_0;
     } else if (strcmp(tls_version, TLS1_1_STRING) == 0
             || strcmp(tls_version, TLS1_1_ALT_STRING) == 0) {
-        *version = TLS1_1_ENUM;
+        *version = TLS_1_1;
     } else if (strcmp(tls_version, TLS1_2_STRING) == 0
             || strcmp(tls_version, TLS1_2_ALT_STRING) == 0) {
-        *version = TLS1_2_ENUM;
+        *version = TLS_1_2;
     } else if (strcmp(tls_version, TLS1_3_STRING) == 0
             || strcmp(tls_version, TLS1_3_ALT_STRING) == 0) {
-        *version = TLS1_3_ENUM;
+        *version = TLS_1_3;
     } else {
         LOG_E("Config: Unknown TLS version '%s'\n",
                 tls_version);
@@ -557,6 +559,9 @@ global_config* parse_config(char* file_path) {
                 strerror(errno));
         goto err;
     }
+
+    settings->min_tls_version = TLS_1_2;
+    settings->max_tls_version = TLS_1_3;
 
     yaml_parser_set_input_file(&parser, input);
 
