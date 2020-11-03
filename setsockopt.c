@@ -54,85 +54,85 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
 
     switch (option) {
     case TLS_HOSTNAME:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_remote_hostname(sock_ctx, (char*) value, len);
         break;
 
     case TLS_DISABLE_CIPHER:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = disable_ciphers(sock_ctx, (char*) value);
         break;
 
     case TLS_ENABLE_CIPHER:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = enable_cipher(sock_ctx, (char*) value);
         break;
 
     case TLS_TRUSTED_PEER_CERTIFICATES:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_CA_certificates(sock_ctx, (char*) value, len);
         break;
 
     case TLS_CERTIFICATE_CHAIN:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_certificate_chain(sock_ctx, (char*) value, len);
         break;
 
     case TLS_PRIVATE_KEY:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_private_key(sock_ctx, (char*) value, len);
         break;
 
     case TLS_VERSION_MIN:
-	    if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+	    if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_min_version(sock_ctx, (short*) value, len);
         break;
 
     case TLS_VERSION_MAX:
-	    if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+	    if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_max_version(sock_ctx, (int*) value, len);
         break;
 
     case TLS_REVOCATION_CHECKS:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_revocation_checks(sock_ctx, (int*) value, len);
         break;
 
     case TLS_OCSP_STAPLED_CHECKS:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_ocsp_stapled_checks(sock_ctx, (int*) value, len);
         break;
 
     case TLS_OCSP_CHECKS:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_ocsp_checks(sock_ctx, (int*) value, len);
         break;
 
     case TLS_CRL_CHECKS:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_crl_checks(sock_ctx, (int*) value, len);
         break;
 
     case TLS_CACHED_REV_CHECKS:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_rev_cache_checks(sock_ctx, (int*) value, len);
         break;
 
     case TLS_CONTEXT:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_tls_context(sock_ctx, (unsigned long*) value, len);
         break;
@@ -142,7 +142,7 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
         break;
 
     case TLS_SERVER_OCSP_STAPLING:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_server_stapling(sock_ctx, (int*) value, len);
         break;

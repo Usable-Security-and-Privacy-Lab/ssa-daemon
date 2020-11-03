@@ -63,20 +63,20 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
         break;
 
     case TLS_HOSTNAME:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = get_hostname(sock_ctx, (char**) data, len);
         break;
 
     case TLS_PEER_IDENTITY:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_CONNECTED)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_CONNECTED)) != 0)
             break;
 
         response = get_peer_identity(sock_ctx, (char**) data, len);
         break;
 
     case TLS_PEER_CERTIFICATE_CHAIN:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_CONNECTED)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_CONNECTED)) != 0)
             break;
         response = get_peer_certificate(sock_ctx, (char**) data, len);
         break;
@@ -86,7 +86,7 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
         break;
 
     case TLS_CHOSEN_CIPHER:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_CONNECTED)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_CONNECTED)) != 0)
             break;
         get_chosen_cipher(sock_ctx, (char**) data, len);
         break;
@@ -100,9 +100,9 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
         break;
 
     case TLS_VERSION_CONN:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_CONNECTED)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_CONNECTED)) != 0)
             break;
-        get_version_conn(sock_ctx, (int**) data, len);
+        get_version_conn(sock_ctx, (short**) data, len);
         break;
 
     case TLS_REVOCATION_CHECKS:
@@ -126,13 +126,13 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
         break;
 
     case TLS_CONTEXT:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = get_tls_context(sock_ctx, (unsigned long**) data, len);
         break;
 
     case TLS_RESUMED_SESSION:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_CONNECTED)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_CONNECTED)) != 0)
             break;
         response = get_session_resumed(sock_ctx, (int**) data, len);
         break;

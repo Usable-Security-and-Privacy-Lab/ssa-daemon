@@ -612,18 +612,10 @@ void crl_responder_free(crl_responder* resp) {
  * @returns 0 if the state was one of the acceptable states listed, -EBADFD if 
  * the state was CONN_ERROR when it shouldn't be, or -EOPNOTSUPP otherwise.
  */
-int check_socket_state(socket_ctx* sock_ctx, int num, ...) {
+int check_socket_state(socket_ctx* sock_ctx, long states) {
 
-    va_list args;
-
-    va_start(args, num);
-
-    for (int i = 0; i < num; i++) {
-        enum socket_state state = va_arg(args, enum socket_state);
-        if (sock_ctx->state == state)
-            return 0;
-    }
-    va_end(args);
+    if ((sock_ctx->state & states) != 0)
+        return 0;
 
     switch(sock_ctx->state) {
     case SOCKET_ERROR:
@@ -680,8 +672,8 @@ int get_port(struct sockaddr* addr) {
 }
 
 
-struct sockaddr_storage get_loopback_address(sa_family_t family)
-{
+struct sockaddr_storage get_loopback_address(sa_family_t family) {
+
     struct sockaddr_storage addr = {0};
 
     if (family == AF_INET) {

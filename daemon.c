@@ -755,7 +755,7 @@ void bind_cb(daemon_ctx* daemon, unsigned long id,
 
     clear_global_and_socket_errors(sock_ctx);
 
-    response = check_socket_state(sock_ctx, 1, SOCKET_NEW);
+    response = check_socket_state(sock_ctx, SOCKET_NEW);
     if (response != 0) {
         netlink_notify_kernel(daemon, id, response);
         return;
@@ -825,9 +825,8 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
         return;
     }
 
-    response = check_socket_state(sock_ctx, 4,
-            SOCKET_NEW, SOCKET_CONNECTING,
-            SOCKET_FINISHING_CONN, SOCKET_CONNECTED);
+    response = check_socket_state(sock_ctx, SOCKET_NEW | SOCKET_CONNECTING 
+                            | SOCKET_FINISHING_CONN | SOCKET_CONNECTED);
     if (response != 0) {
         netlink_notify_kernel(daemon, id, response);
         return;
@@ -835,8 +834,7 @@ void connect_cb(daemon_ctx* daemon, unsigned long id,
 
     clear_global_and_socket_errors(sock_ctx);
 
-    if (sock_ctx->state == SOCKET_CONNECTING
-            || sock_ctx->state == SOCKET_FINISHING_CONN) {
+    if (sock_ctx->state & (SOCKET_CONNECTING | SOCKET_FINISHING_CONN)) {
         netlink_notify_kernel(daemon, id, -EALREADY);
         return;
 
@@ -948,7 +946,7 @@ void listen_cb(daemon_ctx* daemon, unsigned long id,
 
     clear_global_and_socket_errors(sock_ctx);
 
-    response = check_socket_state(sock_ctx, 1, SOCKET_NEW);
+    response = check_socket_state(sock_ctx, SOCKET_NEW);
     if (response != 0) {
         netlink_notify_kernel(daemon, id, response);
         return;
