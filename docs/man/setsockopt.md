@@ -51,12 +51,12 @@ listed below:
 
 
 > #### TLS_REMOTE_HOSTNAME
-> Sets the hostname that will be connected to as a client. 
+> Sets the hostname that will be connected to for a client connection. 
 > The hostname is required in order to verify the validity of a peer's 
 > certificate, so any connection made without first setting this option will 
 > fail. `optval` should be a NULL-terminated string of the hostname (cannot 
 > be an IP address), and `optlen` should be the entire length of the string 
-> (including the null-terminating byte). 
+> (including the null-terminating byte).
 >
 > **RESTRICTIONS** 
 > 
@@ -139,6 +139,76 @@ listed below:
 > - `EINVAL` - The path given in `optval` was not valid or could not be 
 > opened. 
 > - `ECANCELED` - Processing the certificates within the SSA daemon failed. 
+
+#
+
+> #### TLS_MIN_VERSION
+> Sets the minimum TLS version that the socket will accept during the TLS 
+> handshake. Defined versions are `TLS_1_0`, `TLS_1_1`, `TLS_1_2`, and 
+> `TLS_1_3`. `optval` should be a short assigned to one of the four 
+> versions, which are defined as macros in `<in_tls.h>`. `optlen` should 
+> be equal to `sizeof(short)`. 
+>
+> **RESTRICTIONS**
+>
+> The option may not be used if the given socket is already listening, 
+> connecting or connected, or if the socket has previously encountered an 
+> unrecoverable error. The minimum TLS version should not be set greater than 
+> the currently-set maximum TLS version for a given socket; attempts to do 
+> so will result in failure with the `EINVAL` errno code set.
+> 
+> **ERRORS**
+>
+> - `EBADFD` - An unrecoverable error has previously occurred on the socket. 
+> - `EOPNOTSUPP` - The given socket is already in use (see **RESTRICTIONS**).
+> - `EINVAL` - The value passed in `optval` was not valid (either too big or 
+> too small).
+
+#
+
+> #### TLS_MAX_VERSION
+> Sets the maximum TLS version that the socket will accept during the TLS 
+> handshake. Defined versions are `TLS_1_0`, `TLS_1_1`, `TLS_1_2`, and 
+> `TLS_1_3`. `optval` should be a short assigned to one of the four 
+> versions, which are defined as macros in `<in_tls.h>`. `optlen` should 
+> be equal to `sizeof(short)`. 
+>
+> **RESTRICTIONS**
+>
+> The option may not be used if the given socket is already listening, 
+> connecting or connected, or if the socket has previously encountered an 
+> unrecoverable error. The maximum TLS version should not be set less than 
+> the currently-set minimum TLS version for a given socket; attempts to do 
+> so will result in failure with the `EINVAL` errno code set.
+> 
+> **ERRORS**
+>
+> - `EBADFD` - An unrecoverable error has previously occurred on the socket. 
+> - `EOPNOTSUPP` - The given socket is already in use (see **RESTRICTIONS**).
+> - `EINVAL` - The value passed in `optval` was not valid (either too big or 
+> too small).
+
+#
+
+> #### TLS_PRIVATE_KEY
+> Sets the private key to be used in association with the loaded certificate 
+> chain. This option must be used after `TLS_CERTIFICATE_CHAIN` or else the 
+> certificate/private key combination will not be correctly verified. `optval` 
+> should be a null-terminated string containing the path to the 
+> file/directory where the given certificate chain can be found.
+> 
+> **RESTRICTIONS**
+>
+> The option may not be used if the given socket is already listening, 
+> connecting or connected, or if the socket has previously encountered an 
+> unrecoverable error.
+>
+> **ERRORS**
+>
+> - `EBADFD` - An unrecoverable error has previously occurred on the socket.
+> - `EOPNOTSUPP` - The given socket is already in use (see **RESTRICTIONS**).
+> - `EINVAL` - The path given in `optval` was not valid or could not be opened. 
+> - `ECANCELED` - Processing the private key within the SSA daemon failed.
 
 #
 
