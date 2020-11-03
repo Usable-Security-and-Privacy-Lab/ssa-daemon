@@ -17,9 +17,9 @@ int get_peer_certificate(socket_ctx* sock_ctx, char** data, unsigned int* len);
 int get_peer_identity(socket_ctx* sock_ctx, char** data, unsigned int* len);
 int get_hostname(socket_ctx* sock_ctx, char** data, unsigned int* len);
 int get_chosen_cipher(socket_ctx* sock_ctx, char** data, unsigned int* len);
-int get_version_min(socket_ctx* sock_ctx, int** data, unsigned int* len);
-int get_version_max(socket_ctx* sock_ctx, int** data, unsigned int* len);
-int get_version_conn(socket_ctx* sock_ctx, int** data, unsigned int* len);
+int get_version_min(socket_ctx* sock_ctx, short** data, unsigned int* len);
+int get_version_max(socket_ctx* sock_ctx, short** data, unsigned int* len);
+int get_version_conn(socket_ctx* sock_ctx, short** data, unsigned int* len);
 int get_session_resumed(socket_ctx* sock_ctx, int** data, unsigned int *len);
 int get_session_reuse(socket_ctx* sock_ctx, int** data, unsigned int* len);
 int get_server_stapling(socket_ctx* sock_ctx, int** data, unsigned int* len);
@@ -92,11 +92,11 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
         break;
 
     case TLS_VERSION_MIN:
-	get_version_min(sock_ctx, (int**) data, len);
+        get_version_min(sock_ctx, (short**) data, len);
         break;
 
     case TLS_VERSION_MAX:
-        get_version_max(sock_ctx, (int**) data, len);
+        get_version_max(sock_ctx, (short**) data, len);
         break;
 
     case TLS_VERSION_CONN:
@@ -342,30 +342,72 @@ int get_chosen_cipher(socket_ctx* sock_ctx, char** data, unsigned int* len) {
 }
 
 
-int get_version_min(socket_ctx* sock_ctx, int** data, unsigned int* len) {
+/**
+ * Returns the minimum TLS version accepted by the socket.
+ * @param sock_ctx The context of the socket to retrieve TLS version constrints 
+ * for.
+ * @param data [out] A newly-allocated pointer to a version number.
+ * @param len [out] The length of \p data.
+ * @returns 0 on success, or a negative errno on failure.
+ */
+int get_version_min(socket_ctx* sock_ctx, short** data, unsigned int* len) {
 
-    int* version = malloc(sizeof(int));
-    *version = SSL_CTX_get_min_proto_version(sock_ctx->ssl_ctx);
+    short* version = malloc(sizeof(short));
+    if (version == NULL)
+        return -ENOMEM;
+
+    int openssl_version = SSL_CTX_get_min_proto_version(sock_ctx->ssl_ctx);
+    *version = tls_version_from_openssl(openssl_version);
+
     *data = version;
-    *len = sizeof(int);
+    *len = sizeof(short);
+
     return 0;
 }
 
-int get_version_max(socket_ctx* sock_ctx, int** data, unsigned int* len) {
+/**
+ * Returns the maximum TLS version accepted by the socket.
+ * @param sock_ctx The context of the socket to retrieve TLS version constrints 
+ * for.
+ * @param data [out] A newly-allocated pointer to a version number.
+ * @param len [out] The length of \p data.
+ * @returns 0 on success, or a negative errno on failure.
+ */
+int get_version_max(socket_ctx* sock_ctx, short** data, unsigned int* len) {
 
-    int* version = malloc(sizeof(int));
-    *version = SSL_CTX_get_max_proto_version(sock_ctx->ssl_ctx);
+    short* version = malloc(sizeof(short));
+    if (version == NULL)
+        return -ENOMEM;
+
+    int openssl_version = SSL_CTX_get_max_proto_version(sock_ctx->ssl_ctx);
+    *version = tls_version_from_openssl(openssl_version);
+
     *data = version;
-    *len = sizeof(int);
+    *len = sizeof(short);
+
     return 0;
 }
 
-int get_version_conn(socket_ctx* sock_ctx, int** data, unsigned int* len) {
+/**
+ * Returns the TLS version being used in the socket's connection.
+ * @param sock_ctx The context of the socket to retrieve TLS version constrints 
+ * for.
+ * @param data [out] A newly-allocated pointer to a version number.
+ * @param len [out] The length of \p data.
+ * @returns 0 on success, or a negative errno on failure.
+ */
+int get_version_conn(socket_ctx* sock_ctx, short** data, unsigned int* len) {
+    
+    short* version = malloc(sizeof(short));
+    if (version == NULL)
+        return -ENOMEM;
 
-    int* version = malloc(sizeof(int));
-    *version = SSL_version(sock_ctx->ssl);
+    int openssl_version = SSL_version(sock_ctx->ssl);
+    *version = tls_version_from_openssl(openssl_version);
+
     *data = version;
-    *len = sizeof(int);
+    *len = sizeof(short);
+
     return 0;
 }
 
