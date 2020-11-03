@@ -19,7 +19,7 @@ public:                                                          \
     }                                                            \
                                                                  \
     static void TearDownTestCase() {                             \
-        cleanup();                                               \
+        cleanup_children();                                      \
     }                                                            \
 };
 
@@ -33,7 +33,7 @@ public:                                                          \
     }                                                            \
                                                                  \
     static void TearDownTestCase() {                             \
-        cleanup();                                               \
+        cleanup_children();                                      \
     }                                                            \
 };
 
