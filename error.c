@@ -17,10 +17,8 @@ void set_wrong_state_err_string(socket_ctx* sock_ctx);
  * @returns 1 if an error string was found, or 0 otherwise.
  */
 int has_error_string(socket_ctx* sock_ctx) {
-    if (strlen(sock_ctx->err_string) > 0)
-        return 1;
-    else
-        return 0;
+
+    return strlen(sock_ctx->err_string) > 0 ? 1 : 0;
 }
 
 
