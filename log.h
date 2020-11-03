@@ -66,15 +66,16 @@ void log_close(void);
 
 #else
 #define noop
-#define log_init(X, Y)    ((int)0)
+#define log_init()      ((int)0)
 #define log_printf(...) noop
-#define log_close() noop
+#define log_close()     noop
 
-#define LOG_DEBUG(...) noop
-#define LOG_INFO(...) noop
-#define LOG_WARN(...) noop
-#define LOG_ERR(...) noop
-#define LOG_CATAL(...) noop
-#endif
+#define LOG_A(...)      noop
+#define LOG_C(...)      noop
+#define LOG_E(...)      noop
+#define LOG_W(...)      noop
+#define LOG_I(...)      noop
+#define LOG_D(...)      noop
+#endif /* NO_LOG */
 
 #endif
