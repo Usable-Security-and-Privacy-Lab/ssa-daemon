@@ -210,11 +210,6 @@ struct global_config_st {
     enum tls_version min_tls_version; /** minimum accepted TLS version */
     enum tls_version max_tls_version; /** maximum accepted TLS version */
 
-    char* certificates[MAX_CERTS]; /** list of files/folders of certs to use */
-    int cert_cnt;                  /** Size of \p certificates list */
-
-    char* private_keys[MAX_CERTS]; /** list of files/folders of keys to use */
-    int key_cnt;                   /** Size of \p private_keys list */
 
     unsigned int revocation_checks; /** bitset of revocation settings */
     int session_resumption; /** 1 if sockets will reuse sessions, 0 if not */
