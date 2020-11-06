@@ -1,7 +1,7 @@
 #define _GNU_SOURCE
 #define MAP_BUCKETS             10
 
-#define LOG_FILE "/tmp/sslLog.txt"
+#define LOG_CILE "/tmp/sslLog.txt"
 #define SOCKET_PATH "\0tls_upgrade"
 
 #include <dlfcn.h>
@@ -36,7 +36,7 @@ hmap_t* connection_map = NULL;
 
 int logSSL(char* msg)
 {
-    FILE * fd = fopen(LOG_FILE,"a");
+    FILE * fd = fopen(LOG_CILE,"a");
     fputs(msg,fd);
     fclose(fd);
 }

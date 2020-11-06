@@ -6,7 +6,7 @@
 
 void start_daemon(const char* daemon_config, int use_valgrind);
 void start_server(const char* server_path);
-void cleanup();
+void cleanup_children();
 
 
 #endif

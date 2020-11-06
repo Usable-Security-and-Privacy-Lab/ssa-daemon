@@ -17,10 +17,8 @@ void set_wrong_state_err_string(socket_ctx* sock_ctx);
  * @returns 1 if an error string was found, or 0 otherwise.
  */
 int has_error_string(socket_ctx* sock_ctx) {
-    if (strlen(sock_ctx->err_string) > 0)
-        return 1;
-    else
-        return 0;
+
+    return strlen(sock_ctx->err_string) > 0 ? 1 : 0;
 }
 
 
@@ -38,7 +36,7 @@ int determine_errno_error() {
         return -ENOMEM;
 
     } else {
-        log_printf(LOG_ERROR, "Internal daemon error: %s\n", err_string);
+        LOG_E("Internal daemon error: %s\n", err_string);
         return -ECANCELED;
     }
 }
@@ -115,7 +113,7 @@ int set_socket_error(socket_ctx* sock_ctx, unsigned long ssl_err) {
     }
 
     set_err_string(sock_ctx, "Internal daemon error: check logs for details");
-    log_printf(LOG_ERROR, "Internal daemon error during handshake: %s\n", 
+    LOG_E("Internal daemon error during handshake: %s\n", 
                 reason_str);
 
 
@@ -158,7 +156,7 @@ void set_err_string(socket_ctx* sock_ctx, char* string, ...) {
  * @param message The message to print before the error (this function prints
  * it in a way similar to `perror()`).
  */
-void log_global_error(enum log_level level, char *message) {
+void log_global_error(int level, char *message) {
 
     const char *error_string;
 

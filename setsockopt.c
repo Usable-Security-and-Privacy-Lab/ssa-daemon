@@ -17,7 +17,7 @@
 int set_CA_certificates(socket_ctx *sock_ctx, char* path, socklen_t len);
 int set_certificate_chain(socket_ctx* sock_ctx, char* path, socklen_t len);
 int set_private_key(socket_ctx* sock_ctx, char* path, socklen_t len);
-int set_min_version(socket_ctx* sock_ctx, int* version, socklen_t len);
+int set_min_version(socket_ctx* sock_ctx, short* version, socklen_t len);
 int set_max_version(socket_ctx* sock_ctx, int* version, socklen_t len);
 int set_tls_context(socket_ctx* sock_ctx, unsigned long* data, socklen_t len);
 int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, socklen_t len);
@@ -54,87 +54,85 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
 
     switch (option) {
     case TLS_HOSTNAME:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_remote_hostname(sock_ctx, (char*) value, len);
         break;
 
     case TLS_DISABLE_CIPHER:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = disable_ciphers(sock_ctx, (char*) value);
         break;
 
     case TLS_ENABLE_CIPHER:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = enable_cipher(sock_ctx, (char*) value);
         break;
 
     case TLS_TRUSTED_PEER_CERTIFICATES:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_CA_certificates(sock_ctx, (char*) value, len);
         break;
 
     case TLS_CERTIFICATE_CHAIN:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_certificate_chain(sock_ctx, (char*) value, len);
         break;
 
     case TLS_PRIVATE_KEY:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_private_key(sock_ctx, (char*) value, len);
         break;
 
     case TLS_VERSION_MIN:
-	if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-//2, SOCKET_NEW, SOCKET_LISTENING) != 0) TODO: can listening sockets change version settings?
+	    if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
-        response = set_min_version(sock_ctx, (int*) value, len);
+        response = set_min_version(sock_ctx, (short*) value, len);
         break;
 
     case TLS_VERSION_MAX:
-	if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
-//2, SOCKET_NEW, SOCKET_LISTENING) != 0) TODO: can listening sockets change version settings?
+	    if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_max_version(sock_ctx, (int*) value, len);
         break;
 
     case TLS_REVOCATION_CHECKS:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_revocation_checks(sock_ctx, (int*) value, len);
         break;
 
     case TLS_OCSP_STAPLED_CHECKS:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_ocsp_stapled_checks(sock_ctx, (int*) value, len);
         break;
 
     case TLS_OCSP_CHECKS:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_ocsp_checks(sock_ctx, (int*) value, len);
         break;
 
     case TLS_CRL_CHECKS:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_crl_checks(sock_ctx, (int*) value, len);
         break;
 
     case TLS_CACHED_REV_CHECKS:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_rev_cache_checks(sock_ctx, (int*) value, len);
         break;
 
     case TLS_CONTEXT:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_tls_context(sock_ctx, (unsigned long*) value, len);
         break;
@@ -144,7 +142,7 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
         break;
 
     case TLS_SERVER_OCSP_STAPLING:
-        if ((response = check_socket_state(sock_ctx, 1, SOCKET_NEW)) != 0)
+        if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
         response = set_server_stapling(sock_ctx, (int*) value, len);
         break;
@@ -219,7 +217,7 @@ int set_certificate_chain(socket_ctx* sock_ctx, char* path, socklen_t len) {
 err:
     ssl_err = ERR_get_error();
 
-    log_printf(LOG_ERROR, "Failed to load certificate chain: %s\n", 
+    LOG_E("Failed to load certificate chain: %s\n", 
             ssl_err ? ERR_error_string(ssl_err, NULL) : "not a file or folder");
 
     set_err_string(sock_ctx, "TLS error: couldn't set certificate chain - %s",
@@ -274,56 +272,47 @@ int set_private_key(socket_ctx* sock_ctx, char* path, socklen_t len) {
 
     return 0;
 err:
-    log_printf(LOG_ERROR, "Failed to set private key: %s\n", 
+    LOG_E("Failed to set private key: %s\n", 
             ERR_reason_error_string(ERR_GET_REASON(ERR_peek_error())));
     set_err_string(sock_ctx, "TLS error: failed to set private key - %s",
             ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
     return -EBADF;
 }
 
-int set_min_version(socket_ctx *sock_ctx, int* version, socklen_t len) {
 
-    int response = 0;
-    if (*version != TLS_1_2 && *version != TLS_1_3) {
-        response = -EINVAL;
-        log_printf(LOG_DEBUG, "Set TLS_VERSION_MIN not TLS 1.2 or 1.3\n");
+int set_min_version(socket_ctx *sock_ctx, short* version, socklen_t len) {
+
+    if (len != sizeof(short) || *version > TLS_1_3 || *version < TLS_1_0)
+        return -EINVAL;
+
+    int openssl_version = tls_version_to_openssl(*version);
+
+    int ret = SSL_CTX_set_min_proto_version(sock_ctx->ssl_ctx, openssl_version);
+    if (ret != 1) {
+        determine_and_set_error(sock_ctx);
+        LOG_E("Setting min TLS protocol failed (%s)\n", sock_ctx->err_string);
+        return -EINVAL;
     }
-    if (*version < get_tls_version(sock_ctx->daemon->settings->min_tls_version)) {
-        response = -EINVAL;
-        log_printf(LOG_DEBUG, "Set TLS_VERSION_MIN less than min in config file\n");
-    }
-    if (*version > SSL_CTX_get_max_proto_version(sock_ctx->ssl_ctx)) {
-        response = -EINVAL;
-        log_printf(LOG_DEBUG, "Set TLS_VERSION_MIN greater than current max\n");
-    }
-    if (!response)
-        response = (SSL_CTX_set_min_proto_version(sock_ctx->ssl_ctx, *version) - 1);
-        //we return 0 on success and -1 on failure
-    return response;
+
+    return 0;
 }
 
 
 int set_max_version(socket_ctx *sock_ctx, int* version, socklen_t len) {
 
-    int response = 0;
-    if (*version != TLS_1_2 && *version != TLS_1_3) {
-        response = -EINVAL;
-        log_printf(LOG_DEBUG, "Set TLS_VERSION_MAX not TLS 1.2 or 1.3\n");
+    if (len != sizeof(short) || *version > TLS_1_3 || *version < TLS_1_0)
+        return -EINVAL;
+
+    int openssl_version = tls_version_to_openssl(*version);
+
+    int ret = SSL_CTX_set_max_proto_version(sock_ctx->ssl_ctx, openssl_version);
+    if (ret != 1) {
+        determine_and_set_error(sock_ctx);
+        LOG_E("Setting max TLS protocol failed (%s)\n", sock_ctx->err_string);
+        return -EINVAL;
     }
-/*
-    if (*version < get_tls_version(sock_ctx->daemon->settings->max_tls_version)) {
-        response = -EINVAL;
-        log_printf(LOG_DEBUG, "Set TLS_VERSION_MAX less than max in config file\n");
-    }
-*/ //TODO: what kind of settings should be discouraged for max version?
-    if (*version < SSL_CTX_get_min_proto_version(sock_ctx->ssl_ctx)) {
-        response = -EINVAL;
-        log_printf(LOG_DEBUG, "Set TLS_VERSION_MAX less than current min\n");
-    }
-    if (!response)
-        response = (SSL_CTX_set_max_proto_version(sock_ctx->ssl_ctx, *version) - 1);
-        //we return 0 on success and -1 on failure
-    return response;
+
+    return 0;
 }
 
 
@@ -620,14 +609,14 @@ int clear_from_cipherlist(char* cipher, STACK_OF(SSL_CIPHER)* cipherlist) {
  */
 int check_key_cert_pair(socket_ctx* sock_ctx) {
     if (SSL_CTX_check_private_key(sock_ctx->ssl_ctx) != 1) {
-        log_printf(LOG_ERROR, "Key and certificate don't match.\n");
+        LOG_E("Key and certificate don't match.\n");
         set_err_string(sock_ctx, "TLS error: certificate/privateKey mismatch - %s",
                 ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
         goto err;
     }
 
     if (SSL_CTX_build_cert_chain(sock_ctx->ssl_ctx, 0) != 1) {
-        log_printf(LOG_ERROR, "Certificate chain failed to build.\n");
+        LOG_E("Certificate chain failed to build.\n");
         set_err_string(sock_ctx, "TLS error: privateKey/cert chain incomplete - %s",
                 ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
         goto err;

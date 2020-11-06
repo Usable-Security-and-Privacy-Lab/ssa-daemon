@@ -82,18 +82,11 @@
 #define TLS_SERVER_OCSP_STAPLING         122
 
 
-static const int TLS_1_2 = 0x0303;
-static const int TLS_1_3 = 0x0304;
+#define TLS_1_0 0x0000
+#define TLS_1_1 0x0001
+#define TLS_1_2 0x0002
+#define TLS_1_3 0x0003
 
-/*
-__attribute__((unused)) static char* tls_version_str(int version) {
-    if (version == TLS_1_2)
-        return "TLS 1.2";
-    if (version == TLS_1_3)
-        return "TLS 1.3";
-    return "Unknown version number";
-}
-*/
 
 
 /* Internal use only */

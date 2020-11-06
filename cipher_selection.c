@@ -94,7 +94,7 @@ int get_enabled_ciphers(socket_ctx* sock_ctx,
     }
 
     if (get_ciphers_string(ciphers, ciphers_str, ciphers_len + 1) != 0)
-        log_printf(LOG_ERROR, "Buffer had to be truncated--shouldn't happen\n");
+        LOG_E("Buffer had to be truncated--shouldn't happen\n");
 
     *len = ciphers_len + 1;
 end:
@@ -327,7 +327,7 @@ int append_to_cipherstring(char* cipher, char** cipherstring) {
         return 0;
     }
     else {
-        log_printf(LOG_ERROR, "Please use TLS_DISABLE_CIPHER to disable cipher.\n"); //change, seen by developers only
+        LOG_E("Please use TLS_DISABLE_CIPHER to disable cipher.\n"); //change, seen by developers only
         return -1;
     }
 }

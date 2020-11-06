@@ -27,29 +27,17 @@
 #ifndef SSA_LOG_H
 #define SSA_LOG_H
 
-#include <sys/time.h>
-#include <sys/socket.h>
-
-typedef enum log_level {
-    LOG_DEBUG,
-    LOG_INFO,
-    LOG_WARNING,
-    LOG_ERROR,
-    LOG_FATAL,
-    LOG_NONE,
-} log_level_t;
+#include <stdarg.h>
+#include <syslog.h>
 
 #ifndef NO_LOG
 
 /** 
- * Initializes the log to write its output to \p log_filename, or to stdout 
+ * Initializes the log to write its output to \p LOG_Cilename, or to stdout 
  * otherwise. Should be followed by a call to `log_close()` once finished.
- * @param log_filename The absolute path of a file to print logs to, or NULL
- * if it is desired to print logs to stdout.
- * @param level The minimum log level to print logs for.
  * @returns 0 on success, or -1 if the file could not be opened to write to.
  */
-int log_init(const char* log_filename, log_level_t level);
+int log_init();
 
 
 /** 
@@ -59,14 +47,7 @@ int log_init(const char* log_filename, log_level_t level);
  * @param level The level of the log to print out.
  * @param format The `printf`-formatted error message to print out.
  */
-void log_printf(log_level_t level, const char* format, ...);
-
-
-/**
- * Prints the given address \p addr to the log files.
- * @param addr The address to be printed out.
- */
-void log_printf_addr(struct sockaddr *addr);
+void log_printf(int level, const char* format, ...);
 
 
 /**
@@ -74,27 +55,27 @@ void log_printf_addr(struct sockaddr *addr);
  */
 void log_close(void);
 
-
-#define LOG_D(...) log_printf(LOG_DEBUG, __VA_ARGS__)
-#define LOG_I(...) log_printf(LOG_INFO, __VA_ARGS__)
+#define LOG_A(...) log_printf(LOG_ALERT, __VA_ARGS__)
+#define LOG_C(...) log_printf(LOG_CRIT, __VA_ARGS__)
+#define LOG_E(...) log_printf(LOG_ERR, __VA_ARGS__)
 #define LOG_W(...) log_printf(LOG_WARNING, __VA_ARGS__)
-#define LOG_E(...) log_printf(LOG_ERROR, __VA_ARGS__)
-#define LOG_F(...) log_printf(LOG_FATAL, __VA_ARGS__)
+#define LOG_N(...) log_printf(LOG_NOTICE, __VA_ARGS__)
+#define LOG_I(...) log_printf(LOG_INFO, __VA_ARGS__)
+#define LOG_D(...) log_printf(LOG_DEBUG, __VA_ARGS__)
+
 
 #else
 #define noop
-#define log_init(X, Y)    ((int)0)
+#define log_init()      ((int)0)
 #define log_printf(...) noop
-#define log_printf_addr(...) noop
-#define log_close() noop
+#define log_close()     noop
 
-#define LOG_DEBUG(string) noop
-#define LOG_INFO(string) noop
-#define LOG_WARN(string) noop
-#define LOG_ERROR(string) noop
-#define LOG_FATAL(string) noop
-#endif
-
-int timeval_subtract(struct timeval* result, struct timeval* x, struct timeval* y);
+#define LOG_A(...)      noop
+#define LOG_C(...)      noop
+#define LOG_E(...)      noop
+#define LOG_W(...)      noop
+#define LOG_I(...)      noop
+#define LOG_D(...)      noop
+#endif /* NO_LOG */
 
 #endif

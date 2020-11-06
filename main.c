@@ -34,7 +34,6 @@
 
 #define PORT 8443
 
-int parse_input(int argc, char* argv[], enum log_level *level, char** path);
 
 /* NOTE: This is not the main function that spins up multiple daemons and all
  * the other features that Mark O'Neil implemented. That is found in his repo. 
@@ -43,81 +42,34 @@ int parse_input(int argc, char* argv[], enum log_level *level, char** path);
 int main(int argc, char* argv[]) {
 
     char* config_path = NULL;
-    enum log_level level = LOG_WARNING;
-    int ret;
+    int ret = 1;
 
-    ret = parse_input(argc, argv, &level, &config_path);
-    if (ret != 0)
-        exit(EXIT_FAILURE);
-    
+    log_init();
 
-    if (log_init(NULL, level)) {
-        fprintf(stderr, "Failed to initialize log\n");
-        exit(EXIT_FAILURE);
+    if (argc == 2) {
+        config_path = argv[1];
+    } else if (argc > 2) {
+        fprintf(stderr, "Too many args passed to ssad on startup\n");
+        LOG_E("ssad had too many args passed on startup\n");
+        goto out;
     }
 
     if (geteuid() != 0) {
-        log_printf(LOG_ERROR, "Please run as root\n");
-        exit(EXIT_FAILURE);
+        fprintf(stderr, "Please run ssad as root\n");
+        LOG_E("ssad startup attempted without root privilages\n");
+        goto out;
     }
 
+    LOG_I("Starting ssad...\n");
     /* TODO: fork/execve here to make it a true daemon... */
     ret = run_daemon(PORT, config_path);
-
-    log_close();
 
     /* close stdin, stdout, stderr */
     for (int i = 0; i <= 2; i++)
         close(i);
 
+out:
+    log_close();
+
     return ret;
-}
-
-int parse_input(int argc, char* argv[], enum log_level *level, char** path) {
-
-    char* config_path = NULL;
-    int log_level_set = 0;
-
-    while (argc > 1) {
-        if (argv[1][0] == '-') {
-            if (log_level_set) {
-                printf("error: only one log level flag allowed (-v or -d)\n");
-                return 1;
-            }
-
-            if (argv[1][1] == 'v') {
-                *level = LOG_INFO;
-            
-            } else if (argv[1][1] == 'd') {
-                *level = LOG_DEBUG;
-
-            } else if (argv[1][1] == 's') {
-                *level = LOG_NONE;
-
-            } else {
-                printf("unrecognized flag \'%s\'\n", argv[1]);
-                return -1;
-            }
-
-            if (argv[1][2] != '\0') {
-                printf("unrecognized flag \'%s\'\n", argv[1]);
-                return -1;
-            }
-            log_level_set = 1;
-        
-        } else if (config_path == NULL) {
-            config_path = argv[1];
-        
-        } else {
-            printf("unrecognized arg \'%s\'\n", argv[1]);
-            return 1;
-        }
-
-        argv = &argv[1];
-        argc--;
-    }
-
-    *path = config_path;
-    
-    return 0;
 }

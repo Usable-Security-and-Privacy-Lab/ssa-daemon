@@ -19,7 +19,7 @@ void set_err_string(socket_ctx* sock_ctx, char* string, ...);
 void set_badfd_err_string(socket_ctx* sock_ctx);
 void set_wrong_state_err_string(socket_ctx* sock_ctx);
 
-void log_global_error(enum log_level level, char *message);
+void log_global_error(int level, char *message);
 
 void clear_global_errors();
 void clear_socket_error(socket_ctx* sock_ctx);

@@ -111,7 +111,7 @@ daemon_ctx* daemon_context_new(char* config_path, int port) {
 
 err:
     if (errno)
-        log_printf(LOG_ERROR, "Error creating daemon: %s\n", strerror(errno));
+        LOG_E("Error creating daemon: %s\n", strerror(errno));
 
     if (daemon != NULL)
         daemon_context_free(daemon);
@@ -219,7 +219,7 @@ int socket_context_new(socket_ctx** new_sock_ctx, int fd,
 
     return 0;
 err:
-    log_global_error(LOG_ERROR, "Socket context failed to be created");
+    log_global_error(LOG_ERR, "Socket context failed to be created");
 
     if (sock_ctx != NULL)
         socket_context_free(sock_ctx);
@@ -281,7 +281,7 @@ err:
 void socket_shutdown(socket_ctx* sock_ctx) {
 
     if (sock_ctx == NULL) {
-        LOG_F("Tried to shutdown NULL socket context reference\n");
+        LOG_C("Tried to shutdown NULL socket context reference\n");
         return;
     }
 
@@ -345,7 +345,7 @@ void socket_shutdown(socket_ctx* sock_ctx) {
 void socket_context_free(socket_ctx* sock_ctx) {
 
     if (sock_ctx == NULL) {
-        LOG_F("Tried to free NULL socket context reference\n");
+        LOG_C("Tried to free NULL socket context reference\n");
         return;
     }
 
@@ -496,7 +496,7 @@ void revocation_context_cleanup(revocation_ctx* rev_ctx) {
     LOG_D("Revocation context cleanup called\n");
     
     if (rev_ctx == NULL)
-        LOG_F("rev_ctx is null\n");
+        LOG_C("rev_ctx is null\n");
 
     if (rev_ctx->responders_at != NULL)
         free(rev_ctx->responders_at);
@@ -612,18 +612,10 @@ void crl_responder_free(crl_responder* resp) {
  * @returns 0 if the state was one of the acceptable states listed, -EBADFD if 
  * the state was CONN_ERROR when it shouldn't be, or -EOPNOTSUPP otherwise.
  */
-int check_socket_state(socket_ctx* sock_ctx, int num, ...) {
+int check_socket_state(socket_ctx* sock_ctx, long states) {
 
-    va_list args;
-
-    va_start(args, num);
-
-    for (int i = 0; i < num; i++) {
-        enum socket_state state = va_arg(args, enum socket_state);
-        if (sock_ctx->state == state)
-            return 0;
-    }
-    va_end(args);
+    if ((sock_ctx->state & states) != 0)
+        return 0;
 
     switch(sock_ctx->state) {
     case SOCKET_ERROR:
@@ -680,8 +672,8 @@ int get_port(struct sockaddr* addr) {
 }
 
 
-struct sockaddr_storage get_loopback_address(sa_family_t family)
-{
+struct sockaddr_storage get_loopback_address(sa_family_t family) {
+
     struct sockaddr_storage addr = {0};
 
     if (family == AF_INET) {

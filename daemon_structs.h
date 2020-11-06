@@ -149,22 +149,13 @@ typedef struct channel_st channel;
 
 
 enum socket_state {
-    SOCKET_ERROR = 0,      /** Socket unrecoverably failed operation */
-    SOCKET_NEW,            /** Fresh socket ready for `connect` or `listen` */
-    SOCKET_CONNECTING,     /** Performing TCP or TLS handshake */
-    SOCKET_FINISHING_CONN, /** revocation checks/connecting internally */
-    SOCKET_CONNECTED,      /** Both endpoints connected (client) */
-    SOCKET_LISTENING,      /** Socket listening/accepting connections */
-    SOCKET_DISCONNECTED    /** Both endpoints closed cleanly (client/server) */
-};
-
-
-enum tls_version {
-    TLS_DEFAULT_ENUM = 0, /** Default TLS version selected (TLS 1.3) */
-    TLS1_0_ENUM,          /** TLS 1.0 version selected */
-    TLS1_1_ENUM,          /** TLS 1.1 version selected */
-    TLS1_2_ENUM,          /** TLS 1.2 version selected */
-    TLS1_3_ENUM           /** TLS 1.3 version selected */
+    SOCKET_ERROR            = 1<<0, /** Socket unrecoverably failed operation */
+    SOCKET_NEW              = 1<<1, /** Socket ready to `connect` or `listen` */
+    SOCKET_CONNECTING       = 1<<2, /** TCP or TLS handshake in process */
+    SOCKET_FINISHING_CONN   = 1<<3, /** Internally connecting (or revocation) */
+    SOCKET_CONNECTED        = 1<<4, /** Connection fully established */
+    SOCKET_LISTENING        = 1<<5, /** Socket listening for TLS connections */
+    SOCKET_DISCONNECTED     = 1<<6, /** Clean shutdown done (client/server) */
 };
 
 
@@ -207,8 +198,8 @@ struct global_config_st {
     int max_chain_depth; /** Number of certificates acceptable in cert chain */
     int ct_checks;       /** 1 if Certificate Transparency enabled, 0 if not */
 
-    enum tls_version min_tls_version; /** minimum accepted TLS version */
-    enum tls_version max_tls_version; /** maximum accepted TLS version */
+    short min_tls_version; /** minimum accepted TLS version */
+    short max_tls_version; /** maximum accepted TLS version */
 
 
     unsigned int revocation_checks; /** bitset of revocation settings */
@@ -368,7 +359,7 @@ void ocsp_responder_free(ocsp_responder* resp);
 void crl_responder_shutdown(crl_responder* resp);
 void crl_responder_free(crl_responder* resp);
 
-int check_socket_state(socket_ctx* sock_ctx, int num, ...);
+int check_socket_state(socket_ctx* sock_ctx, long states);
 
 
 /**

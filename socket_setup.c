@@ -9,11 +9,12 @@
 #include <event2/event.h>
 #include <openssl/err.h>
 
+#include "certificate.h"
 #include "config.h"
 #include "connection_callbacks.h"
 #include "error.h"
+#include "in_tls.h"
 #include "log.h"
-#include "certificate.h"
 #include "sessions.h"
 #include "socket_setup.h"
 
@@ -90,11 +91,11 @@ SSL_CTX* SSL_CTX_create(global_config* settings) {
         SSL_CTX_clear_options(ctx, SSL_OP_NO_TICKET);
     
 
-    tls_version = get_tls_version(settings->min_tls_version);
+    tls_version = tls_version_to_openssl(settings->min_tls_version);
 	if (SSL_CTX_set_min_proto_version(ctx, tls_version) != 1) 
 		goto err;
 
-	tls_version = get_tls_version(settings->max_tls_version);
+	tls_version = tls_version_to_openssl(settings->max_tls_version);
 	if (SSL_CTX_set_max_proto_version(ctx, tls_version) != 1)
 		goto err;
 
@@ -149,7 +150,7 @@ SSL_CTX* SSL_CTX_create(global_config* settings) {
 	return ctx;
 err:
     if (ERR_peek_error())
-        log_printf(LOG_ERROR, "OpenSSL error initializing client SSL_CTX: %s\n",
+        LOG_E("OpenSSL error initializing client SSL_CTX: %s\n",
                 ERR_error_string(ERR_get_error(), NULL));
     
     if (ctx != NULL)
@@ -211,7 +212,7 @@ int prepare_bufferevents(socket_ctx* sock_ctx, int plain_fd) {
 
      return 0;
 err:
-    log_global_error(LOG_ERROR, "Failed to set up bufferevents for connection");
+    log_global_error(LOG_ERR, "Failed to set up bufferevents for connection");
 
     if (sock_ctx->plain.bev != NULL) {
         bufferevent_free(sock_ctx->plain.bev);
@@ -272,14 +273,14 @@ int prepare_SSL_client(socket_ctx* sock_ctx) {
 
     ret = SSL_set_tlsext_host_name(sock_ctx->ssl, sock_ctx->rem_hostname);
     if (ret != 1) {
-        log_printf(LOG_ERROR, "Connection setup error: "
+        LOG_E("Connection setup error: "
                 "couldn't assign the socket's hostname for SNI\n");
         goto err;
     }
 
     ret = SSL_set1_host(sock_ctx->ssl, sock_ctx->rem_hostname);
     if (ret != 1) {
-        log_printf(LOG_ERROR, "Connection setup error: "
+        LOG_E("Connection setup error: "
                 "couldn't assign the socket's hostname for validation\n");
         goto err;
     }
@@ -327,42 +328,46 @@ int prepare_SSL_server(socket_ctx* sock_ctx) {
 
 /**
  *******************************************************************************
- *                   HELPER FUNCTIONS FOR CONFIG LOADING
+ *               HELPER FUNCTIONS FOR CONFIG LOADING/SOCKOPTS
  *******************************************************************************
  */
 
 /**
- * Converts the given tls_version enum into the OpenSSL-specific version.
- * @param version The version given to us by the config file.
- * @returns The OpenSSL representation of the TLS Version, or TLS1_2_VERSION
+ * Converts the given tls_version into the OpenSSL-specific version.
+ * @param version The version given to us (by config file or setsockopt call).
+ * @returns The OpenSSL representation of the TLS Version, or TLS1_MAX_VERSION
  * if no version was set (a safe default).
  */
-long get_tls_version(enum tls_version version) {
+int tls_version_to_openssl(short version) {
 
-    long tls_version = 0;
-
-    switch(version) {
-    case TLS_DEFAULT_ENUM:
-        tls_version = TLS_MAX_VERSION;
-        break;
-    case TLS1_0_ENUM:
-        tls_version = TLS1_VERSION;
-        break;
-    case TLS1_1_ENUM:
-        tls_version = TLS1_1_VERSION;
-        break;
-    case TLS1_2_ENUM:
-        tls_version = TLS1_2_VERSION;
-        break;
-    case TLS1_3_ENUM:
-        tls_version = TLS1_3_VERSION;
-        break;
-    default:
-        /* shouldn't happen */
-        log_printf(LOG_ERROR, "Unknown TLS version specified\n");
+    switch (version) {
+        case TLS_1_0:
+            return TLS1_VERSION;
+        case TLS_1_1:
+            return TLS1_1_VERSION;
+        case TLS_1_2:
+            return TLS1_2_VERSION;
+        case TLS_1_3:
+            return TLS1_3_VERSION;
+        default:
+            return TLS_MAX_VERSION;
     }
+}
 
-    return tls_version;
+short tls_version_from_openssl(int version) {
+
+    switch (version) {
+        case TLS1_VERSION:
+            return TLS_1_0;
+        case TLS1_1_VERSION:
+            return TLS_1_1;
+        case TLS1_2_VERSION:
+            return TLS_1_2;
+        case TLS1_3_VERSION:
+            return TLS_1_3;
+        default:
+            return -1;
+    }
 }
 
 /**
@@ -389,7 +394,7 @@ int load_cipher_list(SSL_CTX* ctx, char** list, int num) {
     /* returns some false negatives... but it's the best we've got */
     if (sk_SSL_CIPHER_num(SSL_CTX_get_ciphers(ctx)) < num) {
         /* Fewer ciphers were added than were specified */
-        log_printf(LOG_ERROR, "Some cipher names were not recognized\n");
+        LOG_E("Some cipher names were not recognized\n");
         ret = 0;
         goto end;
     }
@@ -421,7 +426,7 @@ int load_ciphersuites(SSL_CTX* ctx, char** list, int num) {
         goto end;
 
     if (sk_SSL_CIPHER_num(SSL_CTX_get_ciphers(ctx)) < num) {
-        log_printf(LOG_ERROR, "Some cipher names were not recognized\n");
+        LOG_E("Some cipher names were not recognized\n");
         ret = 0;
         goto end;
     }
@@ -452,7 +457,7 @@ int concat_ciphers(char** list, int num, char** out) {
 
     ciphers = malloc(len);
     if (ciphers == NULL) {
-        log_printf(LOG_ERROR, "Malloc failed while loading cipher list: %s\n",
+        LOG_E("Malloc failed while loading cipher list: %s\n",
                 strerror(errno));
         return 0;
     }
@@ -539,14 +544,14 @@ int load_certificate_authority(SSL_CTX* ctx, char* CA_path) {
             /* log_printf(LOG_INFO, "Found the Fedora CA file.\n"); */
         
         } else { /* UNSUPPORTED OS */
-            /* log_printf(LOG_ERROR, "Unable to find valid CA location.\n"); */
+            /* LOG_E("Unable to find valid CA location.\n"); */
             return 0;
         }
     }
 
     
     if (stat(CA_path, &file_stats) != 0) {
-        log_printf(LOG_ERROR, "Failed to access CA file %s: %s\n", 
+        LOG_E("Failed to access CA file %s: %s\n", 
                 CA_path, strerror(errno));
         return 0;
     }
@@ -560,7 +565,7 @@ int load_certificate_authority(SSL_CTX* ctx, char* CA_path) {
         return SSL_CTX_load_verify_locations(ctx, NULL, CA_path);
 
     } else {
-        log_printf(LOG_ERROR, "Loading CA certs--path not file or directory\n");
+        LOG_E("Loading CA certs--path not file or directory\n");
         return 0;
     }
 }
@@ -586,6 +591,6 @@ int associate_fd(socket_ctx* sock_ctx, evutil_socket_t ifd) {
 
     return 0;
 err:
-    log_printf(LOG_ERROR, "associate_fd failed.\n");
+    LOG_E("associate_fd failed.\n");
     return -ECONNABORTED; /* Only happens while client is connecting */
 }
