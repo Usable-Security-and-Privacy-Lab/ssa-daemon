@@ -145,9 +145,9 @@ listed below:
 > #### TLS_MIN_VERSION
 > Sets the minimum TLS version that the socket will accept during the TLS 
 > handshake. Defined versions are `TLS_1_0`, `TLS_1_1`, `TLS_1_2`, and 
-> `TLS_1_3`. `optval` should be a short assigned to one of the four 
+> `TLS_1_3`. `optval` should be an int assigned to one of the four 
 > versions, which are defined as macros in `<in_tls.h>`. `optlen` should 
-> be equal to `sizeof(short)`. 
+> be equal to `sizeof(int)`. 
 >
 > **RESTRICTIONS**
 >
@@ -169,9 +169,9 @@ listed below:
 > #### TLS_MAX_VERSION
 > Sets the maximum TLS version that the socket will accept during the TLS 
 > handshake. Defined versions are `TLS_1_0`, `TLS_1_1`, `TLS_1_2`, and 
-> `TLS_1_3`. `optval` should be a short assigned to one of the four 
+> `TLS_1_3`. `optval` should be an int assigned to one of the four 
 > versions, which are defined as macros in `<in_tls.h>`. `optlen` should 
-> be equal to `sizeof(short)`. 
+> be equal to `sizeof(int)`. 
 >
 > **RESTRICTIONS**
 >

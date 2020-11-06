@@ -17,7 +17,7 @@
 int set_CA_certificates(socket_ctx *sock_ctx, char* path, socklen_t len);
 int set_certificate_chain(socket_ctx* sock_ctx, char* path, socklen_t len);
 int set_private_key(socket_ctx* sock_ctx, char* path, socklen_t len);
-int set_min_version(socket_ctx* sock_ctx, short* version, socklen_t len);
+int set_min_version(socket_ctx* sock_ctx, int* version, socklen_t len);
 int set_max_version(socket_ctx* sock_ctx, int* version, socklen_t len);
 int set_tls_context(socket_ctx* sock_ctx, unsigned long* data, socklen_t len);
 int set_remote_hostname(socket_ctx* sock_ctx, char* hostname, socklen_t len);
@@ -92,7 +92,7 @@ int do_setsockopt_action(socket_ctx* sock_ctx,
     case TLS_VERSION_MIN:
 	    if ((response = check_socket_state(sock_ctx, SOCKET_NEW)) != 0)
             break;
-        response = set_min_version(sock_ctx, (short*) value, len);
+        response = set_min_version(sock_ctx, (int*) value, len);
         break;
 
     case TLS_VERSION_MAX:
@@ -280,9 +280,9 @@ err:
 }
 
 
-int set_min_version(socket_ctx *sock_ctx, short* version, socklen_t len) {
+int set_min_version(socket_ctx *sock_ctx, int* version, socklen_t len) {
 
-    if (len != sizeof(short) || *version > TLS_1_3 || *version < TLS_1_0)
+    if (len != sizeof(int) || *version > TLS_1_3 || *version < TLS_1_0)
         return -EINVAL;
 
     int openssl_version = tls_version_to_openssl(*version);
@@ -300,7 +300,7 @@ int set_min_version(socket_ctx *sock_ctx, short* version, socklen_t len) {
 
 int set_max_version(socket_ctx *sock_ctx, int* version, socklen_t len) {
 
-    if (len != sizeof(short) || *version > TLS_1_3 || *version < TLS_1_0)
+    if (len != sizeof(int) || *version > TLS_1_3 || *version < TLS_1_0)
         return -EINVAL;
 
     int openssl_version = tls_version_to_openssl(*version);

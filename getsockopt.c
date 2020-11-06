@@ -17,9 +17,9 @@ int get_peer_certificate(socket_ctx* sock_ctx, char** data, unsigned int* len);
 int get_peer_identity(socket_ctx* sock_ctx, char** data, unsigned int* len);
 int get_hostname(socket_ctx* sock_ctx, char** data, unsigned int* len);
 int get_chosen_cipher(socket_ctx* sock_ctx, char** data, unsigned int* len);
-int get_version_min(socket_ctx* sock_ctx, short** data, unsigned int* len);
-int get_version_max(socket_ctx* sock_ctx, short** data, unsigned int* len);
-int get_version_conn(socket_ctx* sock_ctx, short** data, unsigned int* len);
+int get_version_min(socket_ctx* sock_ctx, int** data, unsigned int* len);
+int get_version_max(socket_ctx* sock_ctx, int** data, unsigned int* len);
+int get_version_conn(socket_ctx* sock_ctx, int** data, unsigned int* len);
 int get_session_resumed(socket_ctx* sock_ctx, int** data, unsigned int *len);
 int get_session_reuse(socket_ctx* sock_ctx, int** data, unsigned int* len);
 int get_server_stapling(socket_ctx* sock_ctx, int** data, unsigned int* len);
@@ -92,17 +92,17 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
         break;
 
     case TLS_VERSION_MIN:
-        get_version_min(sock_ctx, (short**) data, len);
+        get_version_min(sock_ctx, (int**) data, len);
         break;
 
     case TLS_VERSION_MAX:
-        get_version_max(sock_ctx, (short**) data, len);
+        get_version_max(sock_ctx, (int**) data, len);
         break;
 
     case TLS_VERSION_CONN:
         if ((response = check_socket_state(sock_ctx, SOCKET_CONNECTED)) != 0)
             break;
-        get_version_conn(sock_ctx, (short**) data, len);
+        get_version_conn(sock_ctx, (int**) data, len);
         break;
 
     case TLS_REVOCATION_CHECKS:
@@ -350,9 +350,9 @@ int get_chosen_cipher(socket_ctx* sock_ctx, char** data, unsigned int* len) {
  * @param len [out] The length of \p data.
  * @returns 0 on success, or a negative errno on failure.
  */
-int get_version_min(socket_ctx* sock_ctx, short** data, unsigned int* len) {
+int get_version_min(socket_ctx* sock_ctx, int** data, unsigned int* len) {
 
-    short* version = malloc(sizeof(short));
+    int* version = malloc(sizeof(int));
     if (version == NULL)
         return -ENOMEM;
 
@@ -360,7 +360,7 @@ int get_version_min(socket_ctx* sock_ctx, short** data, unsigned int* len) {
     *version = tls_version_from_openssl(openssl_version);
 
     *data = version;
-    *len = sizeof(short);
+    *len = sizeof(int);
 
     return 0;
 }
@@ -373,9 +373,9 @@ int get_version_min(socket_ctx* sock_ctx, short** data, unsigned int* len) {
  * @param len [out] The length of \p data.
  * @returns 0 on success, or a negative errno on failure.
  */
-int get_version_max(socket_ctx* sock_ctx, short** data, unsigned int* len) {
+int get_version_max(socket_ctx* sock_ctx, int** data, unsigned int* len) {
 
-    short* version = malloc(sizeof(short));
+    int* version = malloc(sizeof(int));
     if (version == NULL)
         return -ENOMEM;
 
@@ -383,7 +383,7 @@ int get_version_max(socket_ctx* sock_ctx, short** data, unsigned int* len) {
     *version = tls_version_from_openssl(openssl_version);
 
     *data = version;
-    *len = sizeof(short);
+    *len = sizeof(int);
 
     return 0;
 }
@@ -396,9 +396,9 @@ int get_version_max(socket_ctx* sock_ctx, short** data, unsigned int* len) {
  * @param len [out] The length of \p data.
  * @returns 0 on success, or a negative errno on failure.
  */
-int get_version_conn(socket_ctx* sock_ctx, short** data, unsigned int* len) {
+int get_version_conn(socket_ctx* sock_ctx, int** data, unsigned int* len) {
     
-    short* version = malloc(sizeof(short));
+    int* version = malloc(sizeof(int));
     if (version == NULL)
         return -ENOMEM;
 
@@ -406,7 +406,7 @@ int get_version_conn(socket_ctx* sock_ctx, short** data, unsigned int* len) {
     *version = tls_version_from_openssl(openssl_version);
 
     *data = version;
-    *len = sizeof(short);
+    *len = sizeof(int);
 
     return 0;
 }

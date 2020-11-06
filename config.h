@@ -9,14 +9,14 @@
 typedef struct file_stream_st file_stream;
 typedef struct label_pair_st label_pair;
 
-extern const label_pair parser_keys[PARSER_KEY_CNT];
-
-
 
 struct label_pair_st {
     char *label;
     int (*func)(file_stream *, global_config *);
 };
+
+extern const label_pair parser_keys[PARSER_KEY_CNT];
+
 
 /**
  * Parses a given config file and fills an allocated global_config struct 

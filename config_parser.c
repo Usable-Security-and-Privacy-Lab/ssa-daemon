@@ -1,5 +1,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
@@ -38,12 +39,31 @@ struct file_stream_st {
     int fd;
 };
 
+void global_settings_free(global_config* settings)
+{
+    if (settings == NULL)
+        return;
+
+    if (settings->cipher_list != NULL) {
+        for (int i = 0; i < settings->cipher_list_cnt; i++)
+            free(settings->cipher_list[i]);
+        free(settings->cipher_list);
+    }
+
+    if (settings->ciphersuites != NULL) {
+        for (int i = 0; i < settings->ciphersuite_cnt; i++)
+            free(settings->ciphersuites[i]);
+        free(settings->ciphersuites);
+    }
+
+    free(settings);
+}
+
 
 global_config* parse_config(char* file_path)
 {
     global_config *config = NULL;
     file_stream fs;
-    char nextchar;
     int err;
 
     err = fs_init(&fs, file_path);
@@ -131,7 +151,6 @@ char fs_read(file_stream *fs)
 int read_settings(file_stream *fs, global_config *conf)
 {   
     int keys_parsed[PARSER_KEY_CNT] = {0};
-    char *label;
     char c = fs_peek(fs);
     int err = 0;
 
@@ -185,10 +204,9 @@ int read_setting(file_stream *fs, global_config *conf, int *keys_parsed)
     int start = 0;
     int end = PARSER_KEY_CNT-1;
     int idx = 0;
-    int err;
 
     char c = fs_peek(fs);
-    while (true) {
+    while (1) {
         if (isblank(c) || c == ':') /* designates end of label */
             c = '\0';
         else
@@ -223,7 +241,6 @@ int parser_read_string(file_stream *fs, char **str)
 {
     char buf[MAX_TOKEN_SIZE+1] = {0};
     int buf_idx = 0;
-    int err;
     char c;
 
     while (buf_idx < MAX_TOKEN_SIZE) {
@@ -233,7 +250,8 @@ int parser_read_string(file_stream *fs, char **str)
             break;
 
         case ' ':
-            err = read_blankline(fs);
+            if (read_blankline(fs) != 0)
+                return -1;
             break;
         
         case '#':
@@ -332,7 +350,7 @@ int parser_read_int(file_stream *fs, int *val, int min, int max)
     return 0;
 }
 
-int read_boolean(file_stream *fs, int *val)
+int parser_read_boolean(file_stream *fs, int *val)
 {
     char *str;
     int err = 0;
@@ -362,7 +380,7 @@ int parser_read_list(file_stream *fs, char **str_list[])
     int curr_indent = 0;
     int err = 0;
     
-    if (read_to_newline(fs) != 0)
+    if (read_blankline(fs) != 0)
         return -1;
 
     char c = fs_read(fs);

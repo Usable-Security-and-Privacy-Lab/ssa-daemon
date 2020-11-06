@@ -77,7 +77,7 @@ int associate_fd(socket_ctx* sock_ctx, evutil_socket_t ifd);
  * TLS1_1_VERSION, TLS1_2_VERSION, or TLS1_3_VERSION).
  * @see `in_tls.h`
  */
-int tls_version_to_openssl(short version);
+int tls_version_to_openssl(int version);
 
 
 /**
@@ -88,7 +88,7 @@ int tls_version_to_openssl(short version);
  * input version number is not recognized as a valid version.
  * @see `in_tls.h`
  */
-short tls_version_from_openssl(int version);
+int tls_version_from_openssl(int version);
 
 
 

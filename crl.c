@@ -5,7 +5,6 @@
 #include <unistd.h>
 
 #include "error.h"
-#include "config.h"
 #include "hashmap_crl.h"
 
 #include "crl.h"

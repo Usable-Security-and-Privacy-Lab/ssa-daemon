@@ -9,7 +9,7 @@ int read_ca_path(file_stream *fs, global_config *conf);
 int read_chain_depth(file_stream *fs, global_config *conf);
 int read_ct_checks(file_stream *fs, global_config *conf);
 int read_cipherlist(file_stream *fs, global_config *conf);
-int read_cihpersuites(file_stream *fs, global_config *conf);
+int read_ciphersuites(file_stream *fs, global_config *conf);
 int read_max_tls_version(file_stream *fs, global_config *conf);
 int read_min_tls_version(file_stream *fs, global_config *conf);
 int read_revocation_cached(file_stream *fs, global_config *conf);
@@ -20,12 +20,6 @@ int read_revocation_stapled(file_stream *fs, global_config *conf);
 int read_session_resumption(file_stream *fs, global_config *conf);
 int read_session_tickets(file_stream *fs, global_config *conf);
 int read_session_timeout(file_stream *fs, global_config *conf);
-
-/* Temporary for testing */
-#define TLS_1_0 0x0000
-#define TLS_1_1 0x0001
-#define TLS_1_2 0x0002
-#define TLS_1_3 0x0003
 
 
 /* labels MUST (!!) stay sorted alphabetically */

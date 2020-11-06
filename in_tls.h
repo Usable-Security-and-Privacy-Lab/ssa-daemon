@@ -82,10 +82,10 @@
 #define TLS_SERVER_OCSP_STAPLING         122
 
 
-#define TLS_1_0 0x0000
-#define TLS_1_1 0x0001
-#define TLS_1_2 0x0002
-#define TLS_1_3 0x0003
+#define TLS_1_0 0x00000000
+#define TLS_1_1 0x00000001
+#define TLS_1_2 0x00000002
+#define TLS_1_3 0x00000003
 
 
 

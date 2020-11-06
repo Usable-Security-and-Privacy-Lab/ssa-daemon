@@ -134,18 +134,7 @@ SSL_CTX* SSL_CTX_create(global_config* settings) {
 		ret = SSL_CTX_set_ctlog_list_file(ctx, "ct_log_list.cnf");
 		if(ret != 1)
 			goto err;
-	}
-
-	for(int i = 0; i < settings->cert_cnt; ++i) {
-		ret = load_certificates(ctx, settings->certificates[i]); // eventually delete this
-		if (ret != 1) 
-			goto err;
-
-		ret = load_private_key(ctx, settings->private_keys[i]); 
-		if(ret != 1) 
-			goto err;
-		
-	}
+    }
 
 	return ctx;
 err:
@@ -338,7 +327,7 @@ int prepare_SSL_server(socket_ctx* sock_ctx) {
  * @returns The OpenSSL representation of the TLS Version, or TLS1_MAX_VERSION
  * if no version was set (a safe default).
  */
-int tls_version_to_openssl(short version) {
+int tls_version_to_openssl(int version) {
 
     switch (version) {
         case TLS_1_0:
@@ -354,7 +343,7 @@ int tls_version_to_openssl(short version) {
     }
 }
 
-short tls_version_from_openssl(int version) {
+int tls_version_from_openssl(int version) {
 
     switch (version) {
         case TLS1_VERSION:

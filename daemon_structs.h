@@ -198,9 +198,8 @@ struct global_config_st {
     int max_chain_depth; /** Number of certificates acceptable in cert chain */
     int ct_checks;       /** 1 if Certificate Transparency enabled, 0 if not */
 
-    short min_tls_version; /** minimum accepted TLS version */
-    short max_tls_version; /** maximum accepted TLS version */
-
+    int min_tls_version; /** minimum accepted TLS version */
+    int max_tls_version; /** maximum accepted TLS version */
 
     unsigned int revocation_checks; /** bitset of revocation settings */
     int session_resumption; /** 1 if sockets will reuse sessions, 0 if not */
