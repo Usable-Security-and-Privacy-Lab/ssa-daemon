@@ -40,9 +40,6 @@ global_config* parse_config(char* file_path);
  */
 void global_settings_free(global_config* settings);
 
-char* utf8_to_ascii(unsigned char* src, ssize_t len);
-
-
 
 //==============================================================================
 // Helper functions for config_options.c
