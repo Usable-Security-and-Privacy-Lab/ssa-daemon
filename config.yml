@@ -4,28 +4,27 @@
 # (as listed to the right/bottom of each setting)
 
 
-# TLS Protocols include TLS-1.0, TLS-1.1, TLS-1.2 and TLS-1.3. Note that 
-# SSLv2 and SSLv3 cannot be enabled (due to considerable security flaws).
-# protocols lower than TLS-1.2 are considered deprecated and insecure by most browsers.
-min-tls-version: 2 # Default: 1.2
-max-tls-version: 3 # Default: 1.3
+# TLS Protocols include 0, 1, 2, 3 (corresponding to TLSv1.0, TLSv1.1...). Note 
+# that SSLv2 and SSLv3 cannot be enabled (due to considerable security flaws).
+# Note that protocols lower than TLS-1.2 are considered deprecated and insecure 
+# by most browsers.
+min-tls-version: 2 # Default: 2 (TLSv1.2)
+max-tls-version: 3 # Default: 3 (TLSv1.3)
 
-# The following is commented out since the SSA Daemon does a decent job at finding
-# the correct CA path based on what Linux distro is being run (particularly for Fedora & Ubuntu).
-# CA-path can be a file or directory of CA files. All files must be in PEM format. Use "c_rehash ."
-# in directory before use. 
+# The following is commented out since the SSA Daemon automatically uses the 
+# OS CA path based on what Linux distro is being run.
+# CA-path can be a file or directory of CA files. All files must be in PEM 
+# format. Use "c_rehash ." in directory before use. 
 #  CA-path: /etc/ssl/certs
- #  CA-path: test_files/certs/rootCA.pem # use this for testing our server
+#  CA-path: test_files/certs/rootCA.pem # use this for our test server
 
-# Session Tickets posess a vulnerability in them for TLS 1.2 and lower.
-# For more info, see here: https://blog.filippo.io/we-need-to-talk-about-session-tickets/
-# Realistically, they should be kept disabled unless TLS-1.3 is your minimum TLS version.
 session-tickets: disabled  # Default: disabled
 
-# Default ciphers in this list (and added by the SSA Daemon in the event of no configuration
-# file found) all maintain Forward Secrecy (the second 'E' in ECDHE is for Ephemeral).
-# NULL, RC4, MD4 and MD5 ciphers SHOULD NOT be allowed in this list, and SHA128 is
-# also considered insecure. Make sure to research your cipher before adding it to this list.
+# Default ciphers in this list (and added by the SSA Daemon in the event of no 
+# configuration file found) all maintain Forward Secrecy (the second 'E' in 
+# ECDHE is for Ephemeral). NULL, RC4, MD4 and MD5 ciphers SHOULD NOT be allowed 
+# in this list, and SHA128 is also considered insecure. Make sure to research 
+# your cipher before adding it to this list.
 cipher-list: 
   - ECDHE-ECDSA-AES256-GCM-SHA384
   - ECDHE-RSA-AES256-GCM-SHA384
@@ -42,6 +41,8 @@ cipher-list:
   #           - ECDHE-RSA-AES128-GCM-SHA256
 
 # These are the only ciphersuites accepted by TLS 1.3; they're all very safe.
+# Note that while CCM ciphers are technically safe, they posess properties that 
+# may make them unsafe for future use.
 ciphersuites:
   - TLS_AES_256_GCM_SHA384
   - TLS_AES_128_GCM_SHA256
@@ -50,41 +51,26 @@ ciphersuites:
 # Defaults: - TLS_AES_256_GCM_SHA384
 #           - TLS_AES_128_GCM_SHA256
 #           - TLS_CHACHA20_POLY1305_SHA256
-#           - TLS_AES_128_CCM_SHA256
-#           - TLS_AES_128_CCM_8_SHA256
 
 # Sessions older than the session timeout are not reused.  Value is in seconds.
 session-timeout: 300 # Default: 300 seconds
 
-# Set the maximum number of certificates that can be traversed before certification fails. 
-# To allow for unlimited certificates to be traversed, set the value to 0.
+# Set the maximum number of certificates that can be traversed before 
+# certification fails.
 cert-verification-depth: 10
-# Default: 10. This allows for the peer certificate, at most 10 intermediate CA certificates and a final trust anchor certificate.
+# Default: 10. This allows for the peer certificate, at most 10 intermediate CA 
+# certificates and a final trust anchor certificate.
 
-# Enable certificate transparency verification. Servers that do not provide a valid SCT will not be connected with.
-# Provides greater security by guarding against several types of certificate-based threats.
+# Enable certificate transparency verification. Servers that do not provide a 
+# valid SCT will not be connected with. Provides greater security by guarding 
+# against several types of CA compromise threats.
 # See http://www.certificate-transparency.org/what-is-ct for more information.
 cert-transparency-checks: disabled
 # Default: enabled
 
-# Certificate Revocation checks are important in determining the authenticity of a webiste.
+# Certificate Revocation checks are important in determining the authenticity 
+# of a webiste's certificate.
 revocation-checks: disabled
 # Default: enabled
 
 session-resumption: enabled
-
-
-# Set the path to the certificate chain to be provided to clients.
-# There are two options for this:
-# 1. Give the path to a file in PEM format containing the entire certificate chain.
-#    The certificates should be in the correct order from server certificate to root certificate.
-# 2. Give the path to a directory containing files that hold one certificate each. The files
-#    may be in PEM format or DER (ASN1). PEM files must end in ".pem" not ".crt", ".cer", etc. 
-#cert-path: test_files/certs/server_chain.pem
-
-# Set the path to the file containing the private key. The file may be in PEM or DER (ASN1) format.
-#key-path: test_files/certs/server_key.pem
-
-#Multiple certificate chain / key pairs can be provided if desired (One for RSA and one for DSA certificates).
-#cert-path: test_files/certs/testing/ecdsa
-#key-path: test_files/certs/testing/ecdsa_key.pem
