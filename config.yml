@@ -2,13 +2,13 @@
 # The following are the loadable configurations for the SSA Daemon.
 # If a configuration is not set in this YAML file, the default will be use
 # (as listed to the right/bottom of each setting)
-  
-      
+
+
 # TLS Protocols include TLS-1.0, TLS-1.1, TLS-1.2 and TLS-1.3. Note that 
 # SSLv2 and SSLv3 cannot be enabled (due to considerable security flaws).
 # protocols lower than TLS-1.2 are considered deprecated and insecure by most browsers.
-min-tls-version  : 1.2 # Default: 1.2
-max-tls-version: 1.3 # Default: 1.3
+min-tls-version: 2 # Default: 1.2
+max-tls-version: 3 # Default: 1.3
 
 # The following is commented out since the SSA Daemon does a decent job at finding
 # the correct CA path based on what Linux distro is being run (particularly for Fedora & Ubuntu).
@@ -64,7 +64,7 @@ cert-verification-depth: 10
 # Enable certificate transparency verification. Servers that do not provide a valid SCT will not be connected with.
 # Provides greater security by guarding against several types of certificate-based threats.
 # See http://www.certificate-transparency.org/what-is-ct for more information.
-verify-cert-transparency: disabled
+cert-transparency-checks: disabled
 # Default: enabled
 
 # Certificate Revocation checks are important in determining the authenticity of a webiste.

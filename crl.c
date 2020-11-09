@@ -9,7 +9,7 @@
 
 #include "crl.h"
 
-
+char* utf8_to_ascii(unsigned char* src, ssize_t len);
 int crl_check_times(const ASN1_TIME* thisupd,
 		const ASN1_TIME* nextupd, long nsec, long maxsec);
 char* crl_convert(char* serial);
@@ -288,35 +288,34 @@ err:
 }
 
 
+/**
+ * Allocates a new char array the length of src and fills it with an ASCII 
+ * conversion of the UTF-8 encoded src. If no conversion is possible, or if
+ * allocation fails, this returns NULL.
+ * @param src The UTF-8 encoded string to convert.
+ * @param len The length of src.
+ * @returns An ASCII-formatted string, or NULL on malloc/conversion failure.
+ */
+char* utf8_to_ascii(unsigned char* src, ssize_t len) {
 
+    char* dest = calloc(1, len+1);
+    if (dest == NULL)
+        return NULL;
+    
+    int index = 0;
+    for (int i = 0; i < len; i++) {
+        if ((int) src[index] >= 127) { /* doesn't convert after 126 */
+            free(dest);
+            return NULL;
+        }
 
+        dest[index] = src[index];
+        index++;
+    }
+    dest[len] = '\0';
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    return dest;
+}
 
 
 int check_crl_response(X509_CRL* crl, X509* subject, X509* issuer, int* response) {
