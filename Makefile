@@ -24,7 +24,7 @@ TESTS := $(patsubst %.cpp,%,$(TEST_FILES))
 
 INCLUDES = `pkg-config --cflags libnl-3.0`
 TEST_LIBS=-lgtest_main -lgtest -pthread
-LIBS = -lpthread -lyaml  \
+LIBS = -lpthread         \
 	`pkg-config --libs   \
 		libevent_openssl \
 		libnl-genl-3.0   \
