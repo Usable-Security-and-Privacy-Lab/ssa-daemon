@@ -1,36 +1,39 @@
-## NAME
+% GETSOCKOPT(2) Version 0.67 | Secure Socket API Documentation
+
+NAME
+====
 
 getsockopt, setsockopt - get and set TLS-specific options on sockets
 
-## SYNOPSIS
+SYNOPSIS
+========
 
-```c
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <in_tls.h>
+**#include <sys/types.h>**  
+**#include <sys/socket.h>**  
+**#include <in_tls.h>**  
+  
+| __int getsockopt(int__ *sockfd***, int** *level***, int** *optname***,**  
+|                __void \*__*optval***, socklen_t \****optlen***);** 
 
-int getsockopt(int sockfd, int level, int optname, void *optval, socklen_t *optlen);
+DESCRIPTION
+===========
 
-```
+**getsockopt**() retrieves information both locally and within the SSA daemon for 
+the socket referred to by the file descriptor _sockfd_.
 
-## DESCRIPTION
-
-`getsockopt()` retrieves information both locally and within the SSA daemon for 
-the socket referred to by the file descriptor `sockfd`.
-
-An additional protocol level (`IPPROTO_TLS`) has been added for sockets 
+An additional protocol level (**IPPROTO_TLS**) has been added for sockets 
 utilizing the daemon--it exists as a way for a programmer to retrieve the TLS 
 settings of a socket (such as enabled ciphersuites, message padding features, 
-and many other TLS-specific features). This constant can be used in `level` 
+and many other TLS-specific features). This constant can be used in _level_ 
 along with one of the defined optnames for the TLS socket options (such as 
-`TLS_HOSTNAME` or `TLS_DISABLE_CIPHER`). 
+**TLS_HOSTNAME** or **TLS_DISABLE_CIPHER**). 
 
 Some of the options given in IPPROTO_TLS only make sense at a certain point in 
 the lifecycle of a connection, such as retrieving a peer's certificate after 
-connecting to an end host. Any `getsockopt()` function used at the wrong phase 
-in a socket's life cycle will return the error code `EOPNOTSUPP`.
+connecting to an end host. Any getsockopt**() function used at the wrong phase 
+in a socket's life cycle will return the error code **EOPNOTSUPP**.
 
-At the `IPPROTO_TLS` level, the options available for `getsockopt()` are listed 
+At the **IPPROTO_TLS** level, the options available for **getsockopt**() are listed 
 below:
 
 ### TLS getsockopt options:
