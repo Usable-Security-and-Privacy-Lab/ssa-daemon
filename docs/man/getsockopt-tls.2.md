@@ -12,8 +12,8 @@ SYNOPSIS
 **#include <sys/socket.h>**  
 **#include <in_tls.h>**  
   
-| __int getsockopt(int__ *sockfd***, int** *level***, int** *optname***,**  
-|                __void \*__*optval***, socklen_t \****optlen***);** 
+| __int getsockopt(int__ _sockfd_**, int** _level_**, int** _optname_**,**  
+|                __void \*__*optval***, socklen_t \****optlen*__);__ 
 
 DESCRIPTION
 ===========
