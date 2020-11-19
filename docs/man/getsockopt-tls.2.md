@@ -13,7 +13,7 @@ SYNOPSIS
 **#include <in_tls.h>**  
   
 | __int getsockopt(int__ _sockfd_**, int** _level_**, int** _optname_**,**  
-|                __void \*__*optval***, socklen_t \****optlen*__);__ 
+|                **void** \*_optval_**, socklen_t** \*_optlen_**);**
 
 DESCRIPTION
 ===========
