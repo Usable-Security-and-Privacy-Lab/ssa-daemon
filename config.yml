@@ -25,7 +25,7 @@ session-tickets: disabled  # Default: disabled
 # ECDHE is for Ephemeral). NULL, RC4, MD4 and MD5 ciphers SHOULD NOT be allowed 
 # in this list, and SHA128 is also considered insecure. Make sure to research 
 # your cipher before adding it to this list.
-cipher-list: 
+tlsv1.2-ciphers: 
   - ECDHE-ECDSA-AES256-GCM-SHA384
   - ECDHE-RSA-AES256-GCM-SHA384
   - ECDHE-ECDSA-CHACHA20-POLY1305
@@ -43,7 +43,7 @@ cipher-list:
 # These are the only ciphersuites accepted by TLS 1.3; they're all very safe.
 # Note that while CCM ciphers are technically safe, they posess properties that 
 # may make them unsafe for future use.
-ciphersuites:
+tlsv1.3-ciphers:
   - TLS_AES_256_GCM_SHA384
   - TLS_AES_128_GCM_SHA256
   - TLS_CHACHA20_POLY1305_SHA256
@@ -53,11 +53,11 @@ ciphersuites:
 #           - TLS_CHACHA20_POLY1305_SHA256
 
 # Sessions older than the session timeout are not reused.  Value is in seconds.
-session-timeout: 300 # Default: 300 seconds
+session-timeout: 86400 # Default: 300 seconds
 
 # Set the maximum number of certificates that can be traversed before 
 # certification fails.
-cert-verification-depth: 10
+cert-chain-depth: 10
 # Default: 10. This allows for the peer certificate, at most 10 intermediate CA 
 # certificates and a final trust anchor certificate.
 
@@ -65,7 +65,7 @@ cert-verification-depth: 10
 # valid SCT will not be connected with. Provides greater security by guarding 
 # against several types of CA compromise threats.
 # See http://www.certificate-transparency.org/what-is-ct for more information.
-cert-transparency-checks: disabled
+cert-transparency: disabled
 # Default: enabled
 
 # Certificate Revocation checks are important in determining the authenticity 

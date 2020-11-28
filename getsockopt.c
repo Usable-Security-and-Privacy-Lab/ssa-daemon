@@ -46,7 +46,7 @@ int get_hostname(socket_ctx* sock_ctx, char** data, unsigned int* len);
 int get_chosen_cipher(socket_ctx* sock_ctx, char** data, unsigned int* len);
 int get_version_min(socket_ctx* sock_ctx, int** data, unsigned int* len);
 int get_version_max(socket_ctx* sock_ctx, int** data, unsigned int* len);
-int get_version_conn(socket_ctx* sock_ctx, int** data, unsigned int* len);
+int get_chosen_version(socket_ctx* sock_ctx, int** data, unsigned int* len);
 int get_session_resumed(socket_ctx* sock_ctx, int** data, unsigned int *len);
 int get_session_reuse(socket_ctx* sock_ctx, int** data, unsigned int* len);
 int get_server_stapling(socket_ctx* sock_ctx, int** data, unsigned int* len);
@@ -126,10 +126,10 @@ int do_getsockopt_action(socket_ctx* sock_ctx,
         get_version_max(sock_ctx, (int**) data, len);
         break;
 
-    case TLS_VERSION_CONN:
+    case TLS_CHOSEN_VERSION:
         if ((response = check_socket_state(sock_ctx, SOCKET_CONNECTED)) != 0)
             break;
-        get_version_conn(sock_ctx, (int**) data, len);
+        get_chosen_version(sock_ctx, (int**) data, len);
         break;
 
     case TLS_REVOCATION_CHECKS:
@@ -288,13 +288,13 @@ int get_peer_identity(socket_ctx* sock_ctx,
     if (cert == NULL) {
         set_err_string(sock_ctx, "TLS error: couldn't get peer certificate - %s",
                 ERR_reason_error_string(ERR_GET_REASON(ERR_get_error())));
-        return -ENOTCONN;
+        return -ECANCELED;
     }
 
     subject_name = X509_get_subject_name(cert);
     if (subject_name == NULL) {
         set_err_string(sock_ctx, "TLS error: peer's certificate has no identity");
-        return -EINVAL;
+        return -ECANCELED;
     }
 
     *identity = X509_NAME_oneline(subject_name, NULL, 0);
@@ -423,7 +423,7 @@ int get_version_max(socket_ctx* sock_ctx, int** data, unsigned int* len) {
  * @param len [out] The length of \p data.
  * @returns 0 on success, or a negative errno on failure.
  */
-int get_version_conn(socket_ctx* sock_ctx, int** data, unsigned int* len) {
+int get_chosen_version(socket_ctx* sock_ctx, int** data, unsigned int* len) {
     
     int* version = malloc(sizeof(int));
     if (version == NULL)

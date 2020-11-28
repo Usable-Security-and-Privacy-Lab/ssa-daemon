@@ -38,7 +38,7 @@ int main(int argc, char* argv[]) {
 	       sprintf(http_request,"GET / HTTP/1.1\r\nhost: %s\r\n\r\n", argv[1]);
 	}
 
-	response = getsockopt(sock_fd, IPPROTO_TLS, TLS_VERSION_CONN, &opt_val, &opt_len);
+	response = getsockopt(sock_fd, IPPROTO_TLS, TLS_CHOSEN_VERSION, &opt_val, &opt_len);
 	printf("Version should be 1.3... %s\n%d\n", tls_version_str(opt_val), opt_val);
 	
 

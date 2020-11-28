@@ -103,7 +103,7 @@
 /** TLS version control */
 #define TLS_VERSION_MIN                  111
 #define TLS_VERSION_MAX                  112
-#define TLS_VERSION_CONN                 113
+#define TLS_CHOSEN_VERSION               113
 
 
 #define TLS_SERVER_OCSP_STAPLING         122

@@ -485,7 +485,7 @@ int get_ciphers_string(STACK_OF(SSL_CIPHER)* ciphers, char* buf, int buf_len) {
 
         strcpy(&buf[index], cipher);
         index += strlen(cipher);
-        buf[index] = ':';
+        buf[index] = '\n';
         index += 1;
     }
     buf[index - 1] = '\0'; /* change last ':' to '\0' */

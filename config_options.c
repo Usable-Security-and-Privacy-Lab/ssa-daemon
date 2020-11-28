@@ -52,8 +52,8 @@ int read_session_timeout(file_stream *fs, global_config *conf);
 /* labels MUST (!!) stay sorted alphabetically */
 /* dashes ('-') come alphabetically before anything else */
 const label_pair parser_keys[PARSER_KEY_CNT] = {
-    { .label = "cert-transparency-checks", .func = read_ct_checks },
-    { .label = "cert-verification-depth", .func = read_chain_depth },
+    { .label = "cert-chain-depth", .func = read_chain_depth },
+    { .label = "cert-transparency", .func = read_ct_checks },
     { .label = "max-tls-version", .func = read_max_tls_version },
     { .label = "min-tls-version", .func = read_min_tls_version },
     { .label = "revocation-cached", .func = read_revocation_cached },
@@ -66,7 +66,7 @@ const label_pair parser_keys[PARSER_KEY_CNT] = {
     { .label = "session-timeout", .func = read_session_timeout },
     { .label = "tlsv1.2-ciphers", .func = read_cipherlist },
     { .label = "tlsv1.3-ciphers", .func = read_ciphersuites },
-    { .label = "trust-store-location", .func = read_ca_path },
+    { .label = "trust-store-path", .func = read_ca_path },
 };
 
 
